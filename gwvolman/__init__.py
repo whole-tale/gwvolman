@@ -1,5 +1,6 @@
 from girder_worker import GirderWorkerPluginABC
 
+
 class GWVolumeManagerPlugin(GirderWorkerPluginABC):
     def __init__(self, app, *args, **kwargs):
         self.app = app
