@@ -1,3 +1,6 @@
 girder-client==2.1.0
 docker==2.3.0
 requests==2.18.1
+fusepy
+pycurl
+git+https://github.com/whole-tale/girderfs@master#egg=girderfs
