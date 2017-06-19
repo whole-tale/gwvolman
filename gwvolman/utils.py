@@ -147,9 +147,10 @@ def _launch_container(volumeName, nodeId, container_config=None):
         labels={
             'traefik.port': str(container_config.container_port),
         },
-        mem_limit='2g',
+        resources=docker.types.Resources(mem_limit='2g'),
+        mode=docker.types.ServiceMode('replicated', replicas=1),
+        networks=['traefik-net'],
         name=container_name,
-        network='traefik-net',
         mounts=mounts,
         constraints=constraints
     )
