@@ -68,7 +68,7 @@ def _get_api_key(gc):
 
 
 def parse_request_body(data):
-    gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
+    gc = girder_client.GirderClient(apiUrl=data.get('apiUrl', GIRDER_API_URL))
     gc.token = data['girder_token']
     user = gc.get("/user/me")
     if user is None:
@@ -91,8 +91,9 @@ def get_container_config(gc, tale):
         container_config = {}  # settings['container_config']
     else:
         image = gc.get('/image/%s' % tale['imageId'])
-        tale_config = image['config']
-        tale_config.update(tale['config'])
+        tale_config = image['config'] or {}
+        if tale['config']:
+            tale_config.update(tale['config'])
         container_config = ContainerConfig(
             command=tale_config.get('command'),
             image=image['fullName'],
