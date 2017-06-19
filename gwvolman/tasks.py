@@ -9,7 +9,7 @@ import girder_client
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
-    GIRDER_API_URL, HOSTDIR, API_VERSION, \
+    HOSTDIR, API_VERSION, \
     parse_request_body, new_user, _safe_mkdir, _get_api_key, \
     get_container_config, _launch_container
 
@@ -56,7 +56,7 @@ def create_volume(payload):
         os.makedirs(dest)
     api_key = _get_api_key(gc)
     cmd = "girderfs -c remote --api-url {} --api-key {} {} {}".format(
-        GIRDER_API_URL, api_key, dest, tale['folderId'])
+        gc.urlBase, api_key, dest, tale['folderId'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
     return dict(
@@ -127,7 +127,7 @@ def remove_volume(payload):
                      err.responseText)
         pass  # upload failed, keep going
 
-    volume = cli.volumes.get(containerInfo['volumeId'])
+    volume = cli.volumes.get(containerInfo['volumeName'])
     try:
         logging.info("Removing volume: %s", volume.id)
         volume.remove()
