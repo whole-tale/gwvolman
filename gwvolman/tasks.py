@@ -3,6 +3,7 @@ import os
 import docker
 import subprocess
 from docker.errors import DockerException
+import json
 import logging
 import girder_client
 from girder_worker.app import app
@@ -75,7 +76,11 @@ def shutdown_container(payload):
 
     cli = docker.from_env()
     containerInfo = instance['containerInfo']  # VALIDATE
-    container = cli.containers.get(containerInfo['containerId'])
+    try:
+        container = cli.containers.get(containerInfo['containerId'])
+    except docker.errors.NotFound:
+        logging.info("Container not present [%s].", container.id)
+        return
 
     try:
         logging.info("Releasing container [%s].", container.id)
@@ -106,3 +111,8 @@ def shutdown_container(payload):
     except Exception as e:
         logging.error("Unable to remove volume [%s]: %s", volume.id, e)
         pass
+
+
+@app.task
+def build_image(payload):
+    logging.info('Got payload: %s' % json.dumps(payload))
