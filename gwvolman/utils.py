@@ -143,8 +143,10 @@ def _launch_container(volume, container_config=None):
         container_config.image,
         command=rendered_command,
         detach=True,
-        labels={'traefik-port': str(container_config.container_port),
-                'com.docker.swarm.service.name': container_name},
+        labels={
+            'traefik.port': str(container_config.container_port),
+            'traefik.docker.network': 'traefik-net',
+            'traefik.frontend.rule': "Host:{}.dev.wholetale.org".format(container_name)},
         mem_limit='2g',
         name=container_name,
         network='traefik-net',
