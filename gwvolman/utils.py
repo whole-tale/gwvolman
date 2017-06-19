@@ -114,7 +114,8 @@ def _launch_container(volumeName, nodeId, container_config=None):
     user = new_user(12)
     container_name = 'tmp-{}'.format(user)
     mounts = [
-        'type=volume,source={},target=/home/jovyan/work'.format(volumeName)
+        docker.types.Mount(type='volume', source=volumeName,
+                           target='/home/jovyan/work')
     ]
     constraints = ['node.id == {}'.format(nodeId)]
 
