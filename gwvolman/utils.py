@@ -147,13 +147,15 @@ def _launch_container(volumeName, nodeId, container_config=None):
         labels={
             'traefik.port': str(container_config.container_port),
         },
-        resources=docker.types.Resources(mem_limit='2g'),
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=['traefik-net'],
         name=container_name,
         mounts=mounts,
         constraints=constraints
     )
+
+    # resources=docker.types.Resources(mem_limit='2g'),
+    # FIXME for some reason causes 500
 
     # FIXME
     # create_result = yield self.spawner.create_instance(
