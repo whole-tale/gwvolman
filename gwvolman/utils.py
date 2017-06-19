@@ -11,7 +11,6 @@ import string
 import uuid
 
 import docker
-import requests
 import girder_client
 
 
@@ -174,34 +173,3 @@ def _launch_container(volumeName, nodeId, container_config=None):
     #    id=container_id, path='%s/login?token=%s' % (path, nb_token),
     #    host=host_ip)
     return service
-
-
-def _shutdown_container(container, alive=True):
-    if alive:
-        _with_retries(container.kill)
-    _with_retries(container.remove)
-
-
-def _with_retries(fn, *args, **kwargs):
-    '''Attempt a Docker API call.
-
-    If an error occurs, retry up to "max_tries" times before letting the
-    exception propagate up the stack.  '''
-
-    max_tries = kwargs.get('max_tries', RETRIES)
-    try:
-        if 'max_tries' in kwargs:
-            del kwargs['max_tries']
-        result = fn(*args, **kwargs)
-        return result
-    except (docker.errors.APIError,
-            requests.exceptions.RequestException) as e:
-        logging.error("Encountered a Docker error with"
-                      "{} ({} retries remain): {}".format(
-                          fn.__name__, max_tries, e))
-        if max_tries > 0:
-            kwargs['max_tries'] = max_tries - 1
-            result = _with_retries(fn, *args, **kwargs)
-            return result
-        else:
-            raise e

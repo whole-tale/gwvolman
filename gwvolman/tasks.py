@@ -11,7 +11,7 @@ from girder_worker.app import app
 from .utils import \
     GIRDER_API_URL, HOSTDIR, API_VERSION, \
     parse_request_body, new_user, _safe_mkdir, _get_api_key, \
-    get_container_config, _launch_container, _shutdown_container
+    get_container_config, _launch_container
 
 
 @app.task
@@ -92,20 +92,27 @@ def shutdown_container(payload):
     cli = docker.from_env()
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
-        container = cli.services.get(containerInfo['containerId'])
+        service = cli.services.get(containerInfo['containerId'])
     except docker.errors.NotFound:
         logging.info("Container not present [%s].",
                      containerInfo['containerId'])
         return
 
     try:
-        logging.info("Releasing container [%s].", container.id)
-        _shutdown_container(container)
-        logging.info("Container [%s] has been released.", container.id)
+        logging.info("Releasing container [%s].", service.name)
+        service.remove()
+        logging.info("Container [%s] has been released.", service.name)
     except Exception as e:
-        logging.error("Unable to release container [%s]: %s", container.id, e)
+        logging.error("Unable to release container [%s]: %s", service.id, e)
         raise
 
+
+@app.task
+def remove_volume(payload):
+    gc, user, instance = parse_request_body(payload)
+    containerInfo = instance['containerInfo']  # VALIDATE
+
+    cli = docker.from_env()
     dest = os.path.join(containerInfo['mountPoint'], 'data')
     logging.info("Unmounting %s", dest)
     subprocess.call("umount %s" % dest, shell=True)
