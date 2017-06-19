@@ -15,7 +15,7 @@ from .utils import \
 
 
 @app.task
-def launch_container(payload):
+def create_volume(payload):
     api_check = payload.get('api_version', '1.0')
     if StrictVersion(api_check) != StrictVersion(API_VERSION):
         logging.error('Unsupported API (%s) (server API %s)' %
@@ -59,15 +59,30 @@ def launch_container(payload):
         GIRDER_API_URL, api_key, dest, tale['folderId'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
+    return dict(
+        nodeId=cli.info()['Swarm']['NodeID'],
+        mountPoint=mountpoint,
+        volumeName=volume.name
+    )
 
+
+@app.task
+def launch_container(payload):
+    api_check = payload.get('api_version', '1.0')
+    if StrictVersion(api_check) != StrictVersion(API_VERSION):
+        logging.error('Unsupported API (%s) (server API %s)' %
+                      (api_check, API_VERSION))
+
+    gc, user, tale = parse_request_body(payload)
     # _pull_image()
     container_config = get_container_config(gc, tale)  # FIXME
-    container = _launch_container(volume, container_config=container_config)
-    return dict(mountPoint=mountpoint,
-                volumeId=volume.id,
-                containerId=container.id,
-                containerPath=container.name,
-                swarmNode=cli.info()['Swarm']['NodeID'])
+    service = _launch_container(
+        payload['volumeName'], payload['nodeId'],
+        container_config=container_config)
+    return dict(
+        containerId=service.id,
+        containerPath=service.name
+    )
 
 
 @app.task
@@ -77,7 +92,7 @@ def shutdown_container(payload):
     cli = docker.from_env()
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
-        container = cli.containers.get(containerInfo['containerId'])
+        container = cli.services.get(containerInfo['containerId'])
     except docker.errors.NotFound:
         logging.info("Container not present [%s].",
                      containerInfo['containerId'])

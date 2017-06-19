@@ -109,12 +109,14 @@ def get_container_config(gc, tale):
     return container_config
 
 
-def _launch_container(volume, container_config=None):
+def _launch_container(volumeName, nodeId, container_config=None):
 
     user = new_user(12)
     container_name = 'tmp-{}'.format(user)
-    volume_bindings = {volume.attrs['Name']: {
-        'bind': '/home/jovyan/work', 'mode': 'rw'}}   # FIXME
+    mounts = [
+        'type=volume,source={},target=/home/jovyan/work'.format(volumeName)
+    ]
+    constraints = ['node.id == {}'.format(nodeId)]
 
     # f not container_name_pattern.match(container_name):
     #   pattern = container_name_pattern.pattern
@@ -139,18 +141,17 @@ def _launch_container(volume, container_config=None):
             ip='0.0.0.0', token=nb_token)
 
     cli = docker.from_env(version='auto')
-    container = cli.containers.run(
+    service = cli.services.create(
         container_config.image,
         command=rendered_command,
-        detach=True,
         labels={
             'traefik.port': str(container_config.container_port),
-            'traefik.docker.network': 'traefik-net',
-            'traefik.frontend.rule': "Host:{}.dev.wholetale.org".format(container_name)},
+        },
         mem_limit='2g',
         name=container_name,
         network='traefik-net',
-        volumes=volume_bindings
+        mounts=mounts,
+        constraints=constraints
     )
 
     # FIXME
@@ -168,7 +169,7 @@ def _launch_container(volume, container_config=None):
     # container = PooledContainer(
     #    id=container_id, path='%s/login?token=%s' % (path, nb_token),
     #    host=host_ip)
-    return container
+    return service
 
 
 def _shutdown_container(container, alive=True):
