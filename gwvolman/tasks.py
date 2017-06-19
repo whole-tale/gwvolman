@@ -79,7 +79,8 @@ def shutdown_container(payload):
     try:
         container = cli.containers.get(containerInfo['containerId'])
     except docker.errors.NotFound:
-        logging.info("Container not present [%s].", container.id)
+        logging.info("Container not present [%s].",
+                     containerInfo['containerId'])
         return
 
     try:
