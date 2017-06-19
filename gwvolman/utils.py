@@ -19,7 +19,7 @@ API_VERSION = '2.0'
 GIRDER_API_URL = os.environ.get(
     "GIRDER_API_URL", "https://girder.wholetale.org/api/v1")
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
-HOSTDIR = os.environ.get("HOSTDIR", "/")
+HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 
 MOUNTS = {}
@@ -146,7 +146,7 @@ def _launch_container(volume, container_config=None):
         labels={'traefik-port': str(container_config.container_port)},
         mem_limit='2g',
         name=container_name,
-        network='traefik',
+        network='traefik-net',
         volumes=volume_bindings
     )
 
