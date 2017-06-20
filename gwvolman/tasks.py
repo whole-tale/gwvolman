@@ -85,8 +85,13 @@ def launch_container(payload):
     timeout = 10.0
 
     # wait until task is started
-    while time.time() - tic < timeout and \
-            service.tasks()[0]['Status']['State'] != 'running':
+    while time.time() - tic < timeout:
+        try:
+            started = service.tasks()[0]['Status']['State'] == 'running'
+        except IndexError:
+            started = False
+        if started:
+            break
         time.sleep(0.2)
 
     return dict(
