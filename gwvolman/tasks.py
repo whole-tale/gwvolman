@@ -1,5 +1,6 @@
 from distutils.version import StrictVersion
 import os
+import time
 import docker
 import subprocess
 from docker.errors import DockerException
@@ -79,6 +80,15 @@ def launch_container(payload):
     service, urlPath = _launch_container(
         payload['volumeName'], payload['nodeId'],
         container_config=container_config)
+
+    tic = time.time()
+    timeout = 10.0
+
+    # wait until task is started
+    while time.time() - tic < timeout and \
+            service.tasks()[0]['Status']['State'] != 'running':
+        time.sleep(0.2)
+
     return dict(
         name=service.name,
         urlPath=urlPath
