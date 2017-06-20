@@ -76,12 +76,12 @@ def launch_container(payload):
     gc, user, tale = parse_request_body(payload)
     # _pull_image()
     container_config = get_container_config(gc, tale)  # FIXME
-    service = _launch_container(
+    service, urlPath = _launch_container(
         payload['volumeName'], payload['nodeId'],
         container_config=container_config)
     return dict(
-        containerId=service.id,
-        containerPath=service.name
+        name=service.name,
+        urlPath=urlPath
     )
 
 
@@ -92,10 +92,10 @@ def shutdown_container(payload):
     cli = docker.from_env()
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
-        service = cli.services.get(containerInfo['containerId'])
+        service = cli.services.get(containerInfo['name'])
     except docker.errors.NotFound:
-        logging.info("Container not present [%s].",
-                     containerInfo['containerId'])
+        logging.info("Service not present [%s].",
+                     containerInfo['name'])
         return
 
     try:

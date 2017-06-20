@@ -27,9 +27,8 @@ container_name_pattern = re.compile('tmp\.([^.]+)\.(.+)\Z')
 
 PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
-    'image', 'command', 'mem_limit', 'cpu_shares', 'container_ip',
-    'container_port', 'container_user', 'host_network', 'host_directories',
-    'extra_hosts'
+    'image', 'command', 'mem_limit', 'cpu_shares',
+    'container_port', 'container_user'
 ])
 
 
@@ -95,50 +94,28 @@ def get_container_config(gc, tale):
             tale_config.update(tale['config'])
         container_config = ContainerConfig(
             command=tale_config.get('command'),
-            image=image['fullName'],
-            mem_limit=tale_config.get('memLimit'),
-            cpu_shares=tale_config.get('cpuShares'),
-            container_ip=os.environ.get('DOCKER_GATEWAY', '172.17.0.1'),
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
-            host_network=False,
-            host_directories=None,
-            extra_hosts=[]
+            cpu_shares=tale_config.get('cpuShares'),
+            image=image['fullName'],
+            mem_limit=tale_config.get('memLimit'),
+            target_mount=tale_config.get('targetMount'),
+            urlPath=tale_config.get('urlPath')
         )
     return container_config
 
 
-def _launch_container(volumeName, nodeId, container_config=None):
+def _launch_container(volumeName, nodeId, container_config):
 
-    user = new_user(12)
-    container_name = 'tmp-{}'.format(user)
-    mounts = [
-        docker.types.Mount(type='volume', source=volumeName,
-                           target='/home/jovyan/work')
-    ]
-    constraints = ['node.id == {}'.format(nodeId)]
-
-    # f not container_name_pattern.match(container_name):
-    #   pattern = container_name_pattern.pattern
-    #   raise Exception("[{}] does not match [{}]!".format(container_name,
-    #                                                      pattern))
-
-    # logging.info("Launching new server [%s] at path [%s].",
-    #             container_name, path)
-    if container_config is None:
-        container_config = {}  # FIXME
-    nb_token = uuid.uuid4().hex
-
-    # docker create --name "subdomain"
-    #  --label traefik.port=...
-    #  --network traefik-net
-    #  image
-
+    token = uuid.uuid4().hex
     # command
     rendered_command = \
         container_config.command.format(
             base_path='', port=container_config.container_port,
-            ip='0.0.0.0', token=nb_token)
+            ip='0.0.0.0', token=token)
+
+    rendered_urlPath = \
+        container_config.urlPath.format(token=token)
 
     cli = docker.from_env(version='auto')
     service = cli.services.create(
@@ -148,28 +125,20 @@ def _launch_container(volumeName, nodeId, container_config=None):
             'traefik.port': str(container_config.container_port),
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
-        networks=['traefik-net'],
-        name=container_name,
-        mounts=mounts,
-        constraints=constraints
+        networks=['traefik-net'],  # FIXME
+        name='tmp-{}'.format(new_user(12)),
+        mounts=[
+            docker.types.Mount(type='volume', source=volumeName,
+                               target=container_config.targetMount)
+        ],
+        constraints=['node.id == {}'.format(nodeId)]
     )
 
     # resources=docker.types.Resources(mem_limit='2g'),
     # FIXME for some reason causes 500
 
-    # FIXME
-    # create_result = yield self.spawner.create_instance(
-    # container_id, host_ip, host_port = create_result
-
-    # logging.info(
-    #    "Created notebook server [%s] for path [%s] at [%s:%s]",
-    #    container_name, path, host_ip, host_port)
-
     # Wait for the server to launch within the container before adding it
     # to the pool or serving it to a user.
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
-    # container = PooledContainer(
-    #    id=container_id, path='%s/login?token=%s' % (path, nb_token),
-    #    host=host_ip)
-    return service
+    return service, rendered_urlPath
