@@ -28,7 +28,8 @@ container_name_pattern = re.compile('tmp\.([^.]+)\.(.+)\Z')
 PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
     'image', 'command', 'mem_limit', 'cpu_shares',
-    'container_port', 'container_user'
+    'container_port', 'container_user', 'target_mount',
+    'url_path'
 ])
 
 
@@ -100,7 +101,7 @@ def get_container_config(gc, tale):
             image=image['fullName'],
             mem_limit=tale_config.get('memLimit'),
             target_mount=tale_config.get('targetMount'),
-            urlPath=tale_config.get('urlPath')
+            url_path=tale_config.get('urlPath')
         )
     return container_config
 
@@ -114,8 +115,8 @@ def _launch_container(volumeName, nodeId, container_config):
             base_path='', port=container_config.container_port,
             ip='0.0.0.0', token=token)
 
-    rendered_urlPath = \
-        container_config.urlPath.format(token=token)
+    rendered_url_path = \
+        container_config.url_path.format(token=token)
 
     cli = docker.from_env(version='auto')
     service = cli.services.create(
@@ -129,7 +130,7 @@ def _launch_container(volumeName, nodeId, container_config):
         name='tmp-{}'.format(new_user(12)),
         mounts=[
             docker.types.Mount(type='volume', source=volumeName,
-                               target=container_config.targetMount)
+                               target=container_config.target_mount)
         ],
         constraints=['node.id == {}'.format(nodeId)]
     )
@@ -141,4 +142,4 @@ def _launch_container(volumeName, nodeId, container_config):
     # to the pool or serving it to a user.
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
-    return service, rendered_urlPath
+    return service, rendered_url_path
