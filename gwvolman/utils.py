@@ -69,19 +69,22 @@ def _get_api_key(gc):
 def parse_request_body(data):
     gc = girder_client.GirderClient(apiUrl=data.get('apiUrl', GIRDER_API_URL))
     gc.token = data['girder_token']
-    user = gc.get("/user/me")
+    user = gc.get('/user/me')
     if user is None:
         logging.warn("Bad gider token")
         raise ValueError
+
     if data.get('taleId'):
-        obj = gc.get('/tale/%s' % data['taleId'])
+        path = '/tale/%s' % data['taleId']
     elif data.get('instanceId'):
-        obj = gc.get('/instance/%s' % data['instanceId'])
+        path = '/instance/%s' % data['instanceId']
     else:
-        obj = None
-    if not obj:
-        obj = data
-    # TODO: catch possible errors
+        return gc, user, data
+
+    try:
+        obj = gc.get(path)
+    except girder_client.HttpError as e:
+        raise ValueError
     return gc, user, obj
 
 
