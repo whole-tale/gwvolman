@@ -24,7 +24,7 @@ def create_volume(payload):
 
     gc, user, tale = parse_request_body(payload)
     vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
-    cli = docker.from_env(version='auto')
+    cli = docker.from_env(version='1.28')
 
     try:
         volume = cli.volumes.create(name=vol_name, driver='local')
@@ -104,7 +104,7 @@ def launch_container(payload):
 def shutdown_container(payload):
     gc, user, instance = parse_request_body(payload)
 
-    cli = docker.from_env()
+    cli = docker.from_env(version='1.28')
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
         service = cli.services.get(containerInfo['name'])
@@ -127,7 +127,7 @@ def remove_volume(payload):
     gc, user, instance = parse_request_body(payload)
     containerInfo = instance['containerInfo']  # VALIDATE
 
-    cli = docker.from_env()
+    cli = docker.from_env(version='1.28')
     dest = os.path.join(containerInfo['mountPoint'], 'data')
     logging.info("Unmounting %s", dest)
     subprocess.call("umount %s" % dest, shell=True)
