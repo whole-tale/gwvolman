@@ -121,6 +121,8 @@ def _launch_container(volumeName, nodeId, container_config):
     rendered_url_path = \
         container_config.url_path.format(token=token)
 
+    logging.debug('config = ' + str(container_config))
+    logging.debug('command = ' + rendered_command)
     cli = docker.from_env(version='1.28')
     service = cli.services.create(
         container_config.image,
