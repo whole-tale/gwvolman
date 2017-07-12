@@ -134,7 +134,7 @@ def _launch_container(volumeName, nodeId, container_config):
         networks=['traefik-net'],  # FIXME
         name='tmp-{}'.format(new_user(12)),
         mounts=[
-            docker.types.Mount(type='volume', source=volumeName,
+            docker.types.Mount(type='volume', source=volumeName, no_copy=True,
                                target=container_config.target_mount)
         ],
         constraints=['node.id == {}'.format(nodeId)]
