@@ -6,7 +6,6 @@ import subprocess
 from docker.errors import DockerException
 import json
 import logging
-import girder_client
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
@@ -35,29 +34,22 @@ def create_volume(payload):
     mountpoint = volume.attrs['Mountpoint']
     logging.info("Mountpoint: %s", mountpoint)
 
-    homeDir = gc.loadOrCreateFolder('Notebooks', user['_id'], 'user')
-    items = [item['_id'] for item in gc.listItem(homeDir['_id'])
-             if item["name"].endswith("pynb")]
-    # TODO: should be done in one go with /resource endpoint
-    #  but client doesn't have it yet
-    for item in items:
-        gc.downloadItem(item, HOSTDIR + mountpoint)
-
-    # TODO: read uid/gid from env/config
-    for item in os.listdir(HOSTDIR + mountpoint):
-        if item == 'data':
-            continue
-        os.chown(os.path.join(HOSTDIR + mountpoint, item),
-                 1000, 100)
-
-    dest = os.path.join(mountpoint, "data")
-    _safe_mkdir(HOSTDIR + dest)
+    homeDir = gc.loadOrCreateFolder('Home', user['_id'], 'user')
+    data_dir = os.path.join(mountpoint, 'data')
+    _safe_mkdir(HOSTDIR + data_dir)
+    home_dir = os.path.join(mountpoint, 'home')
+    _safe_mkdir(HOSTDIR + home_dir)
     # FUSE is silly and needs to have mirror inside container
-    if not os.path.isdir(dest):
-        os.makedirs(dest)
+    for directory in (data_dir, home_dir):
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
     api_key = _get_api_key(gc)
     cmd = "girderfs -c remote --api-url {} --api-key {} {} {}".format(
-        gc.urlBase, api_key, dest, tale['folderId'])
+        gc.urlBase, api_key, data_dir, tale['folderId'])
+    logging.info("Calling: %s", cmd)
+    subprocess.call(cmd, shell=True)
+    cmd = 'girderfs -c wt_home --api-url {} --api-key {} {} {}'.format(
+        gc.urlBase, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
     return dict(
@@ -128,19 +120,10 @@ def remove_volume(payload):
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
-    dest = os.path.join(containerInfo['mountPoint'], 'data')
-    logging.info("Unmounting %s", dest)
-    subprocess.call("umount %s" % dest, shell=True)
-
-    # upload notebooks
-    homeDir = gc.loadOrCreateFolder('Notebooks', user['_id'], 'user')
-    try:
-        gc.upload(HOSTDIR + containerInfo["mountPoint"] + '/*.ipynb',
-                  homeDir['_id'], reuseExisting=True, blacklist=["data"])
-    except girder_client.HttpError as err:
-        logging.warn("Something went wrong with data upload: %s" %
-                     err.responseText)
-        pass  # upload failed, keep going
+    for suffix in ('data', 'home'):
+        dest = os.path.join(containerInfo['mountPoint'], suffix)
+        logging.info("Unmounting %s", dest)
+        subprocess.call("umount %s" % dest, shell=True)
 
     volume = cli.volumes.get(containerInfo['volumeName'])
     try:
