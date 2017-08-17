@@ -44,11 +44,11 @@ def create_volume(payload):
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(gc)
-    cmd = "girderfs -c remote --api-url {} --api-key {} {} {}".format(
+    cmd = "girderfs --hostns -c remote --api-url {} --api-key {} {} {}".format(
         gc.urlBase, api_key, data_dir, tale['folderId'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
-    cmd = 'girderfs -c wt_home --api-url {} --api-key {} {} {}'.format(
+    cmd = 'girderfs --hostns -c wt_home --api-url {} --api-key {} {} {}'.format(
         gc.urlBase, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
