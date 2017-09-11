@@ -125,7 +125,11 @@ def remove_volume(payload):
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
 
-    volume = cli.volumes.get(containerInfo['volumeName'])
+    try:
+        volume = cli.volumes.get(containerInfo['volumeName'])
+    except docker.errors.NotFound:
+        logging.info("Volume not present [%s].", containerInfo['volumeName'])
+        return
     try:
         logging.info("Removing volume: %s", volume.id)
         volume.remove()
