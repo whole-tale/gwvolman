@@ -20,9 +20,9 @@ setup(
         ]
     },
     install_requires=[
-        'girder-client>=2.1.0',
+        'girder-client',
         'docker>=2.3.0',
-        'requests>=2.18.1'
+        'requests'
     ],
     packages=find_packages(),
     zip_safe=False

@@ -33,6 +33,7 @@ def create_volume(payload):
     logging.info("Volume: %s created", volume.name)
     mountpoint = volume.attrs['Mountpoint']
     logging.info("Mountpoint: %s", mountpoint)
+    os.chown(HOSTDIR + mountpoint, 1000, 100)
 
     homeDir = gc.loadOrCreateFolder('Home', user['_id'], 'user')
     data_dir = os.path.join(mountpoint, 'data')
