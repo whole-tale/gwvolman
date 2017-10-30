@@ -124,6 +124,10 @@ def _launch_container(volumeName, nodeId, container_config):
     logging.debug('config = ' + str(container_config))
     logging.debug('command = ' + rendered_command)
     cli = docker.from_env(version='1.28')
+    mounts = [
+        docker.types.Mount(type='volume', source=volumeName, no_copy=True,
+                           target=container_config.target_mount)
+    ]
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
@@ -133,10 +137,7 @@ def _launch_container(volumeName, nodeId, container_config):
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=['traefik-net'],  # FIXME
         name='tmp-{}'.format(new_user(12)),
-        mounts=[
-            docker.types.Mount(type='volume', source=volumeName, no_copy=True,
-                               target=container_config.target_mount)
-        ],
+        mounts=mounts,
         constraints=['node.id == {}'.format(nodeId)]
     )
 
