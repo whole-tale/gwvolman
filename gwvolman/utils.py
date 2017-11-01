@@ -20,6 +20,7 @@ GIRDER_API_URL = os.environ.get(
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
+TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
 
 MOUNTS = {}
 RETRIES = 5
@@ -144,7 +145,7 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.port': str(container_config.container_port),
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
-        networks=['traefik-net'],  # FIXME
+        networks=[TRAEFIK_NETWORK], 
         name='tmp-{}'.format(new_user(12)),
         mounts=mounts,
         constraints=['node.id == {}'.format(nodeId)]
