@@ -35,6 +35,14 @@ def create_volume(payload):
     logging.info("Mountpoint: %s", mountpoint)
     os.chown(HOSTDIR + mountpoint, 1000, 100)
 
+    # TODO: this assumes overlayfs
+    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
+    if 'overlay /usr/local' not in mounts:
+        cont = cli.containers.get('celery_worker')
+        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
+        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
+                        shell=True)
+
     homeDir = gc.loadOrCreateFolder('Home', user['_id'], 'user')
     data_dir = os.path.join(mountpoint, 'data')
     _safe_mkdir(HOSTDIR + data_dir)
