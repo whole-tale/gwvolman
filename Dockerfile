@@ -13,11 +13,12 @@ RUN apt-get update -qy && \
 RUN girder-worker-config set celery backend redis://redis/ && \
   girder-worker-config set celery broker redis://redis/
 
-RUN cd /tmp && \
-  wget https://raw.githubusercontent.com/whole-tale/gwvolman/wthomedir-dev/requirements.txt && \
-  pip install -r requirements.txt && rm -rf /tmp/*
+COPY requirements.txt /gwvolman/requirements.txt
+COPY setup.py /gwvolman/setup.py
+COPY gwvolman /gwvolman/gwvolman
 
-RUN pip install git+https://github.com/whole-tale/gwvolman.git@wthomedir-dev
+WORKDIR /gwvolman
+RUN pip install -r requirements.txt -e . && rm -rf /tmp/*
 
 COPY mount.c /tmp/mount.c
 RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -ldl -D_FILE_OFFSET_BITS=64 && \
