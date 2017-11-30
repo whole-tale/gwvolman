@@ -145,7 +145,7 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.port': str(container_config.container_port),
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
-        networks=[TRAEFIK_NETWORK], 
+        networks=[TRAEFIK_NETWORK],
         name='tmp-{}'.format(new_user(12)),
         mounts=mounts,
         constraints=['node.id == {}'.format(nodeId)]

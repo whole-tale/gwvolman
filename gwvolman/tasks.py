@@ -1,17 +1,30 @@
 from distutils.version import StrictVersion
 import os
+import shutil
 import time
+import tarfile
+import tempfile
+import pathlib
 import docker
 import subprocess
 from docker.errors import DockerException
-import json
 import logging
+try:
+    from urllib import urlretrieve
+except ImportError:
+    from urllib.request import urlretrieve
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
     HOSTDIR, API_VERSION, \
     parse_request_body, new_user, _safe_mkdir, _get_api_key, \
     get_container_config, _launch_container
+
+
+REGISTRY_USER = os.environ.get('REGISTRY_USER', 'xarth')
+REGISTRY_URL = os.environ.get('REGISTRY_URL',
+                              'https://registry.dev.wholetale.org')
+REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 
 
 @app.task
@@ -57,7 +70,8 @@ def create_volume(payload):
         gc.urlBase, api_key, data_dir, tale['folderId'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
-    cmd = 'girderfs --hostns -c wt_home --api-url {} --api-key {} {} {}'.format(
+    cmd = 'girderfs --hostns -c wt_home --api-url '
+    cmd += '{} --api-key {} {} {}'.format(
         gc.urlBase, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
@@ -148,5 +162,29 @@ def remove_volume(payload):
 
 
 @app.task
-def build_image(payload):
-    logging.info('Got payload: %s' % json.dumps(payload))
+def build_image(imageId, imageTag, sourceUrl):
+    def strip_components(members, strip=1):
+        for tarinfo in members:
+            path = pathlib.Path(tarinfo.path)
+            if len(path.parts) > strip:
+                tarinfo.path = str(pathlib.Path(*path.parts[strip:]))
+                yield tarinfo
+
+    cli = docker.from_env(version='1.28')
+    cli.login(REGISTRY_USER, REGISTRY_PASS, REGISTRY_URL)
+
+    temp_dir = tempfile.mkdtemp()
+    local_tarball = os.path.join(temp_dir, '{}.tar.gz'.format(imageId))
+    urlretrieve(sourceUrl, local_tarball)
+    with tarfile.open(local_tarball) as tar:
+        tar.extractall(members=strip_components(tar), path=temp_dir)
+
+    apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
+    for line in apicli.build(path=temp_dir, pull=True, tag=imageTag):
+        print(line)
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    for line in apicli.push(imageTag, stream=True):
+        print(line)
+
+    image = cli.images.get(imageTag)
+    return image.attrs
