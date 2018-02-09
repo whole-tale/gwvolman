@@ -185,6 +185,8 @@ def build_image(imageId, imageTag, sourceUrl):
     tag = urlparse(REGISTRY_URL).netloc + '/' + imageId
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
+    apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+                 registry=REGISTRY_URL)
     for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
     shutil.rmtree(temp_dir, ignore_errors=True)
