@@ -1,3 +1,4 @@
+"""A set of WT related Girder tasks."""
 from distutils.version import StrictVersion
 import os
 import shutil
@@ -18,18 +19,19 @@ from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
     HOSTDIR, API_VERSION, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
-    parse_request_body, new_user, _safe_mkdir, _get_api_key, \
-    get_container_config, _launch_container
+    _parse_request_body, new_user, _safe_mkdir, _get_api_key, \
+    _get_container_config, _launch_container
 
 
 @app.task
 def create_volume(payload):
+    """Create a mountpoint and compose WT-fs."""
     api_check = payload.get('api_version', '1.0')
     if StrictVersion(api_check) != StrictVersion(API_VERSION):
         logging.error('Unsupported API (%s) (server API %s)' %
                       (api_check, API_VERSION))
 
-    gc, user, tale = parse_request_body(payload)
+    gc, user, tale = _parse_request_body(payload)
     vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
     cli = docker.from_env(version='1.28')
 
@@ -79,14 +81,15 @@ def create_volume(payload):
 
 @app.task
 def launch_container(payload):
+    """Launch a container using a Tale object."""
     api_check = payload.get('api_version', '1.0')
     if StrictVersion(api_check) != StrictVersion(API_VERSION):
         logging.error('Unsupported API (%s) (server API %s)' %
                       (api_check, API_VERSION))
 
-    gc, user, tale = parse_request_body(payload)
+    gc, user, tale = _parse_request_body(payload)
     # _pull_image()
-    container_config = get_container_config(gc, tale)  # FIXME
+    container_config = _get_container_config(gc, tale)  # FIXME
     service, urlPath = _launch_container(
         payload['volumeName'], payload['nodeId'],
         container_config=container_config)
@@ -112,7 +115,8 @@ def launch_container(payload):
 
 @app.task
 def shutdown_container(payload):
-    gc, user, instance = parse_request_body(payload)
+    """Shutdown a running Tale."""
+    gc, user, instance = _parse_request_body(payload)
 
     cli = docker.from_env(version='1.28')
     containerInfo = instance['containerInfo']  # VALIDATE
@@ -134,7 +138,8 @@ def shutdown_container(payload):
 
 @app.task
 def remove_volume(payload):
-    gc, user, instance = parse_request_body(payload)
+    """Unmount WT-fs and remove mountpoint."""
+    gc, user, instance = _parse_request_body(payload)
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
@@ -158,6 +163,7 @@ def remove_volume(payload):
 
 @app.task
 def build_image(imageId, imageTag, sourceUrl):
+    """Build docker image from WT Image object and push to a registry."""
     def strip_components(members, strip=1):
         for tarinfo in members:
             path = pathlib.Path(tarinfo.path)

@@ -1,9 +1,13 @@
+"""WholeTale Girder Worker Plugin."""
 from girder_worker import GirderWorkerPluginABC
 from kombu.common import Broadcast, Exchange, Queue
 
 
 class GWVolumeManagerPlugin(GirderWorkerPluginABC):
+    """Custom WT Manager providing WT tasks."""
+
     def __init__(self, app, *args, **kwargs):
+        """Constructor."""
         self.app = app
         # Here we can also change application settings. E.g.
         # changing the task time limit:
@@ -21,6 +25,5 @@ class GWVolumeManagerPlugin(GirderWorkerPluginABC):
         # })
 
     def task_imports(self):
-        # Return a list of python importable paths to the
-        # plugin's path directory
+        """Return a list of python importable paths."""
         return ['gwvolman.tasks']

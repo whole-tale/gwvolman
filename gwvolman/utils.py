@@ -2,6 +2,8 @@
 # Copyright (c) 2016, Data Exploration Lab
 # Distributed under the terms of the Modified BSD License.
 
+"""A set of helper routines for WT related tasks."""
+
 from collections import namedtuple
 import logging
 import os
@@ -42,13 +44,17 @@ ContainerConfig = namedtuple('ContainerConfig', [
 
 
 def sample_with_replacement(a, size):
-    '''Get a random path. If Python had sampling with replacement built in,
+    """Get a random path.
+
+    If Python had sampling with replacement built in,
     I would use that. The other alternative is numpy.random.choice, but
-    numpy is overkill for this tiny bit of random pathing.'''
+    numpy is overkill for this tiny bit of random pathing.
+    """
     return "".join([random.SystemRandom().choice(a) for x in range(size)])
 
 
 def new_user(size):
+    """Get a random path."""
     return sample_with_replacement(string.ascii_letters + string.digits, size)
 
 
@@ -74,7 +80,7 @@ def _get_api_key(gc):
     return api_key
 
 
-def parse_request_body(data):
+def _parse_request_body(data):
     gc = girder_client.GirderClient(apiUrl=data.get('apiUrl', GIRDER_API_URL))
     gc.token = data['girder_token']
     user = gc.get('/user/me')
@@ -96,7 +102,7 @@ def parse_request_body(data):
     return gc, user, obj
 
 
-def get_container_config(gc, tale):
+def _get_container_config(gc, tale):
     if tale is None:
         container_config = {}  # settings['container_config']
     else:
