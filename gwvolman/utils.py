@@ -154,7 +154,7 @@ def _launch_container(volumeName, nodeId, container_config):
         docker.types.Mount(type='bind', source=source_mount,
                            target=container_config.target_mount)
     ]
-    host = 'tmp-{}'.format(new_user(12))
+    host = 'tmp-{}'.format(new_user(12).lower())
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
