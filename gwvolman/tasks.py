@@ -173,7 +173,8 @@ def build_image(imageId, imageTag, sourceUrl):
                 yield tarinfo
 
     cli = docker.from_env(version='1.28')
-    cli.login(REGISTRY_USER, REGISTRY_PASS, REGISTRY_URL)
+    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+              registry=REGISTRY_URL)
 
     temp_dir = tempfile.mkdtemp()
     local_tarball = os.path.join(temp_dir, '{}.tar.gz'.format(imageId))

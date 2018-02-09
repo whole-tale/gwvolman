@@ -138,7 +138,8 @@ def _launch_container(volumeName, nodeId, container_config):
     logging.debug('config = ' + str(container_config))
     logging.debug('command = ' + rendered_command)
     cli = docker.from_env(version='1.28')
-    cli.login(REGISTRY_USER, REGISTRY_PASS, REGISTRY_URL)
+    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+              registry=REGISTRY_URL)
     # Fails with: 'starting container failed: error setting
     #              label on mount source ...: read-only file system'
     # mounts = [
