@@ -12,7 +12,7 @@ import re
 import string
 import uuid
 try:
-    from urllib import urlparse
+    from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
 import docker

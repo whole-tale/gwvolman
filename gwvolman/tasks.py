@@ -11,7 +11,8 @@ import subprocess
 from docker.errors import DockerException
 import logging
 try:
-    from urllib import urlretrieve, urlparse
+    from urllib import urlretrieve
+    from urlparse import urlparse
 except ImportError:
     from urllib.request import urlretrieve
     from urllib.parse import urlparse
