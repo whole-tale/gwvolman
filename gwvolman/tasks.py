@@ -10,21 +10,16 @@ import subprocess
 from docker.errors import DockerException
 import logging
 try:
-    from urllib import urlretrieve
+    from urllib import urlretrieve, urlparse
 except ImportError:
     from urllib.request import urlretrieve
+    from urllib.parse import urlparse
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
-    HOSTDIR, API_VERSION, \
+    HOSTDIR, API_VERSION, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
     parse_request_body, new_user, _safe_mkdir, _get_api_key, \
     get_container_config, _launch_container
-
-
-REGISTRY_USER = os.environ.get('REGISTRY_USER', 'xarth')
-REGISTRY_URL = os.environ.get('REGISTRY_URL',
-                              'https://registry.dev.wholetale.org')
-REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 
 
 @app.task
@@ -179,12 +174,15 @@ def build_image(imageId, imageTag, sourceUrl):
     with tarfile.open(local_tarball) as tar:
         tar.extractall(members=strip_components(tar), path=temp_dir)
 
+    tag = urlparse(REGISTRY_URL).netloc + '/' + imageId
+
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
-    for line in apicli.build(path=temp_dir, pull=True, tag=imageTag):
+    for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
     shutil.rmtree(temp_dir, ignore_errors=True)
-    for line in apicli.push(imageTag, stream=True):
+    for line in apicli.push(tag, stream=True):
         print(line)
 
-    image = cli.images.get(imageTag)
+    image = cli.images.get(tag)
+    # Only image.attrs['Id'] is used in Girder right now
     return image.attrs
