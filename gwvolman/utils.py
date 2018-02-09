@@ -155,6 +155,10 @@ def _launch_container(volumeName, nodeId, container_config):
                            target=container_config.target_mount)
     ]
     host = 'tmp-{}'.format(new_user(12).lower())
+
+    # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
+    endpoint_spec = docker.types.EndpointSpec(mode="vip")
+
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
@@ -170,6 +174,7 @@ def _launch_container(volumeName, nodeId, container_config):
         networks=[TRAEFIK_NETWORK],
         name=host,
         mounts=mounts,
+        endpoint_spec=endpoint_spec,
         constraints=['node.id == {}'.format(nodeId)]
     )
 
