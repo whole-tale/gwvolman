@@ -26,9 +26,10 @@ DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
+DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_URL = os.environ.get('REGISTRY_URL',
-                              'https://registry.dev.wholetale.org')
+                              'https://registry.{}'.format(DOMAIN))
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 
 MOUNTS = {}
@@ -153,15 +154,21 @@ def _launch_container(volumeName, nodeId, container_config):
         docker.types.Mount(type='bind', source=source_mount,
                            target=container_config.target_mount)
     ]
+    host = 'tmp-{}'.format(new_user(12))
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
         labels={
             'traefik.port': str(container_config.container_port),
+            'traefik.enable': 'true',
+            'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
+            'traefik.docker.network': TRAEFIK_NETWORK,
+            'traefik.frontend.passHostHeader': 'true',
+            'traefik.frontend.entryPoints': 'http'
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=[TRAEFIK_NETWORK],
-        name='tmp-{}'.format(new_user(12)),
+        name=host,
         mounts=mounts,
         constraints=['node.id == {}'.format(nodeId)]
     )
