@@ -68,7 +68,8 @@ def create_volume(payload):
         gc.urlBase, api_key, data_dir, tale['folderId'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
-    cmd = 'girderfs --hostns -c wt_home --api-url '
+    #  webdav relies on mount.c module, don't use hostns for now
+    cmd = 'girderfs -c wt_home --api-url '
     cmd += '{} --api-key {} {} {}'.format(
         gc.urlBase, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)

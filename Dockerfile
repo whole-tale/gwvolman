@@ -4,9 +4,9 @@ ENV C_FORCE_ROOT=1
 
 USER root
 
-RUN apt-get update -qy && \
-  apt-get -qy install vim git fuse libfuse-dev && \
-  apt-get -qy clean all && \
+RUN apt-get update -qqy && \
+  DEBIAN_FRONTEND=noninteractive apt-get -qy install vim git fuse libfuse-dev davfs2 && \
+  apt-get -qqy clean all && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
