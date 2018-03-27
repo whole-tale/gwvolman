@@ -3,4 +3,4 @@ docker==2.3.0
 requests==2.18.1
 fusepy
 pycurl
-git+https://github.com/whole-tale/girderfs@master#egg=girderfs
+git+https://github.com/whole-tale/girderfs@v0.1#egg=girderfs
