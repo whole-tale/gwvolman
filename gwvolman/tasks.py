@@ -6,7 +6,6 @@ import subprocess
 from docker.errors import DockerException
 import json
 import logging
-import girder_client
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
@@ -34,30 +33,27 @@ def create_volume(payload):
     logging.info("Volume: %s created", volume.name)
     mountpoint = volume.attrs['Mountpoint']
     logging.info("Mountpoint: %s", mountpoint)
+    os.chown(HOSTDIR + mountpoint, 1000, 100)
 
-    homeDir = gc.loadOrCreateFolder('Notebooks', user['_id'], 'user')
-    items = [item['_id'] for item in gc.listItem(homeDir['_id'])
-             if item["name"].endswith("pynb")]
-    # TODO: should be done in one go with /resource endpoint
-    #  but client doesn't have it yet
-    for item in items:
-        gc.downloadItem(item, HOSTDIR + mountpoint)
+    # Before calling girderfs and "escaping" container, we need to make
+    # sure that shared objects we use are available on the host
+    # TODO: this assumes overlayfs
+    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
+    if 'overlay /usr/local' not in mounts:
+        cont = cli.containers.get('celery_worker')
+        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
+        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
+                        shell=True)
 
-    # TODO: read uid/gid from env/config
-    for item in os.listdir(HOSTDIR + mountpoint):
-        if item == 'data':
-            continue
-        os.chown(os.path.join(HOSTDIR + mountpoint, item),
-                 1000, 100)
-
-    dest = os.path.join(mountpoint, "data")
-    _safe_mkdir(HOSTDIR + dest)
+    data_dir = os.path.join(mountpoint, 'data')
+    _safe_mkdir(HOSTDIR + data_dir)
     # FUSE is silly and needs to have mirror inside container
-    if not os.path.isdir(dest):
-        os.makedirs(dest)
+    for directory in (data_dir, ):
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
     api_key = _get_api_key(gc)
-    cmd = "girderfs -c remote --api-url {} --api-key {} {} {}".format(
-        gc.urlBase, api_key, dest, tale['folderId'])
+    cmd = "girderfs --hostns -c remote --api-url {} --api-key {} {} {}".format(
+        gc.urlBase, api_key, data_dir, tale['folderId'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
     return dict(
@@ -128,21 +124,16 @@ def remove_volume(payload):
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
-    dest = os.path.join(containerInfo['mountPoint'], 'data')
-    logging.info("Unmounting %s", dest)
-    subprocess.call("umount %s" % dest, shell=True)
+    for suffix in ('data', ):
+        dest = os.path.join(containerInfo['mountPoint'], suffix)
+        logging.info("Unmounting %s", dest)
+        subprocess.call("umount %s" % dest, shell=True)
 
-    # upload notebooks
-    homeDir = gc.loadOrCreateFolder('Notebooks', user['_id'], 'user')
     try:
-        gc.upload(HOSTDIR + containerInfo["mountPoint"] + '/*.ipynb',
-                  homeDir['_id'], reuseExisting=True, blacklist=["data"])
-    except girder_client.HttpError as err:
-        logging.warn("Something went wrong with data upload: %s" %
-                     err.responseText)
-        pass  # upload failed, keep going
-
-    volume = cli.volumes.get(containerInfo['volumeName'])
+        volume = cli.volumes.get(containerInfo['volumeName'])
+    except docker.errors.NotFound:
+        logging.info("Volume not present [%s].", containerInfo['volumeName'])
+        return
     try:
         logging.info("Removing volume: %s", volume.id)
         volume.remove()

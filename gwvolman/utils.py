@@ -20,6 +20,7 @@ GIRDER_API_URL = os.environ.get(
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
+TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
 
 MOUNTS = {}
 RETRIES = 5
@@ -34,9 +35,14 @@ ContainerConfig = namedtuple('ContainerConfig', [
 
 
 def sample_with_replacement(a, size):
-    '''Get a random path. If Python had sampling with replacement built in,
+    """
+    Get a random path.
+
+    If Python had sampling with replacement built in,
     I would use that. The other alternative is numpy.random.choice, but
-    numpy is overkill for this tiny bit of random pathing.'''
+    numpy is overkill for this tiny bit of random pathing.
+
+    """
     return "".join([random.SystemRandom().choice(a) for x in range(size)])
 
 
@@ -124,6 +130,20 @@ def _launch_container(volumeName, nodeId, container_config):
     logging.debug('config = ' + str(container_config))
     logging.debug('command = ' + rendered_command)
     cli = docker.from_env(version='1.28')
+    # Fails with: 'starting container failed: error setting
+    #              label on mount source ...: read-only file system'
+    # mounts = [
+    #     docker.types.Mount(type='volume', source=volumeName, no_copy=True,
+    #                        target=container_config.target_mount)
+    # ]
+
+    # FIXME: get mountPoint
+    source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
+    mounts = [
+        docker.types.Mount(type='bind', source=source_mount,
+                           target=container_config.target_mount)
+    ]
+
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
@@ -131,12 +151,9 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.port': str(container_config.container_port),
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
-        networks=['traefik-net'],  # FIXME
+        networks=[TRAEFIK_NETWORK],
         name='tmp-{}'.format(new_user(12)),
-        mounts=[
-            docker.types.Mount(type='volume', source=volumeName, no_copy=True,
-                               target=container_config.target_mount)
-        ],
+        mounts=mounts,
         constraints=['node.id == {}'.format(nodeId)]
     )
 

@@ -1,6 +1,5 @@
-girder-client==2.1.0
-docker==2.3.0
-requests==2.18.1
 fusepy
 pycurl
+girder_worker==0.4.1
+redis>=2.10.5
 git+https://github.com/whole-tale/girderfs@v0.1#egg=girderfs
