@@ -139,10 +139,13 @@ def _launch_container(volumeName, nodeId, container_config):
 
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
-    mounts = [
-        docker.types.Mount(type='bind', source=source_mount,
-                           target=container_config.target_mount)
-    ]
+    mounts = []
+    for path in ('data', ):
+        source = os.path.join(source_mount, path)
+        target = os.path.join(container_config.target_mount, path)
+        mounts.append(
+            docker.types.Mount(type='bind', source=source, target=target)
+        )
 
     service = cli.services.create(
         container_config.image,
