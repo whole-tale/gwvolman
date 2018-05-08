@@ -1,5 +1,6 @@
 fusepy
 pycurl
-girder_worker==0.4.1
+girder_worker
 redis>=2.10.5
+pyOpenSSL[security]   # bug in pip?
 git+https://github.com/whole-tale/girderfs@v0.2#egg=girderfs
