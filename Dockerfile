@@ -35,6 +35,8 @@ RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -l
    chmod +x /usr/local/lib/container_mount.so && \
    echo "/usr/local/lib/container_mount.so" > /etc/ld.so.preload
 
+RUN useradd -g 100 -G 100 -u 1000 -s /bin/bash wtuser
+
 RUN girder-worker-config set celery backend redis://redis/ && \
   girder-worker-config set celery broker redis://redis/ && \
   girder-worker-config set girder_worker tmp_root /tmp
