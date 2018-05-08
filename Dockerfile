@@ -27,7 +27,7 @@ COPY setup.py /gwvolman/setup.py
 COPY gwvolman /gwvolman/gwvolman
 
 WORKDIR /gwvolman
-RUN pip install -r requirements.txt -e . && rm -rf /tmp/*
+RUN pip install --no-cache-dir -r requirements.txt -e . && rm -rf /tmp/*
 
 COPY mount.c /tmp/mount.c
 RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -ldl -D_FILE_OFFSET_BITS=64 && \

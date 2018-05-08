@@ -2,6 +2,8 @@
 # Copyright (c) 2016, Data Exploration Lab
 # Distributed under the terms of the Modified BSD License.
 
+"""A set of helper routines for WT related tasks."""
+
 from collections import namedtuple
 import logging
 import os
@@ -9,7 +11,10 @@ import random
 import re
 import string
 import uuid
-
+try:
+    from urlparse import urlparse
+except ImportError:
+    from urllib.parse import urlparse
 import docker
 import girder_client
 
@@ -21,6 +26,11 @@ DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
+DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
+REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
+REGISTRY_URL = os.environ.get('REGISTRY_URL',
+                              'https://registry.{}'.format(DOMAIN))
+REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 
 MOUNTS = {}
 RETRIES = 5
@@ -38,15 +48,12 @@ def sample_with_replacement(a, size):
     """
     Get a random path.
 
-    If Python had sampling with replacement built in,
-    I would use that. The other alternative is numpy.random.choice, but
-    numpy is overkill for this tiny bit of random pathing.
-
     """
     return "".join([random.SystemRandom().choice(a) for x in range(size)])
 
 
 def new_user(size):
+    """Get a random path."""
     return sample_with_replacement(string.ascii_letters + string.digits, size)
 
 
@@ -72,7 +79,7 @@ def _get_api_key(gc):
     return api_key
 
 
-def parse_request_body(data):
+def _parse_request_body(data):
     gc = girder_client.GirderClient(apiUrl=data.get('apiUrl', GIRDER_API_URL))
     gc.token = data['girder_token']
     user = gc.get('/user/me')
@@ -94,7 +101,7 @@ def parse_request_body(data):
     return gc, user, obj
 
 
-def get_container_config(gc, tale):
+def _get_container_config(gc, tale):
     if tale is None:
         container_config = {}  # settings['container_config']
     else:
@@ -107,7 +114,7 @@ def get_container_config(gc, tale):
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
-            image=image['fullName'],
+            image=urlparse(REGISTRY_URL).netloc + '/' + tale['imageId'],
             mem_limit=tale_config.get('memLimit'),
             target_mount=tale_config.get('targetMount'),
             url_path=tale_config.get('urlPath')
@@ -130,6 +137,8 @@ def _launch_container(volumeName, nodeId, container_config):
     logging.debug('config = ' + str(container_config))
     logging.debug('command = ' + rendered_command)
     cli = docker.from_env(version='1.28')
+    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+              registry=REGISTRY_URL)
     # Fails with: 'starting container failed: error setting
     #              label on mount source ...: read-only file system'
     # mounts = [
@@ -140,23 +149,33 @@ def _launch_container(volumeName, nodeId, container_config):
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
     mounts = []
-    for path in ('data', ):
+    for path in ('data', 'home'):
         source = os.path.join(source_mount, path)
         target = os.path.join(container_config.target_mount, path)
         mounts.append(
             docker.types.Mount(type='bind', source=source, target=target)
         )
+    host = 'tmp-{}'.format(new_user(12).lower())
+
+    # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
+    endpoint_spec = docker.types.EndpointSpec(mode="vip")
 
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
         labels={
             'traefik.port': str(container_config.container_port),
+            'traefik.enable': 'true',
+            'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
+            'traefik.docker.network': TRAEFIK_NETWORK,
+            'traefik.frontend.passHostHeader': 'true',
+            'traefik.frontend.entryPoints': 'http'
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=[TRAEFIK_NETWORK],
-        name='tmp-{}'.format(new_user(12)),
+        name=host,
         mounts=mounts,
+        endpoint_spec=endpoint_spec,
         constraints=['node.id == {}'.format(nodeId)]
     )
 
