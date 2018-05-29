@@ -26,6 +26,7 @@ DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
+TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_URL = os.environ.get('REGISTRY_URL',
@@ -45,10 +46,7 @@ ContainerConfig = namedtuple('ContainerConfig', [
 
 
 def sample_with_replacement(a, size):
-    """
-    Get a random path.
-
-    """
+    """Get a random path."""
     return "".join([random.SystemRandom().choice(a) for x in range(size)])
 
 
@@ -169,7 +167,7 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
             'traefik.docker.network': TRAEFIK_NETWORK,
             'traefik.frontend.passHostHeader': 'true',
-            'traefik.frontend.entryPoints': 'http'
+            'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT
         },
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=[TRAEFIK_NETWORK],
