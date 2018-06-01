@@ -41,6 +41,8 @@ RUN girder-worker-config set celery backend redis://redis/ && \
   girder-worker-config set celery broker redis://redis/ && \
   girder-worker-config set girder_worker tmp_root /tmp
 
-ENV C_FORCE_ROOT=1 
+ENV C_FORCE_ROOT=1
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 ENTRYPOINT ["python", "-m", "girder_worker", "-l", "INFO"]
