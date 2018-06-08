@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gwvolman',
-    version='0.2.0',
+    version='0.3.0',
     description='An example girder worker extension',
     author='Kacper Kowalik',
     author_email='xarthisius.kk@gmail.com',
