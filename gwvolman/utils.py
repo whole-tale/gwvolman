@@ -41,7 +41,7 @@ PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
     'image', 'command', 'mem_limit', 'cpu_shares',
     'container_port', 'container_user', 'target_mount',
-    'url_path'
+    'url_path', 'environment'
 ])
 
 
@@ -112,6 +112,7 @@ def _get_container_config(gc, tale):
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
+            environment=tale_config.get('environment', []),
             image=urlparse(REGISTRY_URL).netloc + '/' + tale['imageId'],
             mem_limit=tale_config.get('memLimit'),
             target_mount=tale_config.get('targetMount'),
@@ -169,6 +170,7 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.frontend.passHostHeader': 'true',
             'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT
         },
+        env=container_config.environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=[TRAEFIK_NETWORK],
         name=host,
