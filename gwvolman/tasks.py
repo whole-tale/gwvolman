@@ -147,7 +147,6 @@ def shutdown_container(payload):
         logging.info("Container [%s] has been released.", service.name)
     except Exception as e:
         logging.error("Unable to release container [%s]: %s", service.id, e)
-        raise
 
 
 @girder_job(title='Remove Tale Data Volume')
