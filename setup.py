@@ -21,6 +21,7 @@ setup(
     },
     install_requires=[
         'girder-client',
+        'girder-worker',
         'docker>=2.3.0',
         'requests'
     ],
