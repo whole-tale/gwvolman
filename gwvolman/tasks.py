@@ -133,6 +133,8 @@ def shutdown_container(payload):
     gc, user, instance = _parse_request_body(payload)
 
     cli = docker.from_env(version='1.28')
+    if 'containerInfo' not in instance:
+        return
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
         service = cli.services.get(containerInfo['name'])
@@ -154,6 +156,8 @@ def shutdown_container(payload):
 def remove_volume(payload):
     """Unmount WT-fs and remove mountpoint."""
     gc, user, instance = _parse_request_body(payload)
+    if 'containerInfo' not in instance:
+        return
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
