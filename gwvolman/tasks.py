@@ -166,8 +166,14 @@ def remove_volume(payload):
 
 
 @app.task
-def build_image(imageId, imageTag, sourceUrl):
-    """Build docker image from WT Image object and push to a registry."""
+def build_image(imageId, imageTag, sourceUrl, **kwargs):
+    """
+    Build docker image from WT Image object and push to a registry.
+
+    :param imageId: The ID of the image being built
+    :param imageTag: The full name of the image
+    :param sourceUrl: The path to the repository tarball
+    """
     def strip_components(members, strip=1):
         for tarinfo in members:
             path = pathlib.Path(tarinfo.path)
@@ -184,6 +190,18 @@ def build_image(imageId, imageTag, sourceUrl):
     urlretrieve(sourceUrl, local_tarball)
     with tarfile.open(local_tarball) as tar:
         tar.extractall(members=strip_components(tar), path=temp_dir)
+        size = os.path.getsize(local_tarball)
+        fileId = kwargs.get['file_id']
+        if fileId is not None:
+            try:
+                cli.uploadFileContents(field=fileId, stream=tar, size=size)
+            except Exception as e:
+                """
+                uploadFileContents can throw Exception-but we want to
+                 continue the building process even if it the upload fails
+                """
+                logging.warning('Failed to upload repository'
+                                ' to Girder. {}'.format(e))
 
     tag = urlparse(REGISTRY_URL).netloc + '/' + imageId
 
