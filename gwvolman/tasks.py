@@ -166,14 +166,13 @@ def remove_volume(payload):
 
 
 @app.task
-def build_image(imageId, imageTag, sourceUrl, fileId):
+def build_image(imageId, imageTag, sourceUrl, **kwargs):
     """
     Build docker image from WT Image object and push to a registry.
 
     :param imageId: The ID of the image being built
     :param imageTag: The full name of the image
     :param sourceUrl: The path to the repository tarball
-    :param fileId: The id of the file that the repository will end up in
     """
     def strip_components(members, strip=1):
         for tarinfo in members:
@@ -192,6 +191,7 @@ def build_image(imageId, imageTag, sourceUrl, fileId):
     with tarfile.open(local_tarball) as tar:
         tar.extractall(members=strip_components(tar), path=temp_dir)
         size = os.path.getsize(local_tarball)
+        fileId = kwargs.get['file_id']
         if fileId is not None:
             try:
                 cli.uploadFileContents(field=fileId, stream=tar, size=size)
