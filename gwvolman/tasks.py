@@ -16,6 +16,7 @@ try:
 except ImportError:
     from urllib.request import urlretrieve
     from urllib.parse import urlparse
+from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
@@ -24,6 +25,7 @@ from .utils import \
     _get_container_config, _launch_container
 
 
+@girder_job(title='Create Tale Data Volume')
 @app.task
 def create_volume(payload):
     """Create a mountpoint and compose WT-fs."""
@@ -76,13 +78,17 @@ def create_volume(payload):
         gc.urlBase, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
-    return dict(
-        nodeId=cli.info()['Swarm']['NodeID'],
-        mountPoint=mountpoint,
-        volumeName=volume.name
+    payload.update(
+        dict(
+            nodeId=cli.info()['Swarm']['NodeID'],
+            mountPoint=mountpoint,
+            volumeName=volume.name
+        )
     )
+    return payload
 
 
+@girder_job(title='Spawn Instance')
 @app.task
 def launch_container(payload):
     """Launch a container using a Tale object."""
@@ -111,18 +117,24 @@ def launch_container(payload):
             break
         time.sleep(0.2)
 
-    return dict(
-        name=service.name,
-        urlPath=urlPath
+    payload.update(
+        dict(
+            name=service.name,
+            urlPath=urlPath
+        )
     )
+    return payload
 
 
+@girder_job(title='Shutdown Instance')
 @app.task
 def shutdown_container(payload):
     """Shutdown a running Tale."""
     gc, user, instance = _parse_request_body(payload)
 
     cli = docker.from_env(version='1.28')
+    if 'containerInfo' not in instance:
+        return
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
         service = cli.services.get(containerInfo['name'])
@@ -137,13 +149,15 @@ def shutdown_container(payload):
         logging.info("Container [%s] has been released.", service.name)
     except Exception as e:
         logging.error("Unable to release container [%s]: %s", service.id, e)
-        raise
 
 
+@girder_job(title='Remove Tale Data Volume')
 @app.task
 def remove_volume(payload):
     """Unmount WT-fs and remove mountpoint."""
     gc, user, instance = _parse_request_body(payload)
+    if 'containerInfo' not in instance:
+        return
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
@@ -165,6 +179,7 @@ def remove_volume(payload):
         pass
 
 
+@girder_job(title='Build WT Image')
 @app.task
 def build_image(imageId, imageTag, sourceUrl):
     """Build docker image from WT Image object and push to a registry."""
