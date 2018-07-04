@@ -11,7 +11,6 @@ RUN apt-get update -qqy && \
     fuse \
     davfs2 \
     libffi-dev \
-    libgit2-dev \
     libssl-dev \
     libjpeg-dev \
     zlib1g-dev \
@@ -23,12 +22,22 @@ RUN apt-get update -qqy && \
 
 RUN wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py
 
+RUN cd /tmp && \
+  wget -q https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz && \
+  tar xf cmake-3.11.4-Linux-x86_64.tar.gz && \
+  wget -q https://github.com/libgit2/libgit2/archive/v0.27.2.tar.gz && \
+  tar xf v0.27.2.tar.gz && \
+  cd libgit2-0.27.2 && \
+  ../cmake-3.11.4-Linux-x86_64/bin/cmake . && \
+  make && make install && \
+  rm -rf /tmp/*
+
 COPY requirements.txt /gwvolman/requirements.txt
 COPY setup.py /gwvolman/setup.py
 COPY gwvolman /gwvolman/gwvolman
 
 WORKDIR /gwvolman
-RUN pip install --no-cache-dir -r requirements.txt -e . && rm -rf /tmp/*
+RUN LDFLAGS="-Wl,-rpath='/usr/local/lib',--enable-new-dtags $LDFLAGS" pip install --no-cache-dir -r requirements.txt -e . && rm -rf /tmp/*
 
 COPY mount.c /tmp/mount.c
 RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -ldl -D_FILE_OFFSET_BITS=64 && \
