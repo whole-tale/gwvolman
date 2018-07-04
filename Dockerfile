@@ -11,6 +11,7 @@ RUN apt-get update -qqy && \
     fuse \
     davfs2 \
     libffi-dev \
+    libgit2-dev \
     libssl-dev \
     libjpeg-dev \
     zlib1g-dev \
