@@ -4,7 +4,6 @@ import os
 import shutil
 import time
 import tempfile
-from pygit2 import clone_repository
 import docker
 import subprocess
 from docker.errors import DockerException
@@ -182,6 +181,7 @@ def build_image(image_id, repo_url, commit_id):
     """Build docker image from WT Image object and push to a registry."""
     temp_dir = tempfile.mkdtemp()
     # Clone repository and set HEAD to chosen commitId
+    from pygit2 import clone_repository
     repo = clone_repository(repo_url, temp_dir)
     repo.init_submodules()
     repo.update_submodules()
