@@ -3,18 +3,15 @@ from distutils.version import StrictVersion
 import os
 import shutil
 import time
-import tarfile
 import tempfile
-import pathlib
+from pygit2 import clone_repository
 import docker
 import subprocess
 from docker.errors import DockerException
 import logging
 try:
-    from urllib import urlretrieve
     from urlparse import urlparse
 except ImportError:
-    from urllib.request import urlretrieve
     from urllib.parse import urlparse
 from girder_worker.utils import girder_job
 from girder_worker.app import app
@@ -181,36 +178,32 @@ def remove_volume(payload):
 
 @girder_job(title='Build WT Image')
 @app.task
-def build_image(imageId, imageTag, sourceUrl):
+def build_image(image_id, repo_url, commit_id):
     """Build docker image from WT Image object and push to a registry."""
-    def strip_components(members, strip=1):
-        for tarinfo in members:
-            path = pathlib.Path(tarinfo.path)
-            if len(path.parts) > strip:
-                tarinfo.path = str(pathlib.Path(*path.parts[strip:]))
-                yield tarinfo
-
-    cli = docker.from_env(version='1.28')
-    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=REGISTRY_URL)
-
     temp_dir = tempfile.mkdtemp()
-    local_tarball = os.path.join(temp_dir, '{}.tar.gz'.format(imageId))
-    urlretrieve(sourceUrl, local_tarball)
-    with tarfile.open(local_tarball) as tar:
-        tar.extractall(members=strip_components(tar), path=temp_dir)
-
-    tag = urlparse(REGISTRY_URL).netloc + '/' + imageId
+    # Clone repository and set HEAD to chosen commitId
+    repo = clone_repository(repo_url, temp_dir)
+    repo.init_submodules()
+    repo.update_submodules()
+    ref = repo.create_reference('refs/tags/wtbuild', commit_id)
+    repo.checkout(ref)
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=REGISTRY_URL)
+    tag = urlparse(REGISTRY_URL).netloc + '/' + image_id
     for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
+
+    # TODO: create tarball
+    # remove clone
     shutil.rmtree(temp_dir, ignore_errors=True)
     for line in apicli.push(tag, stream=True):
         print(line)
 
+    cli = docker.from_env(version='1.28')
+    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+              registry=REGISTRY_URL)
     image = cli.images.get(tag)
     # Only image.attrs['Id'] is used in Girder right now
     return image.attrs
