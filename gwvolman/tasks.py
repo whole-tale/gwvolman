@@ -181,12 +181,9 @@ def build_image(image_id, repo_url, commit_id):
     """Build docker image from WT Image object and push to a registry."""
     temp_dir = tempfile.mkdtemp()
     # Clone repository and set HEAD to chosen commitId
-    from pygit2 import clone_repository
-    repo = clone_repository(repo_url, temp_dir)
-    repo.init_submodules()
-    repo.update_submodules()
-    ref = repo.create_reference('refs/tags/wtbuild', commit_id)
-    repo.checkout(ref)
+    cmd = 'git clone --recursive {} {}'.format(repo_url, temp_dir)
+    subprocess.call(cmd, shell=True)
+    subprocess.call('git checkout ' + commit_id, shell=True, cwd=temp_dir)
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,

@@ -22,16 +22,6 @@ RUN apt-get update -qqy && \
 
 RUN wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py
 
-RUN cd /tmp && \
-  wget -q https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz && \
-  tar xf cmake-3.11.4-Linux-x86_64.tar.gz && \
-  wget -q https://github.com/libgit2/libgit2/archive/v0.27.2.tar.gz && \
-  tar xf v0.27.2.tar.gz && \
-  cd libgit2-0.27.2 && \
-  ../cmake-3.11.4-Linux-x86_64/bin/cmake . && \
-  make && make install && \
-  rm -rf /tmp/*
-
 COPY requirements.txt /gwvolman/requirements.txt
 COPY setup.py /gwvolman/setup.py
 COPY gwvolman /gwvolman/gwvolman
