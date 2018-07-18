@@ -125,16 +125,22 @@ def _launch_container(volumeName, nodeId, container_config):
 
     token = uuid.uuid4().hex
     # command
-    rendered_command = \
-        container_config.command.format(
-            base_path='', port=container_config.container_port,
-            ip='0.0.0.0', token=token)
+    if container_config.command:
+        rendered_command = \
+            container_config.command.format(
+                base_path='', port=container_config.container_port,
+                ip='0.0.0.0', token=token)
+    else:
+        rendered_command = None
 
-    rendered_url_path = \
-        container_config.url_path.format(token=token)
+    if container_config.url_path:
+        rendered_url_path = \
+            container_config.url_path.format(token=token)
+    else:
+        rendered_url_path = ''
 
     logging.debug('config = ' + str(container_config))
-    logging.debug('command = ' + rendered_command)
+    logging.debug('command = ' + str(rendered_command))
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=REGISTRY_URL)
