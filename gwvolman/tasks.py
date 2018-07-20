@@ -3,19 +3,16 @@ from distutils.version import StrictVersion
 import os
 import shutil
 import time
-import tarfile
 import tempfile
-import pathlib
 import docker
 import subprocess
 from docker.errors import DockerException
 import logging
 try:
-    from urllib import urlretrieve
     from urlparse import urlparse
 except ImportError:
-    from urllib.request import urlretrieve
     from urllib.parse import urlparse
+from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
@@ -24,6 +21,7 @@ from .utils import \
     _get_container_config, _launch_container
 
 
+@girder_job(title='Create Tale Data Volume')
 @app.task
 def create_volume(payload):
     """Create a mountpoint and compose WT-fs."""
@@ -76,13 +74,17 @@ def create_volume(payload):
         gc.urlBase, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
-    return dict(
-        nodeId=cli.info()['Swarm']['NodeID'],
-        mountPoint=mountpoint,
-        volumeName=volume.name
+    payload.update(
+        dict(
+            nodeId=cli.info()['Swarm']['NodeID'],
+            mountPoint=mountpoint,
+            volumeName=volume.name
+        )
     )
+    return payload
 
 
+@girder_job(title='Spawn Instance')
 @app.task
 def launch_container(payload):
     """Launch a container using a Tale object."""
@@ -111,18 +113,24 @@ def launch_container(payload):
             break
         time.sleep(0.2)
 
-    return dict(
-        name=service.name,
-        urlPath=urlPath
+    payload.update(
+        dict(
+            name=service.name,
+            urlPath=urlPath
+        )
     )
+    return payload
 
 
+@girder_job(title='Shutdown Instance')
 @app.task
 def shutdown_container(payload):
     """Shutdown a running Tale."""
     gc, user, instance = _parse_request_body(payload)
 
     cli = docker.from_env(version='1.28')
+    if 'containerInfo' not in instance:
+        return
     containerInfo = instance['containerInfo']  # VALIDATE
     try:
         service = cli.services.get(containerInfo['name'])
@@ -137,13 +145,15 @@ def shutdown_container(payload):
         logging.info("Container [%s] has been released.", service.name)
     except Exception as e:
         logging.error("Unable to release container [%s]: %s", service.id, e)
-        raise
 
 
+@girder_job(title='Remove Tale Data Volume')
 @app.task
 def remove_volume(payload):
     """Unmount WT-fs and remove mountpoint."""
     gc, user, instance = _parse_request_body(payload)
+    if 'containerInfo' not in instance:
+        return
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
@@ -165,37 +175,32 @@ def remove_volume(payload):
         pass
 
 
+@girder_job(title='Build WT Image')
 @app.task
-def build_image(imageId, imageTag, sourceUrl):
+def build_image(image_id, repo_url, commit_id):
     """Build docker image from WT Image object and push to a registry."""
-    def strip_components(members, strip=1):
-        for tarinfo in members:
-            path = pathlib.Path(tarinfo.path)
-            if len(path.parts) > strip:
-                tarinfo.path = str(pathlib.Path(*path.parts[strip:]))
-                yield tarinfo
-
-    cli = docker.from_env(version='1.28')
-    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=REGISTRY_URL)
-
     temp_dir = tempfile.mkdtemp()
-    local_tarball = os.path.join(temp_dir, '{}.tar.gz'.format(imageId))
-    urlretrieve(sourceUrl, local_tarball)
-    with tarfile.open(local_tarball) as tar:
-        tar.extractall(members=strip_components(tar), path=temp_dir)
-
-    tag = urlparse(REGISTRY_URL).netloc + '/' + imageId
+    # Clone repository and set HEAD to chosen commitId
+    cmd = 'git clone --recursive {} {}'.format(repo_url, temp_dir)
+    subprocess.call(cmd, shell=True)
+    subprocess.call('git checkout ' + commit_id, shell=True, cwd=temp_dir)
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=REGISTRY_URL)
+    tag = urlparse(REGISTRY_URL).netloc + '/' + image_id
     for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
+
+    # TODO: create tarball
+    # remove clone
     shutil.rmtree(temp_dir, ignore_errors=True)
     for line in apicli.push(tag, stream=True):
         print(line)
 
+    cli = docker.from_env(version='1.28')
+    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+              registry=REGISTRY_URL)
     image = cli.images.get(tag)
     # Only image.attrs['Id'] is used in Girder right now
     return image.attrs

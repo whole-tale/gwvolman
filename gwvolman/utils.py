@@ -26,6 +26,7 @@ DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
+TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_URL = os.environ.get('REGISTRY_URL',
@@ -40,15 +41,12 @@ PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
     'image', 'command', 'mem_limit', 'cpu_shares',
     'container_port', 'container_user', 'target_mount',
-    'url_path'
+    'url_path', 'environment'
 ])
 
 
 def sample_with_replacement(a, size):
-    """
-    Get a random path.
-
-    """
+    """Get a random path."""
     return "".join([random.SystemRandom().choice(a) for x in range(size)])
 
 
@@ -114,6 +112,7 @@ def _get_container_config(gc, tale):
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
+            environment=tale_config.get('environment', []),
             image=urlparse(REGISTRY_URL).netloc + '/' + tale['imageId'],
             mem_limit=tale_config.get('memLimit'),
             target_mount=tale_config.get('targetMount'),
@@ -126,16 +125,22 @@ def _launch_container(volumeName, nodeId, container_config):
 
     token = uuid.uuid4().hex
     # command
-    rendered_command = \
-        container_config.command.format(
-            base_path='', port=container_config.container_port,
-            ip='0.0.0.0', token=token)
+    if container_config.command:
+        rendered_command = \
+            container_config.command.format(
+                base_path='', port=container_config.container_port,
+                ip='0.0.0.0', token=token)
+    else:
+        rendered_command = None
 
-    rendered_url_path = \
-        container_config.url_path.format(token=token)
+    if container_config.url_path:
+        rendered_url_path = \
+            container_config.url_path.format(token=token)
+    else:
+        rendered_url_path = ''
 
     logging.debug('config = ' + str(container_config))
-    logging.debug('command = ' + rendered_command)
+    logging.debug('command = ' + str(rendered_command))
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=REGISTRY_URL)
@@ -169,8 +174,9 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
             'traefik.docker.network': TRAEFIK_NETWORK,
             'traefik.frontend.passHostHeader': 'true',
-            'traefik.frontend.entryPoints': 'http'
+            'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT
         },
+        env=container_config.environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=[TRAEFIK_NETWORK],
         name=host,
