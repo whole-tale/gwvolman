@@ -64,10 +64,12 @@ def create_volume(payload):
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(gc)
-    cmd = "girderfs --hostns -c remote --api-url {} --api-key {} {} {}".format(
-        gc.urlBase, api_key, data_dir, tale['folderId'])
-    logging.info("Calling: %s", cmd)
-    subprocess.call(cmd, shell=True)
+
+    if tale.get('folderId'):
+        cmd = "girderfs --hostns -c remote --api-url {} --api-key {} {} {}".format(
+            gc.urlBase, api_key, data_dir, tale['folderId'])
+        logging.info("Calling: %s", cmd)
+        subprocess.call(cmd, shell=True)
     #  webdav relies on mount.c module, don't use hostns for now
     cmd = 'girderfs -c wt_home --api-url '
     cmd += '{} --api-key {} {} {}'.format(
