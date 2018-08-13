@@ -12,6 +12,7 @@ try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
+import girder_client
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
@@ -19,6 +20,10 @@ from .utils import \
     HOSTDIR, API_VERSION, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
     _parse_request_body, new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container
+
+
+DEFAULT_USER = 1000
+DEFAULT_GROUP = 100
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -42,7 +47,20 @@ def create_volume(payload):
     logging.info("Volume: %s created", volume.name)
     mountpoint = volume.attrs['Mountpoint']
     logging.info("Mountpoint: %s", mountpoint)
-    os.chown(HOSTDIR + mountpoint, 1000, 100)
+
+    try:
+        gc.downloadFolderRecursive(tale['narrativeId'], mountpoint)
+    except KeyError:
+        pass  # no narrativeId
+    except girder_client.HttpError:
+        logging.warn("Narrative folder not found for tale: %s",
+                     str(tale['_id']))
+        pass
+
+    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
+    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
+        for obj in dirs + files:
+            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
 
     # Before calling girderfs and "escaping" container, we need to make
     # sure that shared objects we use are available on the host
