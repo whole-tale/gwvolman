@@ -4,3 +4,8 @@ girder_worker
 redis>=2.10.5
 pyOpenSSL[security]   # bug in pip?
 git+https://github.com/whole-tale/girderfs#egg=girderfs
+d1_common
+requests
+yaml
+d1_common
+jwt
