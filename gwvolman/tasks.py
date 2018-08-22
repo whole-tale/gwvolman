@@ -7,24 +7,25 @@ import tempfile
 import docker
 import subprocess
 from docker.errors import DockerException
+import girder_client
+
 import logging
 try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
-import girder_client
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
-    HOSTDIR, API_VERSION, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
+    HOSTDIR, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
     _parse_request_body, new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container
-
+from .publish import publish_tale
+from .constants import API_VERSION
 
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
-
 
 @girder_job(title='Create Tale Data Volume')
 @app.task
@@ -224,3 +225,45 @@ def build_image(image_id, repo_url, commit_id):
     image = cli.images.get(tag)
     # Only image.attrs['Id'] is used in Girder right now
     return image.attrs
+
+
+@girder_job(title='Publish Tale')
+@app.task
+def publish(item_ids,
+            tale,
+            dataone_node,
+            dataone_auth_token,
+            girder_token,
+            user,
+            prov_info,
+            license_id):
+    """
+    Publishes a Tale to DataONE
+
+    :param item_ids: A list of item ids that are in the package
+    :param tale: The tale structure from /tale/id
+    :param dataone_node: The DataONE member node endpoint
+    :param dataone_auth_token: The user's DataONE JWT
+    :param girder_token: The user's girder token
+    :param user: The `user` object from /user/me
+    :param prov_info: Additional information included in the tale yaml
+    :param license_id: The spdx of the license used
+    :type item_ids: list
+    :type tale: dict
+    :type dataone_node: str
+    :type dataone_auth_token: str
+    :type girder_token: str
+    :type user: dict
+    :type prov_info: dict
+    :type license_id: str
+    """
+
+    res = publish_tale(item_ids,
+                       tale,
+                       dataone_node,
+                       dataone_auth_token,
+                       license_id,
+                       girder_token,
+                       user,
+                       prov_info)
+    return res
