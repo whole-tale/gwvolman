@@ -263,7 +263,7 @@ def create_minimum_eml(tale,
 
         # Create the record for the object
         item = gc.getItem(item_id)
-        file = get_file_item(item_id, user, gc)
+        file = get_file_item(item_id, gc)
         add_object_record(dataset,
                           item['name'],
                           item.get('description', ''),

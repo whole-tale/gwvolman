@@ -55,9 +55,7 @@ file_descriptions = {
         'reproduce the compute environment.',
     ExtraFileNames.license_filename:
         'The package\'s licensing information.'
-
 }
-
 
 """
 The DataONE packages need to have descriptions in the EML metadata. The

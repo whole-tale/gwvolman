@@ -482,8 +482,10 @@ def filter_items(item_ids, user, gc):
         # Check if it points do a dataone objbect
         url = get_remote_url(item_id, gc)
         if url is not None:
-            dataone_objects.append(item_id)
-            continue
+            if is_dataone_url(url):
+                dataone_objects.append(item_id)
+                continue
+
             """
             If there is a url, and it's not pointing to a DataONE resource, then assume
             it's pointing to an external object
