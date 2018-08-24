@@ -532,10 +532,12 @@ def publish_tale(item_ids,
     :return: The pid of the package's resource map
     :rtype: str
     """
-
     client = None
-    gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
-    gc.token = str(girder_token)
+    try:
+        gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
+        gc.token = str(girder_token)
+    except Exception as e:
+        raise Exception('ERROR {}'.format(e))
 
     # create_dataone_client can throw DataONEException
     try:
@@ -553,7 +555,7 @@ def publish_tale(item_ids,
     except DataONEException as e:
         logging.warning('Error creating the DataONE Client: {}'.format(e))
         # We'll want to exit if we can't create the client
-        return 'Failed to establish connection with DataONE. {}'.format(e)
+        raise ValueError('Failed to establish connection with DataONE. {}'.format(e))
 
     user_id = extract_user_id(dataone_auth_token)
     if user_id is None:
