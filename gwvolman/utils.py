@@ -450,17 +450,15 @@ def compute_md5(file):
     return md5
 
 
-def filter_items(item_ids, user, gc):
+def filter_items(item_ids, gc):
     """
     Take a list of item ids and determine whether it:
        1. Exists on the local file system
        2. Exists on DataONE
        3. Is linked to a remote location other than DataONE
     :param item_ids: A list of items to be processed
-    :param user: The user that is requesting the package creation
     :param gc: The girder client
     :type item_ids: list
-    :type user: girder.models.User
     :return: A dictionary of lists for each file location
     For example,
      {'dataone': ['uuid:123456', 'doi.10x501'],

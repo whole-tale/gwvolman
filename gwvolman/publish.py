@@ -569,7 +569,7 @@ def publish_tale(item_ids,
         2. DataONE resource
         3. Local filesystem object
     """
-    filtered_items = filter_items(item_ids, user, gc)
+    filtered_items = filter_items(item_ids, gc)
 
     """
     Iterate through the list of objects that are local (ie files without a `linkUrl`

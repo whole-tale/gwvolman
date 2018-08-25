@@ -6,7 +6,7 @@ from girder import events
 
 API_VERSION = '2.0'
 GIRDER_API_URL = os.environ.get(
-    "GIRDER_API_URL", "https://girder.wholetale.org/api/v1")
+    "GIRDER_API_URL", "http://probable-cattle.nceas.ucsb.edu:8080/api/v1")
 
 
 class DataONELocations:
