@@ -263,8 +263,8 @@ def publish(item_ids,
                        tale,
                        dataone_node,
                        dataone_auth_token,
-                       license_id,
                        girder_token,
                        user,
-                       prov_info)
+                       prov_info,
+                       license_id)
     return res

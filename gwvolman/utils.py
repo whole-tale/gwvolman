@@ -208,9 +208,11 @@ def get_file_item(item_id, gc):
     :return: The file object or None
     :rtype: girder.models.file
     """
-
     file_generator = gc.listFile(item_id)
-    return next(file_generator)
+    try:
+        return next(file_generator)
+    except StopIteration as e:
+        return None
 
 
 def is_dataone_url(url):

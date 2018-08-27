@@ -361,7 +361,7 @@ def generate_system_metadata(pid,
                 file_object = file_object.encode("utf-8")
         md5.update(file_object)
         size = len(file_object)
-        md5 = md5.hexdigest()
+    md5 = md5.hexdigest()
     sys_meta = populate_sys_meta(pid,
                                  format_id,
                                  size,
