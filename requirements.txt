@@ -5,7 +5,7 @@ redis>=2.10.5
 pyOpenSSL[security]   # bug in pip?
 git+https://github.com/whole-tale/girderfs#egg=girderfs
 requests
-yaml
+pyyaml
 d1_common
 jwt
 dataone.common
