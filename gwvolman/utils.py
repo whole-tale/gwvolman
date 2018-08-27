@@ -208,9 +208,11 @@ def get_file_item(item_id, gc):
     :return: The file object or None
     :rtype: girder.models.file
     """
-
     file_generator = gc.listFile(item_id)
-    return next(file_generator)
+    try:
+        return next(file_generator)
+    except StopIteration as e:
+        return None
 
 
 def is_dataone_url(url):
@@ -450,17 +452,15 @@ def compute_md5(file):
     return md5
 
 
-def filter_items(item_ids, user, gc):
+def filter_items(item_ids, gc):
     """
     Take a list of item ids and determine whether it:
        1. Exists on the local file system
        2. Exists on DataONE
        3. Is linked to a remote location other than DataONE
     :param item_ids: A list of items to be processed
-    :param user: The user that is requesting the package creation
     :param gc: The girder client
     :type item_ids: list
-    :type user: girder.models.User
     :return: A dictionary of lists for each file location
     For example,
      {'dataone': ['uuid:123456', 'doi.10x501'],
@@ -482,8 +482,10 @@ def filter_items(item_ids, user, gc):
         # Check if it points do a dataone objbect
         url = get_remote_url(item_id, gc)
         if url is not None:
-            dataone_objects.append(item_id)
-            continue
+            if is_dataone_url(url):
+                dataone_objects.append(item_id)
+                continue
+
             """
             If there is a url, and it's not pointing to a DataONE resource, then assume
             it's pointing to an external object

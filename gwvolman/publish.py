@@ -90,8 +90,6 @@ def create_upload_eml(tale,
                 pid=eml_pid,
                 file_object=io.BytesIO(eml_doc),
                 system_metadata=meta)
-    print(eml_doc)
-    print(eml_pid)
     return eml_pid
 
 
@@ -208,8 +206,6 @@ def create_paths_structure(item_ids, gc):
     for item_id in item_ids:
         item = gc.getItem(item_id)
         path = gc.get('resource/{}/path?type=item'.format(item_id))
-        print('PATH')
-        print(path)
         path_file[item['name']] = path
 
     return path_file
@@ -357,7 +353,6 @@ def upload_license_file(client, license_id, rights_holder):
     :type rights_holder: str
     :return: The pid and size of the license file
     """
-
     # Holds the license text
     license_text = str()
     PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -365,7 +360,6 @@ def upload_license_file(client, license_id, rights_holder):
     # Path to the license file
     license_path = os.path.join(ROOT_DIR, 'gwvolman', 'licenses',
                                 license_files[license_id])
-    print(license_path)
     try:
         license_length = os.path.getsize(license_path)
         with open(license_path) as f:
@@ -410,29 +404,24 @@ def create_upload_object_metadata(client, file_object, rights_holder, gc):
 
     # PID for the metadata object
     pid = str(uuid.uuid4())
-    print('FILE PID {}'.format(pid))
-    PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
-    ROOT_DIR = os.path.dirname(PACKAGE_DIR)
-    # Path to the license file
-    file_path = os.path.join(ROOT_DIR, 'gwvolman', 'temp')
-    print(file_path)
-
-    gc.downloadFile(file_object['_id'], file_path)
-    with io.open(file_path, "rb") as file:
-        file.seek(0)
+    with tempfile.NamedTemporaryFile() as temp_file:
+        gc.downloadFile(file_object['_id'], temp_file.name)
+        temp_file.seek(0)
         meta = generate_system_metadata(pid,
                                         format_id=file_object['mimeType'],
-                                        file_object=file,
+                                        file_object=temp_file,
                                         name=file_object['name'],
                                         is_file=True,
                                         rights_holder=rights_holder,
                                         size=file_object['size'])
-        file.seek(0)
+        temp_file.seek(0)
         upload_file(client=client,
                     pid=pid,
-                    file_object=file.read(),
+                    file_object=temp_file.read(),
                     system_metadata=meta)
-    print('FILE PID {}'.format(pid))
+        logging.info('Uploaded file to DataONE, PID {}'.format(pid))
+    return pid
+
     return pid
 
 
@@ -532,10 +521,12 @@ def publish_tale(item_ids,
     :return: The pid of the package's resource map
     :rtype: str
     """
-
     client = None
-    gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
-    gc.token = str(girder_token)
+    try:
+        gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
+        gc.token = str(girder_token)
+    except Exception as e:
+        raise Exception('ERROR {}'.format(e))
 
     # create_dataone_client can throw DataONEException
     try:
@@ -547,13 +538,14 @@ def publish_tale(item_ids,
         logging.debug('Creating the DataONE client')
         client = create_dataone_client(dataone_node, {
             "headers": {
-                "Authorization": "Bearer " + dataone_auth_token},
+                "Authorization": "Bearer " + dataone_auth_token,
+                "Connection": "close"},
             "user_agent": "safari"})
 
     except DataONEException as e:
         logging.warning('Error creating the DataONE Client: {}'.format(e))
         # We'll want to exit if we can't create the client
-        return 'Failed to establish connection with DataONE. {}'.format(e)
+        raise ValueError('Failed to establish connection with DataONE. {}'.format(e))
 
     user_id = extract_user_id(dataone_auth_token)
     if user_id is None:
@@ -567,7 +559,7 @@ def publish_tale(item_ids,
         2. DataONE resource
         3. Local filesystem object
     """
-    filtered_items = filter_items(item_ids, user, gc)
+    filtered_items = filter_items(item_ids, gc)
 
     """
     Iterate through the list of objects that are local (ie files without a `linkUrl`
@@ -579,7 +571,6 @@ def publish_tale(item_ids,
     for file in filtered_items['local_files']:
         logging.debug('Processing local files for DataONE upload')
         local_file_pids.append(create_upload_object_metadata(client, file, user_id, gc))
-    print('Local File PIDS {}'.format(local_file_pids))
 
     logging.debug('Processing Tale YAML file')
     remote_items = filtered_items['remote'] + filtered_items['dataone']

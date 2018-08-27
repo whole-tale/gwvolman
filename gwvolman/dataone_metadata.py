@@ -263,7 +263,7 @@ def create_minimum_eml(tale,
 
         # Create the record for the object
         item = gc.getItem(item_id)
-        file = get_file_item(item_id, user, gc)
+        file = get_file_item(item_id, gc)
         add_object_record(dataset,
                           item['name'],
                           item.get('description', ''),
@@ -361,7 +361,7 @@ def generate_system_metadata(pid,
                 file_object = file_object.encode("utf-8")
         md5.update(file_object)
         size = len(file_object)
-        md5 = md5.hexdigest()
+    md5 = md5.hexdigest()
     sys_meta = populate_sys_meta(pid,
                                  format_id,
                                  size,
