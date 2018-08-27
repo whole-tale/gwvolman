@@ -6,7 +6,6 @@ pyOpenSSL[security]   # bug in pip?
 git+https://github.com/whole-tale/girderfs#egg=girderfs
 requests
 pyyaml
-d1_common
 jwt
 dataone.common
 dataone.libclient
