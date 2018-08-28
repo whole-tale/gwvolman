@@ -248,7 +248,7 @@ def create_minimum_eml(tale,
     description = tale.get('description', str())
     if description is not str():
         abstract = ET.SubElement(dataset, 'abstract')
-        ET.SubElement(abstract, 'para').text = strip_html_tags(description)
+        ET.SubElement(abstract, 'para').text = strip_html_tags(str(description))
 
     # Add a section for the license file
     create_intellectual_rights(dataset, license_id)
