@@ -481,7 +481,7 @@ def create_upload_repository(tale, client, rights_holder, gc):
 
 
 def publish_tale(item_ids,
-                 tale,
+                 taleId,
                  dataone_node,
                  dataone_auth_token,
                  girder_token,
@@ -503,7 +503,7 @@ def publish_tale(item_ids,
     the name, description, and ID.
 
     :param item_ids: A list of item ids that are in the package
-    :param tale: The tale structure from /tale/id
+    :param taleId: The tale Id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
@@ -511,7 +511,7 @@ def publish_tale(item_ids,
     :param prov_info: Additional information included in the tale yaml
     :param license_id: The spdx of the license used
     :type item_ids: list
-    :type tale: dict
+    :type taleId: str
     :type dataone_node: str
     :type dataone_auth_token: str
     :type girder_token: str
@@ -526,8 +526,9 @@ def publish_tale(item_ids,
         gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
         gc.token = str(girder_token)
     except Exception as e:
-        raise Exception('ERROR {}'.format(e))
+        raise ValueError('Error authenticating with Girder {}'.format(e))
 
+    tale = gc.get('/tale/{}/'.format(taleId))
     # create_dataone_client can throw DataONEException
     try:
         """
@@ -541,7 +542,6 @@ def publish_tale(item_ids,
                 "Authorization": "Bearer " + dataone_auth_token,
                 "Connection": "close"},
             "user_agent": "safari"})
-
     except DataONEException as e:
         logging.warning('Error creating the DataONE Client: {}'.format(e))
         # We'll want to exit if we can't create the client

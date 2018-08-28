@@ -242,7 +242,7 @@ def publish(item_ids,
     Publishes a Tale to DataONE
 
     :param item_ids: A list of item ids that are in the package
-    :param tale: The tale structure from /tale/id
+    :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
@@ -250,7 +250,7 @@ def publish(item_ids,
     :param prov_info: Additional information included in the tale yaml
     :param license_id: The spdx of the license used
     :type item_ids: list
-    :type tale: dict
+    :type tale: str
     :type dataone_node: str
     :type dataone_auth_token: str
     :type girder_token: str
