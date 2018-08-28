@@ -422,8 +422,6 @@ def create_upload_object_metadata(client, file_object, rights_holder, gc):
         logging.info('Uploaded file to DataONE, PID {}'.format(pid))
     return pid
 
-    return pid
-
 
 def create_upload_repository(tale, client, rights_holder, gc):
     """
@@ -485,7 +483,7 @@ def publish_tale(item_ids,
                  dataone_node,
                  dataone_auth_token,
                  girder_token,
-                 user,
+                 userId,
                  prov_info,
                  license_id):
     """
@@ -507,7 +505,7 @@ def publish_tale(item_ids,
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
-    :param user: The `user` object from /user/me
+    :param userId: The user's ID
     :param prov_info: Additional information included in the tale yaml
     :param license_id: The spdx of the license used
     :type item_ids: list
@@ -515,7 +513,7 @@ def publish_tale(item_ids,
     :type dataone_node: str
     :type dataone_auth_token: str
     :type girder_token: str
-    :type user: dict
+    :type userId: str
     :type prov_info: dict
     :type license_id: str
     :return: The pid of the package's resource map
@@ -529,6 +527,7 @@ def publish_tale(item_ids,
         raise ValueError('Error authenticating with Girder {}'.format(e))
 
     tale = gc.get('/tale/{}/'.format(taleId))
+    user = gc.getUser(userId)
     # create_dataone_client can throw DataONEException
     try:
         """
