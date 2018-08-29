@@ -235,26 +235,26 @@ def publish(item_ids,
             dataone_node,
             dataone_auth_token,
             girder_token,
-            user,
+            userId,
             prov_info,
             license_id):
     """
     Publishes a Tale to DataONE
 
     :param item_ids: A list of item ids that are in the package
-    :param tale: The tale structure from /tale/id
+    :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
-    :param user: The `user` object from /user/me
+    :param userId: The user's ID
     :param prov_info: Additional information included in the tale yaml
     :param license_id: The spdx of the license used
     :type item_ids: list
-    :type tale: dict
+    :type tale: str
     :type dataone_node: str
     :type dataone_auth_token: str
     :type girder_token: str
-    :type user: dict
+    :type userId: str
     :type prov_info: dict
     :type license_id: str
     """
@@ -264,7 +264,7 @@ def publish(item_ids,
                        dataone_node,
                        dataone_auth_token,
                        girder_token,
-                       user,
+                       userId,
                        prov_info,
                        license_id)
     return res
