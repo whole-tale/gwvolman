@@ -2,7 +2,10 @@ import io
 import tempfile
 import logging
 
-from urllib.request import urlopen
+try:
+    from urllib.request import urlopen
+except ImportError:
+    from urllib2 import urlopen
 from shutil import copyfileobj
 import uuid
 import requests
