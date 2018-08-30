@@ -45,4 +45,9 @@ ENV C_FORCE_ROOT=1
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
+# Temporary fix for kombu
+RUN sed \
+  -e 's/return decode(data/&.decode("utf-8")/' \
+  -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
+
 ENTRYPOINT ["python3", "-m", "girder_worker", "-l", "INFO"]
