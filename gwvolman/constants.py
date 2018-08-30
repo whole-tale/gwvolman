@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-from girder import events
 
 API_VERSION = '2.0'
 GIRDER_API_URL = os.environ.get(
