@@ -51,7 +51,7 @@ def create_volume(payload):
     logging.info("Mountpoint: %s", mountpoint)
 
     try:
-        gc.downloadFolderRecursive(tale['narrativeId'], mountpoint)
+        gc.downloadFolderRecursive(tale['narrativeId'], HOSTDIR + mountpoint)
     except KeyError:
         pass  # no narrativeId
     except girder_client.HttpError:
