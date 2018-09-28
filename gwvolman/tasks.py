@@ -2,6 +2,8 @@
 from distutils.version import StrictVersion
 import os
 import shutil
+import socket
+import json
 import time
 import tempfile
 import docker
@@ -22,7 +24,7 @@ from .utils import \
     _parse_request_body, new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container
 from .publish import publish_tale
-from .constants import API_VERSION
+from .constants import API_VERSION, GIRDER_API_URL
 
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
@@ -69,7 +71,7 @@ def create_volume(payload):
     # TODO: this assumes overlayfs
     mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
     if 'overlay /usr/local' not in mounts:
-        cont = cli.containers.get('celery_worker')
+        cont = cli.containers.get(socket.gethostname())
         libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
         subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
                         shell=True)
@@ -86,21 +88,34 @@ def create_volume(payload):
     api_key = _get_api_key(gc)
 
     if tale.get('folderId'):
-        cmd = "girderfs --hostns -c remote --api-url {} --api-key {} {} {}".format(
-            gc.urlBase, api_key, data_dir, tale['folderId'])
+        data_set = [
+            {'itemId': folder['_id'], 'mountPath': '/' + folder['name']}
+            for folder in gc.listFolder(tale['folderId'])
+        ]
+        data_set += [
+            {'itemId': item['_id'], 'mountPath': '/' + item['name']}
+            for item in gc.listItem(tale['folderId'])
+        ]
+        session = gc.post('/dm/session', parameters={'dataSet': json.dumps(data_set)})
+
+        cmd = "girderfs --hostns -c wt_dms --api-url {} --api-key {} {} {}".format(
+            GIRDER_API_URL, api_key, data_dir, session['_id'])
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
+    else:
+        session = {'_id': None}
     #  webdav relies on mount.c module, don't use hostns for now
     cmd = 'girderfs -c wt_home --api-url '
     cmd += '{} --api-key {} {} {}'.format(
-        gc.urlBase, api_key, home_dir, homeDir['_id'])
+        GIRDER_API_URL, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
     payload.update(
         dict(
             nodeId=cli.info()['Swarm']['NodeID'],
             mountPoint=mountpoint,
-            volumeName=volume.name
+            volumeName=volume.name,
+            sessionId=session['_id']
         )
     )
     return payload
@@ -118,7 +133,7 @@ def launch_container(payload):
     gc, user, tale = _parse_request_body(payload)
     # _pull_image()
     container_config = _get_container_config(gc, tale)  # FIXME
-    service, urlPath = _launch_container(
+    service, attrs = _launch_container(
         payload['volumeName'], payload['nodeId'],
         container_config=container_config)
 
@@ -135,12 +150,8 @@ def launch_container(payload):
             break
         time.sleep(0.2)
 
-    payload.update(
-        dict(
-            name=service.name,
-            urlPath=urlPath
-        )
-    )
+    payload.update(attrs)
+    payload['name'] = service.name
     return payload
 
 
@@ -183,6 +194,12 @@ def remove_volume(payload):
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
+
+    try:
+        gc.delete('/dm/session/{sessionId}'.format(**payload))
+    except Exception as e:
+        logging.error("Unable to remove session. %s", e)
+        pass
 
     try:
         volume = cli.volumes.get(containerInfo['volumeName'])

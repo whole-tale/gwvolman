@@ -2,10 +2,14 @@
 # -*- coding: utf-8 -*-
 
 import os
+import socket
 
-API_VERSION = '2.0'
-GIRDER_API_URL = os.environ.get(
-    "GIRDER_API_URL", "https://girder.wholetale.org/api/v1")
+API_VERSION = '2.1'
+try:
+    DEFAULT_GIRDER_API_URL = 'http://' + socket.gethostbyname('girder') + ':8080/api/v1'
+except socket.gaierror:
+    DEFAULT_GIRDER_API_URL = 'https://girder.dev.wholetale.org/api/v1'
+GIRDER_API_URL = os.environ.get('GIRDER_API_URL', DEFAULT_GIRDER_API_URL)
 
 
 class DataONELocations:
