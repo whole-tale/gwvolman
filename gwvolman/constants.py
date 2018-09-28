@@ -4,7 +4,7 @@
 import os
 import socket
 
-API_VERSION = '2.0'
+API_VERSION = '2.1'
 try:
     DEFAULT_GIRDER_API_URL = 'http://' + socket.gethostbyname('girder') + ':8080/api/v1'
 except socket.gaierror:

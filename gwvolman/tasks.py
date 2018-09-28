@@ -133,7 +133,7 @@ def launch_container(payload):
     gc, user, tale = _parse_request_body(payload)
     # _pull_image()
     container_config = _get_container_config(gc, tale)  # FIXME
-    service, urlPath = _launch_container(
+    service, attrs = _launch_container(
         payload['volumeName'], payload['nodeId'],
         container_config=container_config)
 
@@ -150,12 +150,8 @@ def launch_container(payload):
             break
         time.sleep(0.2)
 
-    payload.update(
-        dict(
-            name=service.name,
-            urlPath=urlPath
-        )
-    )
+    payload.update(attrs)
+    payload['name'] = service.name
     return payload
 
 

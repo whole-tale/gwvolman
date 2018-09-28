@@ -195,7 +195,11 @@ def _launch_container(volumeName, nodeId, container_config):
     # to the pool or serving it to a user.
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
-    return service, rendered_url_path
+    url = '{proto}://{host}.{domain}/{path}'.format(
+        proto=TRAEFIK_ENTRYPOINT, host=host, domain=DOMAIN,
+        path=rendered_url_path)
+
+    return service, {'url': url}
 
 
 def get_file_item(item_id, gc):
