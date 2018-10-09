@@ -81,6 +81,8 @@ def create_volume(payload):
     _safe_mkdir(HOSTDIR + data_dir)
     home_dir = os.path.join(mountpoint, 'home')
     _safe_mkdir(HOSTDIR + home_dir)
+    work_dir = os.path.join(mountpoint, 'workspace')
+    _safe_mkdir(HOSTDIR + work_dir)
     # FUSE is silly and needs to have mirror inside container
     for directory in (data_dir, home_dir):
         if not os.path.isdir(directory):
@@ -110,6 +112,13 @@ def create_volume(payload):
         GIRDER_API_URL, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
+
+    cmd = 'girderfs -c wt_work --api-url '
+    cmd += '{} --api-key {} {} {}'.format(
+        GIRDER_API_URL, api_key, work_dir, tale['_id'])
+    logging.info("Calling: %s", cmd)
+    subprocess.call(cmd, shell=True)
+
     payload.update(
         dict(
             nodeId=cli.info()['Swarm']['NodeID'],
@@ -190,7 +199,7 @@ def remove_volume(payload):
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
-    for suffix in ('data', 'home'):
+    for suffix in ('data', 'home', 'workspace'):
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
