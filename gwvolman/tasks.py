@@ -84,7 +84,7 @@ def create_volume(payload):
     work_dir = os.path.join(mountpoint, 'workspace')
     _safe_mkdir(HOSTDIR + work_dir)
     # FUSE is silly and needs to have mirror inside container
-    for directory in (data_dir, home_dir):
+    for directory in (data_dir, home_dir, work_dir):
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(gc)
