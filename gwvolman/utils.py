@@ -157,7 +157,7 @@ def _launch_container(volumeName, nodeId, container_config):
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
     mounts = []
-    for path in ('data', 'home'):
+    for path in ('data', 'home', 'workspace'):
         source = os.path.join(source_mount, path)
         target = os.path.join(container_config.target_mount, path)
         mounts.append(
