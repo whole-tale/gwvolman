@@ -2,6 +2,7 @@
 import os
 import shutil
 import socket
+from typing import List
 import json
 import time
 import tempfile
@@ -289,3 +290,39 @@ def publish(item_ids,
                        prov_info,
                        license_id)
     return res
+
+
+@girder_job(title='Create ad-hoc Tale')
+@app.task(bind=True)
+def create_adhoc_tale(self, imageId: str, dataId: List[str]):
+    """Create a Tale provided a url for an external data and an image Id."""
+    self.job_manager.updateProgress(
+        message='Gathering basic info about the dataset', total=3, current=1)
+    dataMap = self.girder_client.get(
+        '/repository/lookup', parameters={'dataId': json.dumps(dataId)})
+
+    self.job_manager.updateProgress(
+        message='Registering the dataset in Whole Tale', total=3, current=2)
+    self.girder_client.post(
+        '/dataset/register', parameters={'dataMap': json.dumps(dataMap),
+                                         'copyToHome': True})
+
+    # Get resulting folder/item by name
+    user = self.girder_client.get('/user/me')
+    path = '/user/{}/Data/{}'.format(user['login'], dataMap[0]['name'])
+    resource = self.girder_client.get(
+        '/resource/lookup', parameters={'path': path})
+
+    payload = {
+        'authors': user['firstName'] + ' ' + user['lastName'],
+        'title': 'Ad-hoc Tale for ' + dataId[0],
+        'imageId': imageId,
+        'involatileData': [
+            {'type': resource['_modelType'], 'id': resource['_id']}
+        ],
+        'public': False,
+        'published': False
+    }
+    self.job_manager.updateProgress(
+        message='Creating a Tale', total=3, current=3)
+    return self.girder_client.post('/tale', json=payload)
