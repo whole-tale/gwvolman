@@ -24,7 +24,7 @@ from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance
 from .publish import publish_tale
-from .constants import GIRDER_API_URL
+from .constants import GIRDER_API_URL, InstanceStatus
 
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
@@ -294,15 +294,22 @@ def publish(item_ids,
 
 @girder_job(title='Create ad-hoc Tale')
 @app.task(bind=True)
-def create_adhoc_tale(self, imageId: str, dataId: List[str]):
+def create_adhoc_tale(self, imageId: str, dataId: List[str], spawn: bool):
     """Create a Tale provided a url for an external data and an image Id."""
+    if spawn:
+        total = 4
+    else:
+        total = 3
+
     self.job_manager.updateProgress(
-        message='Gathering basic info about the dataset', total=3, current=1)
+        message='Gathering basic info about the dataset', total=total,
+        current=1)
     dataMap = self.girder_client.get(
         '/repository/lookup', parameters={'dataId': json.dumps(dataId)})
 
     self.job_manager.updateProgress(
-        message='Registering the dataset in Whole Tale', total=3, current=2)
+        message='Registering the dataset in Whole Tale', total=total,
+        current=2)
     self.girder_client.post(
         '/dataset/register', parameters={'dataMap': json.dumps(dataMap),
                                          'copyToHome': True})
@@ -323,6 +330,23 @@ def create_adhoc_tale(self, imageId: str, dataId: List[str]):
         'public': False,
         'published': False
     }
+    tale = self.girder_client.post('/tale', json=payload)
+
+    if spawn:
+        self.job_manager.updateProgress(
+            message='Creating a Tale container', total=total, current=3)
+        instance = self.girder_client.post(
+            '/instance', parameters={'taleId': tale['_id']})
+
+        while instance['status'] == InstanceStatus.LAUNCHING:
+            # TODO: Timeout? Raise error?
+            time.sleep(1)
+            instance = self.girder_client.get(
+                '/instance/{_id}'.format(**instance))
+    else:
+        instance = None
+
     self.job_manager.updateProgress(
-        message='Creating a Tale', total=3, current=3)
-    return self.girder_client.post('/tale', json=payload)
+        message='Tale is ready!', total=total, current=total)
+    # TODO: maybe filter results?
+    return {'tale': tale, 'instance': instance}
