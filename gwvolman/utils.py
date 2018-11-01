@@ -645,7 +645,6 @@ def filter_items(item_ids, gc):
             'local_files': local_objects,
             'local_items': local_items}
 
-
 def find_initial_pid(path):
     """
     Extracts the pid from an arbitrary path to a DataOne object.
