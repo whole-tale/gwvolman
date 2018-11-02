@@ -309,8 +309,22 @@ def import_tale(self, imageId: str, dataId: List[str], spawn: bool):
     self.job_manager.updateProgress(
         message='Gathering basic info about the dataset', total=total,
         current=1)
-    dataMap = self.girder_client.get(
-        '/repository/lookup', parameters={'dataId': json.dumps(dataId)})
+    try:
+        dataMap = self.girder_client.get(
+            '/repository/lookup', parameters={'dataId': json.dumps(dataId)})
+    except girder_client.HttpError as resp:
+        try:
+            message = json.loads(resp.responseText).get('message', '')
+        except json.JSONDecodeError:
+            message = str(resp)
+        errormsg = 'Unable to register \"{}\". Server returned {}: {}'
+        errormsg = errormsg.format(dataId[0], resp.status, message)
+        raise ValueError(errormsg)
+
+    if not dataMap:
+        errormsg = 'Unable to register \"{}\". Source is not supported'
+        errormsg = errormsg.format(dataId[0])
+        raise ValueError(errormsg)
 
     self.job_manager.updateProgress(
         message='Registering the dataset in Whole Tale', total=total,
