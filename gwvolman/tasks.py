@@ -6,6 +6,7 @@ from typing import List
 import json
 import time
 import tempfile
+import textwrap
 import docker
 import subprocess
 from docker.errors import DockerException
@@ -292,10 +293,14 @@ def publish(item_ids,
     return res
 
 
-@girder_job(title='Create ad-hoc Tale')
+@girder_job(title='Import Tale')
 @app.task(bind=True)
-def create_adhoc_tale(self, imageId: str, dataId: List[str], spawn: bool):
-    """Create a Tale provided a url for an external data and an image Id."""
+def import_tale(self, imageId: str, dataId: List[str], spawn: bool):
+    """Create a Tale provided a url for an external data and an image Id.
+
+    Currently, this task only handles importing raw data. In the future, it
+    should also allow importing serialized Tales.
+    """
     if spawn:
         total = 4
     else:
@@ -320,9 +325,14 @@ def create_adhoc_tale(self, imageId: str, dataId: List[str], spawn: bool):
     resource = self.girder_client.get(
         '/resource/lookup', parameters={'path': path})
 
+    # Try to come up with a good name for the dataset
+    long_name = resource['name']
+    long_name = long_name.replace('-', ' ').replace('_', ' ')
+    shortened_name = textwrap.shorten(text=long_name, width=30)
+
     payload = {
         'authors': user['firstName'] + ' ' + user['lastName'],
-        'title': 'Ad-hoc Tale for ' + dataId[0],
+        'title': 'A Tale for \"{}\"'.format(shortened_name),
         'imageId': imageId,
         'involatileData': [
             {'type': resource['_modelType'], 'id': resource['_id']}
