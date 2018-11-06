@@ -2,7 +2,7 @@
 import os
 import shutil
 import socket
-from typing import List
+from typing import List, Dict
 import json
 import time
 import tempfile
@@ -295,7 +295,8 @@ def publish(item_ids,
 
 @girder_job(title='Import Tale')
 @app.task(bind=True)
-def import_tale(self, imageId: str, dataId: List[str], spawn: bool):
+def import_tale(self, imageId: str, lookup_kwargs: Dict[str, str],
+                spawn: bool):
     """Create a Tale provided a url for an external data and an image Id.
 
     Currently, this task only handles importing raw data. In the future, it
@@ -309,9 +310,12 @@ def import_tale(self, imageId: str, dataId: List[str], spawn: bool):
     self.job_manager.updateProgress(
         message='Gathering basic info about the dataset', total=total,
         current=1)
+    dataId = lookup_kwargs.pop('dataId')
     try:
+        parameters = lookup_kwargs.copy()
+        parameters['dataId'] = json.dumps(dataId)
         dataMap = self.girder_client.get(
-            '/repository/lookup', parameters={'dataId': json.dumps(dataId)})
+            '/repository/lookup', parameters=parameters)
     except girder_client.HttpError as resp:
         try:
             message = json.loads(resp.responseText).get('message', '')
@@ -323,6 +327,7 @@ def import_tale(self, imageId: str, dataId: List[str], spawn: bool):
 
     if not dataMap:
         errormsg = 'Unable to register \"{}\". Source is not supported'
+        errormsg = errormsg.format(dataId[0])
         raise ValueError(errormsg)
 
     self.job_manager.updateProgress(
