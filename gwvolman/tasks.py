@@ -2,7 +2,6 @@
 import os
 import shutil
 import socket
-from typing import List, Dict
 import json
 import time
 import tempfile
@@ -295,8 +294,7 @@ def publish(item_ids,
 
 @girder_job(title='Import Tale')
 @app.task(bind=True)
-def import_tale(self, imageId: str, lookup_kwargs: Dict[str, str],
-                spawn: bool):
+def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
     """Create a Tale provided a url for an external data and an image Id.
 
     Currently, this task only handles importing raw data. In the future, it
@@ -312,8 +310,8 @@ def import_tale(self, imageId: str, lookup_kwargs: Dict[str, str],
         current=1)
     dataId = lookup_kwargs.pop('dataId')
     try:
-        parameters = lookup_kwargs.copy()
-        parameters['dataId'] = json.dumps(dataId)
+        parameters = dict(dataId=json.dumps(dataId))
+        parameters.update(lookup_kwargs)
         dataMap = self.girder_client.get(
             '/repository/lookup', parameters=parameters)
     except girder_client.HttpError as resp:
@@ -351,20 +349,31 @@ def import_tale(self, imageId: str, lookup_kwargs: Dict[str, str],
     payload = {
         'authors': user['firstName'] + ' ' + user['lastName'],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
-        'imageId': imageId,
         'involatileData': [
             {'type': resource['_modelType'], 'id': resource['_id']}
         ],
         'public': False,
         'published': False
     }
+
+    # allow to override title, etc. MUST contain imageId
+    payload.update(tale_kwargs)
     tale = self.girder_client.post('/tale', json=payload)
 
     if spawn:
         self.job_manager.updateProgress(
             message='Creating a Tale container', total=total, current=3)
-        instance = self.girder_client.post(
-            '/instance', parameters={'taleId': tale['_id']})
+        try:
+            instance = self.girder_client.post(
+                '/instance', parameters={'taleId': tale['_id']})
+        except girder_client.HttpError as resp:
+            try:
+                message = json.loads(resp.responseText).get('message', '')
+            except json.JSONDecodeError:
+                message = str(resp)
+            errormsg = 'Unable to create instance. Server returned {}: {}'
+            errormsg = errormsg.format(resp.status, message)
+            raise ValueError(errormsg)
 
         while instance['status'] == InstanceStatus.LAUNCHING:
             # TODO: Timeout? Raise error?
