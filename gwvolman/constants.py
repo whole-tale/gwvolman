@@ -12,6 +12,12 @@ except socket.gaierror:
 GIRDER_API_URL = os.environ.get('GIRDER_API_URL', DEFAULT_GIRDER_API_URL)
 
 
+class InstanceStatus(object):
+    LAUNCHING = 0
+    RUNNING = 1
+    ERROR = 2
+
+
 class DataONELocations:
     """
     An enumeration that describes the different DataONE

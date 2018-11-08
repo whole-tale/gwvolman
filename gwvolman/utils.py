@@ -19,11 +19,9 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 import docker
-import girder_client
 
 from .constants import \
-    DataONELocations, \
-    GIRDER_API_URL
+    DataONELocations
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
@@ -80,26 +78,13 @@ def _get_api_key(gc):
     return api_key
 
 
-def _parse_request_body(data):
-    gc = girder_client.GirderClient(apiUrl=data.get('apiUrl', GIRDER_API_URL))
-    gc.token = data['girder_token']
-    user = gc.get('/user/me')
+def _get_user_and_instance(girder_client, instanceId):
+    user = girder_client.get('/user/me')
     if user is None:
         logging.warn("Bad gider token")
         raise ValueError
-
-    if data.get('taleId'):
-        path = '/tale/%s' % data['taleId']
-    elif data.get('instanceId'):
-        path = '/instance/%s' % data['instanceId']
-    else:
-        return gc, user, data
-
-    try:
-        obj = gc.get(path)
-    except girder_client.HttpError as e:
-        raise ValueError
-    return gc, user, obj
+    instance = girder_client.get('/instance/' + instanceId)
+    return user, instance
 
 
 def _get_container_config(gc, tale):
