@@ -143,7 +143,7 @@ def launch_container(self, payload):
         container_config=container_config)
 
     tic = time.time()
-    timeout = 10.0
+    timeout = 30.0
 
     # wait until task is started
     while time.time() - tic < timeout:
