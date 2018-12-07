@@ -16,7 +16,6 @@ try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
-import girder_client
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
@@ -25,15 +24,8 @@ from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance
 from .publish import publish_tale
-from .constants import GIRDER_API_URL, InstanceStatus
-
-DEFAULT_USER = 1000
-DEFAULT_GROUP = 100
-ENABLE_WORKSPACES = False
-
-
-DEFAULT_USER = 1000
-DEFAULT_GROUP = 100
+from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -207,9 +199,7 @@ def remove_volume(self, instanceId):
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
-    for suffix in ('data', 'home', 'workspace'):
-        if not ENABLE_WORKSPACES and suffix == 'workspace':
-            continue
+    for suffix in MOUNTPOINTS:
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
