@@ -28,6 +28,7 @@ from .constants import GIRDER_API_URL, InstanceStatus
 
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
+ENABLE_WORKSPACES = False
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -80,10 +81,14 @@ def create_volume(self, instanceId: str):
     _safe_mkdir(HOSTDIR + data_dir)
     home_dir = os.path.join(mountpoint, 'home')
     _safe_mkdir(HOSTDIR + home_dir)
-    work_dir = os.path.join(mountpoint, 'workspace')
-    _safe_mkdir(HOSTDIR + work_dir)
+    if ENABLE_WORKSPACES:
+        work_dir = os.path.join(mountpoint, 'workspace')
+        _safe_mkdir(HOSTDIR + work_dir)
+        if not os.path.isdir(work_dir):
+            os.makedirs(work_dir)
+
     # FUSE is silly and needs to have mirror inside container
-    for directory in (data_dir, home_dir, work_dir):
+    for directory in (data_dir, home_dir):
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
@@ -113,11 +118,12 @@ def create_volume(self, instanceId: str):
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
 
-    cmd = 'girderfs -c wt_work --api-url '
-    cmd += '{} --api-key {} {} {}'.format(
-        GIRDER_API_URL, api_key, work_dir, tale['_id'])
-    logging.info("Calling: %s", cmd)
-    subprocess.call(cmd, shell=True)
+    if ENABLE_WORKSPACES:
+        cmd = 'girderfs -c wt_work --api-url '
+        cmd += '{} --api-key {} {} {}'.format(
+            GIRDER_API_URL, api_key, work_dir, tale['_id'])
+        logging.info("Calling: %s", cmd)
+        subprocess.call(cmd, shell=True)
 
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
@@ -197,6 +203,8 @@ def remove_volume(self, instanceId):
 
     cli = docker.from_env(version='1.28')
     for suffix in ('data', 'home', 'workspace'):
+        if not ENABLE_WORKSPACES and suffix == 'workspace':
+            continue
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
