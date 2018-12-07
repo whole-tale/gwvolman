@@ -21,7 +21,7 @@ except ImportError:
 import docker
 
 from .constants import \
-    DataONELocations
+    DataONELocations, MOUNTPOINTS
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
@@ -142,7 +142,7 @@ def _launch_container(volumeName, nodeId, container_config):
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
     mounts = []
-    for path in ('data', 'home', 'workspace'):
+    for path in MOUNTPOINTS:
         source = os.path.join(source_mount, path)
         target = os.path.join(container_config.target_mount, path)
         mounts.append(

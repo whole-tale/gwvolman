@@ -5,6 +5,13 @@ import os
 import socket
 
 API_VERSION = '2.1'
+DEFAULT_USER = 1000
+DEFAULT_GROUP = 100
+ENABLE_WORKSPACES = False
+MOUNTPOINTS = ['data', 'home']
+if ENABLE_WORKSPACES:
+    MOUNTPOINTS.append('workspace')
+
 try:
     DEFAULT_GIRDER_API_URL = 'http://' + socket.gethostbyname('girder') + ':8080/api/v1'
 except socket.gaierror:
