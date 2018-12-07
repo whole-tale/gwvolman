@@ -5,23 +5,24 @@
 """A set of helper routines for WT related tasks."""
 
 from collections import namedtuple
-import logging
 import os
 import random
 import re
 import string
 import uuid
+import logging
+import jwt
+import hashlib
+
 try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
 import docker
-import girder_client
 
+from .constants import \
+    DataONELocations
 
-API_VERSION = '2.0'
-GIRDER_API_URL = os.environ.get(
-    "GIRDER_API_URL", "https://girder.wholetale.org/api/v1")
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
@@ -77,26 +78,13 @@ def _get_api_key(gc):
     return api_key
 
 
-def _parse_request_body(data):
-    gc = girder_client.GirderClient(apiUrl=data.get('apiUrl', GIRDER_API_URL))
-    gc.token = data['girder_token']
-    user = gc.get('/user/me')
+def _get_user_and_instance(girder_client, instanceId):
+    user = girder_client.get('/user/me')
     if user is None:
         logging.warn("Bad gider token")
         raise ValueError
-
-    if data.get('taleId'):
-        path = '/tale/%s' % data['taleId']
-    elif data.get('instanceId'):
-        path = '/instance/%s' % data['instanceId']
-    else:
-        return gc, user, data
-
-    try:
-        obj = gc.get(path)
-    except girder_client.HttpError as e:
-        raise ValueError
-    return gc, user, obj
+    instance = girder_client.get('/instance/' + instanceId)
+    return user, instance
 
 
 def _get_container_config(gc, tale):
@@ -139,8 +127,8 @@ def _launch_container(volumeName, nodeId, container_config):
     else:
         rendered_url_path = ''
 
-    logging.debug('config = ' + str(container_config))
-    logging.debug('command = ' + str(rendered_command))
+    logging.info('config = ' + str(container_config))
+    logging.info('command = ' + str(rendered_command))
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=REGISTRY_URL)
@@ -154,7 +142,7 @@ def _launch_container(volumeName, nodeId, container_config):
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
     mounts = []
-    for path in ('data', 'home'):
+    for path in ('data', 'home', 'workspace'):
         source = os.path.join(source_mount, path)
         target = os.path.join(container_config.target_mount, path)
         mounts.append(
@@ -192,4 +180,351 @@ def _launch_container(volumeName, nodeId, container_config):
     # to the pool or serving it to a user.
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
-    return service, rendered_url_path
+    url = '{proto}://{host}.{domain}/{path}'.format(
+        proto=TRAEFIK_ENTRYPOINT, host=host, domain=DOMAIN,
+        path=rendered_url_path)
+
+    return service, {'url': url}
+
+
+def get_file_item(item_id, gc):
+    """
+    Gets the file out of an item.
+
+    :param item_id: The item that has the file inside
+    :param gc: The girder client
+    :type: item_id: str
+    :return: The file object or None
+    :rtype: girder.models.file
+    """
+    file_generator = gc.listFile(item_id)
+    try:
+        return next(file_generator)
+    except StopIteration as e:
+        return None
+
+
+def is_dataone_url(url):
+    """
+    Checks if a url has dataone in it
+    :param url: The url in question
+    :return: True if it does, False otherwise
+    """
+
+    res = url.find('dataone.org')
+    if res is not -1:
+        return True
+    else:
+        return False
+
+
+def is_dev_url(url):
+    """
+    Determines whether the object at the URL is on the NCEAS
+    Development network
+    :param url: URL to the object
+    :type url: str
+    :return: True of False, depending on whether it's on the dev network
+    :rtype: bool
+    """
+    parsed_url = urlparse(url).netloc
+    parsed_dev_mn = urlparse(DataONELocations.dev_cn).netloc
+
+    if parsed_url == parsed_dev_mn:
+        return True
+    return False
+
+
+def is_in_network(url, network):
+    """
+    Checks to see if the url shares the same netlocation as network
+    :param url: The URL to a data object
+    :param network: The url of the member node being checke
+    :return: True or False
+    """
+    parsed_url = urlparse(url).netloc
+    parsed_network = urlparse(network).netloc
+    base_dev_mn = urlparse(DataONELocations.dev_mn).netloc
+    base_dev_cn = urlparse(DataONELocations.dev_cn).netloc
+
+    if parsed_network == base_dev_mn:
+        # Then we're in NCEAS Development
+        # The resolve address is through the membernode in this case
+        if parsed_url == base_dev_cn:
+            # Then the object is in network
+            return True
+        else:
+            # Then the object is outside network
+            return False
+
+    else:
+        # Otherwise we're on DataONE
+
+        base_dev_cn = urlparse(DataONELocations.prod_cn).netloc
+
+        if parsed_url == base_dev_cn:
+            # Then the object is in network
+            return True
+        else:
+            # Then the object is outside network
+            return False
+
+
+def check_pid(pid):
+    """
+    Check that a pid is of type str. Pids are generated as uuid4, and this
+    check is done to make sure the programmer has converted it to a str before
+    attempting to use it with the DataONE client.
+
+    :param pid: The pid that is being checked
+    :type pid: str, int
+    :return: Returns the pid as a str, or just the pid if it was already a str
+    :rtype: str
+    """
+
+    if not isinstance(pid, str):
+        return str(pid)
+    else:
+        return pid
+
+
+def get_remote_url(item_id, gc):
+    """
+    Checks if a file has a link url and returns the url if it does. This is less
+     restrictive than thecget_dataone_url in that we aren't restricting the link
+      to a particular domain.
+
+    :param item_id: The id of the item
+    :param gc: The girder client
+    :return: The url that points to the object
+    :rtype: str or None
+    """
+
+    file = get_file_item(item_id, gc)
+    if file is None:
+        file_error = 'Failed to find the file with ID {}'.format(item_id)
+        logging.warning(file_error)
+        raise ValueError(file_error)
+    url = file.get('linkUrl')
+    if url is not None:
+        return url
+
+
+def get_dataone_package_url(repository, pid):
+    """
+    Given a repository url and a pid, construct a url that should
+     be the package's landing page.
+
+    :param repository: The repository that the package is on
+    :param pid: The package pid
+    :return: The package landing page
+    """
+    if repository in DataONELocations.prod_cn:
+        return str('https://search.dataone.org/#view/'+pid)
+    elif repository in DataONELocations.dev_mn:
+        return str('https://dev.nceas.ucsb.edu/#view/'+pid)
+
+
+def extract_user_id(jwt_token):
+    """
+    Takes a JWT and extracts the 'userId` field. This is used
+    as the package's owner and contact.
+    :param jwt_token: The decoded JWT
+    :type jwt_token: str
+    :return: The ORCID ID
+    :rtype: str, None if failure
+    """
+    jwt_token = jwt.decode(jwt_token, verify=False)
+    user_id = jwt_token.get('userId', None)
+    if user_id is not None:
+        if is_orcid_id(user_id):
+            return make_url_https(user_id)
+    return user_id
+
+
+def is_orcid_id(user_id):
+    """
+    Checks whether a string is a link to an ORCID account
+    :param user_id: The string that may contain the ORCID account
+    :type user_id: str
+    :return: True/False if it is or isn't
+    :rtype: bool
+    """
+    return bool(user_id.find('orcid.org'))
+
+
+def esc(value):
+    """
+    Escape a string so it can be used in a Solr query string
+    :param value: The string that will be escaped
+    :type value: str
+    :return: The escaped string
+    :rtype: str
+    """
+    return urlparse.quote_plus(value)
+
+
+def strip_html_tags(string):
+    """
+    Removes HTML tags from a string
+    :param string: The string with HTML
+    :type string: str
+    :return: The string without HTML
+    :rtype: str
+    """
+    return re.sub('<[^<]+?>', '', string)
+
+
+def get_directory(user_id):
+    """
+    Returns the directory that should be used in the EML
+
+    :param user_id: The user ID
+    :type user_id: str
+    :return: The directory name
+    :rtype: str
+    """
+    if is_orcid_id(user_id):
+        return "https://orcid.org"
+    return "https://cilogon.org"
+
+
+def make_url_https(url):
+    """
+    Given an http url, return it as https
+
+    :param url: The http url
+    :type url: str
+    :return: The url as https
+    :rtype: str
+    """
+    parsed = urlparse(url)
+    return parsed._replace(scheme="https").geturl()
+
+
+def get_file_md5(file_object, gc):
+    """
+    Computes the md5 of a file on the Girder filesystem.
+
+    :param file_object: The file object that will be hashed
+    :param gc: The girder client
+    :type file_object: girder.models.file
+    :return: Returns an updated md5 object. Returns None if it fails
+    :rtype: md5
+    """
+
+    file = gc.downloadFileAsIterator(file_object['_id'])
+    try:
+        md5 = compute_md5(file)
+    except Exception as e:
+        logging.warning('Error: {}'.format(e))
+        raise ValueError('Failed to download and md5 a remote file. {}'.format(e))
+    return md5
+
+
+def compute_md5(file):
+    """
+    Takes an file handle and computes the md5 of it. This uses duck typing
+    to allow for any file handle that supports .read. Note that it is left to the
+    caller to close the file handle and to handle any exceptions
+
+    :param file: An open file handle that can be read
+    :return: Returns an updated md5 object. Returns None if it fails
+    :rtype: md5
+    """
+    md5 = hashlib.md5()
+    while True:
+        buf = file.read(8192)
+        if not buf:
+            break
+        md5.update(buf)
+    return md5
+
+
+def filter_items(item_ids, gc):
+    """
+    Take a list of item ids and determine whether it:
+       1. Exists on the local file system
+       2. Exists on DataONE
+       3. Is linked to a remote location other than DataONE
+    :param item_ids: A list of items to be processed
+    :param gc: The girder client
+    :type item_ids: list
+    :return: A dictionary of lists for each file location
+    For example,
+     {'dataone': ['uuid:123456', 'doi.10x501'],
+     'remote_objects: ['url1', 'url2'],
+     local: [file_obj1, file_obj2]}
+    :rtype: dict
+    """
+
+    # Holds item_ids for DataONE objects
+    dataone_objects = list()
+    # Holds item_ids for files not in DataONE
+    remote_objects = list()
+    # Holds file dicts for local objects
+    local_objects = list()
+    # Holds item_ids for local files
+    local_items = list()
+
+    for item_id in item_ids:
+        # Check if it points do a dataone objbect
+        url = get_remote_url(item_id, gc)
+        if url is not None:
+            if is_dataone_url(url):
+                dataone_objects.append(item_id)
+                continue
+
+            """
+            If there is a url, and it's not pointing to a DataONE resource, then assume
+            it's pointing to an external object
+            """
+            logging.debug('Adding remote object')
+            remote_objects.append(item_id)
+            continue
+
+        # If the file wasn't linked to a remote location, then it must exist locally. This
+        # is a list of girder.models.File objects
+        logging.debug('Adding local object')
+        local_objects.append(get_file_item(item_id, gc))
+        local_items.append(item_id)
+
+    return {'dataone': dataone_objects,
+            'remote': remote_objects,
+            'local_files': local_objects,
+            'local_items': local_items}
+
+
+def find_initial_pid(path):
+    """
+    Extracts the pid from an arbitrary path to a DataOne object.
+    Supports:
+       - HTTP & HTTPS
+       - The MetacatUI landing page (#view)
+       - The D1 v2 Object URI (/object)
+       - The D1 v2 Resolve URI (/resolve)
+
+    :param path:
+    :type path: str
+    :return: The object's pid, or the original path if one wasn't found
+    :rtype: str
+    """
+
+    # http://blog.crossref.org/2015/08/doi-regular-expressions.html
+    doi_regex = re.compile('(10.\d{4,9}/[-._;()/:A-Z0-9]+)', re.IGNORECASE)
+    doi = doi_regex.search(path)
+    if re.search(r'^http[s]?:\/\/search.dataone.org\/#view\/', path):
+        return re.sub(
+            r'^http[s]?:\/\/search.dataone.org\/#view\/', '', path)
+    elif re.search(r'\Ahttp[s]?:\/\/cn[a-z\-\d\.]*\.dataone\.org\/cn\/v\d\/[a-zA-Z]+\/.+\Z', path):
+        return re.sub(
+            r'\Ahttp[s]?:\/\/cn[a-z\-\d\.]*\.dataone\.org\/cn\/v\d\/[a-zA-Z]+\/', '', path)
+    if re.search(r'^http[s]?:\/\/dev.nceas.ucsb.edu\/#view\/', path):
+        return re.sub(
+            r'^http[s]?:\/\/dev.nceas.ucsb.edu\/#view\/', '', path)
+    if re.search(r'resolve', path):
+        return path.split("resolve/", 1)[1]
+    elif doi is not None:
+        return 'doi:{}'.format(doi.group())
+    else:
+        return path

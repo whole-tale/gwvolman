@@ -1,13 +1,13 @@
 FROM ubuntu:xenial
 
 RUN apt-get update -qqy && \
-  apt-get install -qy software-properties-common python-software-properties && \
+  apt-get install -qy software-properties-common python3-software-properties && \
   DEBIAN_FRONTEND=noninteractive apt-get -qy install \
     build-essential \
     vim \
     git \
     wget \
-    python \
+    python3 \
     fuse \
     davfs2 \
     libffi-dev \
@@ -15,12 +15,12 @@ RUN apt-get update -qqy && \
     libjpeg-dev \
     zlib1g-dev \
     libfuse-dev \
-    libpython-dev && \
+    libpython3-dev && \
   apt-get -qqy clean all && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN wget https://bootstrap.pypa.io/get-pip.py && python get-pip.py
+RUN wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
 
 COPY requirements.txt /gwvolman/requirements.txt
 COPY setup.py /gwvolman/setup.py
@@ -45,4 +45,9 @@ ENV C_FORCE_ROOT=1
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
-ENTRYPOINT ["python", "-m", "girder_worker", "-l", "INFO"]
+# Temporary fix for kombu
+RUN sed \
+  -e 's/return decode(data/&.decode("utf-8")/' \
+  -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
+
+ENTRYPOINT ["python3", "-m", "girder_worker", "-l", "INFO"]
