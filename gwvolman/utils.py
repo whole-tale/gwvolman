@@ -645,40 +645,6 @@ def filter_items(item_ids, gc):
             'local_files': local_objects,
             'local_items': local_items}
 
-def find_initial_pid(path):
-    """
-    Extracts the pid from an arbitrary path to a DataOne object.
-    Supports:
-       - HTTP & HTTPS
-       - The MetacatUI landing page (#view)
-       - The D1 v2 Object URI (/object)
-       - The D1 v2 Resolve URI (/resolve)
-
-    :param path:
-    :type path: str
-    :return: The object's pid, or the original path if one wasn't found
-    :rtype: str
-    """
-
-    # http://blog.crossref.org/2015/08/doi-regular-expressions.html
-    doi_regex = re.compile('(10.\d{4,9}/[-._;()/:A-Z0-9]+)', re.IGNORECASE)
-    doi = doi_regex.search(path)
-    if re.search(r'^http[s]?:\/\/search.dataone.org\/#view\/', path):
-        return re.sub(
-            r'^http[s]?:\/\/search.dataone.org\/#view\/', '', path)
-    elif re.search(r'\Ahttp[s]?:\/\/cn[a-z\-\d\.]*\.dataone\.org\/cn\/v\d\/[a-zA-Z]+\/.+\Z', path):
-        return re.sub(
-            r'\Ahttp[s]?:\/\/cn[a-z\-\d\.]*\.dataone\.org\/cn\/v\d\/[a-zA-Z]+\/', '', path)
-    if re.search(r'^http[s]?:\/\/dev.nceas.ucsb.edu\/#view\/', path):
-        return re.sub(
-            r'^http[s]?:\/\/dev.nceas.ucsb.edu\/#view\/', '', path)
-    if re.search(r'resolve', path):
-        return path.split("resolve/", 1)[1]
-    elif doi is not None:
-        return 'doi:{}'.format(doi.group())
-    else:
-        return path
-
 def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     """
     Run repo2docker on the workspace using a shared temp directory. Note that
@@ -722,3 +688,12 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     # Since detach=True, then we need to explicitly check for the
     # container exit code
     return container.wait()
+
+def generate_dataone_guid():
+    """
+    DataONE requires that UUIDs are prepended with `urn:uuid:`. This method
+    returns a DataONE compliant guid.
+    :return: A DataONE compliant guid
+    :rtype: str
+    """
+    return 'urn:uuid:'+str(uuid.uuid4())
