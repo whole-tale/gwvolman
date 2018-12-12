@@ -44,6 +44,11 @@ ContainerConfig = namedtuple('ContainerConfig', [
 
 
 class Deployment(object):
+    """Container for WT-specific docker stack deployment configuration.
+
+    This class allows to read and store configuration of services in a WT
+    deployment. It's meant to be used as a singleton across gwvolman.
+    """
 
     _dashboard_url = None
     _girder_url = None
@@ -55,6 +60,7 @@ class Deployment(object):
 
     @property
     def traefik_network(self):
+        """str: Name of the overlay network used by traefik for ingress."""
         if self._traefik_network is None:
             service = self.docker_client.services.get('wt_dashboard')
             self._traefik_network = \
@@ -63,23 +69,27 @@ class Deployment(object):
 
     @property
     def dashboard_url(self):
+        """str: Dashboard's public url."""
         if self._dashboard_url is None:
             self._dashboard_url = self.get_host_from_traefik_rule('wt_dashboard')
         return self._dashboard_url
 
     @property
     def girder_url(self):
+        """str: Girder's public url."""
         if self._girder_url is None:
             self._girder_url = self.get_host_from_traefik_rule('wt_girder')
         return self._girder_url
 
     @property
     def registry_url(self):
+        """str: Docker Registry's public url."""
         if self._registry_url is None:
             self._registry_url = self.get_host_from_traefik_rule('wt_registry')
         return self._registry_url
 
     def get_host_from_traefik_rule(self, service_name):
+        """Infer service's hostname from traefik frontend rule label."""
         service = self.docker_client.services.get(service_name)
         rule = service.attrs['Spec']['Labels']['traefik.frontend.rule']
         return 'https://' + rule.split(':')[-1].split(',')[0].strip()
@@ -130,12 +140,20 @@ def _get_user_and_instance(girder_client, instanceId):
 
 
 def get_env_with_csp(config):
+    '''Ensure that environment in container config has CSP_HOSTS setting.
+
+    This method handles 3 cases:
+        * No 'environment' in config -> return ['CSP_HOSTS=...']
+        * 'environment' in config, but no 'CSP_HOSTS=...' -> append
+        * 'environment' in config and has 'CSP_HOSTS=...' -> replace
+
+    '''
     csp = 'CSP_HOSTS="{}"'.format(DEPLOYMENT.dashboard_url)
     try:
         env = config['environment']
         original_csp = next((_ for _ in env if _.startswith('CSP_HOSTS')), None)
         if original_csp:
-            env[env.index(original_csp)] = csp
+            env[env.index(original_csp)] = csp  # replace
         else:
             env.append(csp)
     except KeyError:
