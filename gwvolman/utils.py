@@ -26,12 +26,9 @@ from .constants import \
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
-TRAEFIK_NETWORK = os.environ.get("TRAEFIK_NETWORK", "traefik-net")
-TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
+TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
-REGISTRY_URL = os.environ.get('REGISTRY_URL',
-                              'https://registry.{}'.format(DOMAIN))
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 
 MOUNTS = {}
@@ -44,6 +41,51 @@ ContainerConfig = namedtuple('ContainerConfig', [
     'container_port', 'container_user', 'target_mount',
     'url_path', 'environment'
 ])
+
+
+class Deployment(object):
+
+    _dashboard_url = None
+    _girder_url = None
+    _registry_url = None
+    _traefik_network = None
+
+    def __init__(self):
+        self.docker_client = docker.from_env(version='1.28')
+
+    @property
+    def traefik_network(self):
+        if self._traefik_network is None:
+            service = self.docker_client.services.get('wt_dashboard')
+            self._traefik_network = \
+                service.attrs['Spec']['Labels']['traefik.docker.network']
+        return self._traefik_network
+
+    @property
+    def dashboard_url(self):
+        if self._dashboard_url is None:
+            self._dashboard_url = self.get_host_from_traefik_rule('wt_dashboard')
+        return self._dashboard_url
+
+    @property
+    def girder_url(self):
+        if self._girder_url is None:
+            self._girder_url = self.get_host_from_traefik_rule('wt_girder')
+        return self._girder_url
+
+    @property
+    def registry_url(self):
+        if self._registry_url is None:
+            self._registry_url = self.get_host_from_traefik_rule('wt_registry')
+        return self._registry_url
+
+    def get_host_from_traefik_rule(self, service_name):
+        service = self.docker_client.services.get(service_name)
+        rule = service.attrs['Spec']['Labels']['traefik.frontend.rule']
+        return 'https://' + rule.split(':')[-1].split(',')[0].strip()
+
+
+DEPLOYMENT = Deployment()
 
 
 def sample_with_replacement(a, size):
@@ -88,7 +130,7 @@ def _get_user_and_instance(girder_client, instanceId):
 
 
 def get_env_with_csp(config):
-    csp = 'CSP_HOSTS="https://dashboard.{}"'.format(DOMAIN)
+    csp = 'CSP_HOSTS="{}"'.format(DEPLOYMENT.dashboard_url)
     try:
         env = config['environment']
         original_csp = next((_ for _ in env if _.startswith('CSP_HOSTS')), None)
@@ -115,7 +157,7 @@ def _get_container_config(gc, tale):
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
             environment=get_env_with_csp(tale_config),
-            image=urlparse(REGISTRY_URL).netloc + '/' + tale['imageId'],
+            image=urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale['imageId'],
             mem_limit=tale_config.get('memLimit'),
             target_mount=tale_config.get('targetMount'),
             url_path=tale_config.get('urlPath')
@@ -145,7 +187,7 @@ def _launch_container(volumeName, nodeId, container_config):
     logging.info('command = ' + str(rendered_command))
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=REGISTRY_URL)
+              registry=DEPLOYMENT.registry_url)
     # Fails with: 'starting container failed: error setting
     #              label on mount source ...: read-only file system'
     # mounts = [
@@ -174,13 +216,13 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.port': str(container_config.container_port),
             'traefik.enable': 'true',
             'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
-            'traefik.docker.network': TRAEFIK_NETWORK,
+            'traefik.docker.network': DEPLOYMENT.traefik_network,
             'traefik.frontend.passHostHeader': 'true',
             'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT
         },
         env=container_config.environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
-        networks=[TRAEFIK_NETWORK],
+        networks=[DEPLOYMENT.traefik_network],
         name=host,
         mounts=mounts,
         endpoint_spec=endpoint_spec,
