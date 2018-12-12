@@ -87,6 +87,20 @@ def _get_user_and_instance(girder_client, instanceId):
     return user, instance
 
 
+def get_env_with_csp(config):
+    csp = 'CSP_HOSTS="https://dashboard.{}"'.format(DOMAIN)
+    try:
+        env = config['environment']
+        original_csp = next((_ for _ in env if _.startswith('CSP_HOSTS')), None)
+        if original_csp:
+            env[env.index(original_csp)] = csp
+        else:
+            env.append(csp)
+    except KeyError:
+        env = [csp]
+    return env
+
+
 def _get_container_config(gc, tale):
     if tale is None:
         container_config = {}  # settings['container_config']
@@ -100,7 +114,7 @@ def _get_container_config(gc, tale):
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
-            environment=tale_config.get('environment', []),
+            environment=get_env_with_csp(tale_config),
             image=urlparse(REGISTRY_URL).netloc + '/' + tale['imageId'],
             mem_limit=tale_config.get('memLimit'),
             target_mount=tale_config.get('targetMount'),
