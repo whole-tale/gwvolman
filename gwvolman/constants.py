@@ -7,7 +7,7 @@ import socket
 API_VERSION = '2.1'
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
-ENABLE_WORKSPACES = False
+ENABLE_WORKSPACES = True
 MOUNTPOINTS = ['data', 'home']
 if ENABLE_WORKSPACES:
     MOUNTPOINTS.append('workspace')
