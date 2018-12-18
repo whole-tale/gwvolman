@@ -20,9 +20,10 @@ from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
-    HOSTDIR, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
+    HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
-    _get_container_config, _launch_container, _get_user_and_instance
+    _get_container_config, _launch_container, _get_user_and_instance, \
+    DEPLOYMENT
 from .publish import publish_tale
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
@@ -235,8 +236,8 @@ def build_image(image_id, repo_url, commit_id):
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-                 registry=REGISTRY_URL)
-    tag = urlparse(REGISTRY_URL).netloc + '/' + image_id
+                 registry=DEPLOYMENT.registry_url)
+    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + image_id
     for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
 
@@ -248,7 +249,7 @@ def build_image(image_id, repo_url, commit_id):
 
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=REGISTRY_URL)
+              registry=DEPLOYMENT.registry_url)
     image = cli.images.get(tag)
     # Only image.attrs['Id'] is used in Girder right now
     return image.attrs
