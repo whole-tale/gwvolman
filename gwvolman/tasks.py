@@ -164,6 +164,33 @@ def launch_container(self, payload):
     return payload
 
 
+@girder_job(title='Update Instance')
+@app.task(bind=True)
+def update_container(self, instanceId, **kwargs):
+    user, instance = _get_user_and_instance(self.girder_client, instanceId)
+
+    cli = docker.from_env(version='1.28')
+    if 'containerInfo' not in instance:
+        return
+    containerInfo = instance['containerInfo']  # VALIDATE
+    try:
+        service = cli.services.get(containerInfo['name'])
+    except docker.errors.NotFound:
+        logging.info("Service not present [%s].", containerInfo['name'])
+        return
+    
+    # Assume containers launched from gwvolman come from its configured registry
+    repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
+    
+    try:
+        # NOTE: Only "image" passed currently, but this can be easily extended
+        logging.info("Restarting container [%s].", service.name)
+        service.update(image=repoLoc + '/' + kwargs['image'])
+        logging.info("Restart command has been sent to Container [%s].", service.name)
+    except Exception as e:
+        logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
+
+
 @girder_job(title='Shutdown Instance')
 @app.task(bind=True)
 def shutdown_container(self, instanceId):
