@@ -148,7 +148,7 @@ def get_env_with_csp(config):
         * 'environment' in config and has 'CSP_HOSTS=...' -> replace
 
     '''
-    csp = 'CSP_HOSTS="{}"'.format(DEPLOYMENT.dashboard_url)
+    csp = "CSP_HOSTS='self' {}".format(DEPLOYMENT.dashboard_url)
     try:
         env = config['environment']
         original_csp = next((_ for _ in env if _.startswith('CSP_HOSTS')), None)
