@@ -23,7 +23,7 @@ from .utils import \
     HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    DEPLOYMENT
+    _get_workspace_folder, _build_image, _get_workspace_mtime, DEPLOYMENT
 from .publish import publish_tale
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
@@ -183,17 +183,17 @@ def update_container(self, instanceId, **kwargs):
         logging.info("Service not present [%s].", containerInfo['name'])
         return
 
-    # Assume containers launched from gwvolman come from its configured registry
-    repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
-    digest = repoLoc + '/' + kwargs['image']
+    digest = kwargs['image']
 
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
         service.update(image=digest)
-        logging.info("Restart command has been sent to Container [%s].", service.name)
+        logging.info("Restart command has been sent to Container [%s].",
+                     service.name)
     except Exception as e:
-        logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
+        logging.error("Unable to send restart command to container [%s]: %s",
+                      service.id, e)
 
     return {'image_digest': digest}
 
@@ -258,36 +258,111 @@ def remove_volume(self, instanceId):
         pass
 
 
-@girder_job(title='Build WT Image')
-@app.task
-def build_image(image_id, repo_url, commit_id):
-    """Build docker image from WT Image object and push to a registry."""
-    temp_dir = tempfile.mkdtemp()
-    # Clone repository and set HEAD to chosen commitId
-    cmd = 'git clone --recursive {} {}'.format(repo_url, temp_dir)
-    subprocess.call(cmd, shell=True)
-    subprocess.call('git checkout ' + commit_id, shell=True, cwd=temp_dir)
+@girder_job(title='Build Tale Image')
+@app.task(bind=True)
+def build_tale_image(self, tale_id):
+    """
+    Build docker image from Tale workspace using repo2docker
+    and push to Whole Tale registry.
+    """
+    logging.info('Building image for Tale %s', tale_id)
 
-    apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
-    apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-                 registry=DEPLOYMENT.registry_url)
-    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + image_id
-    for line in apicli.build(path=temp_dir, pull=True, tag=tag):
-        print(line)
+    tale = self.girder_client.get('/tale/%s' % tale_id)
 
-    # TODO: create tarball
-    # remove clone
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    for line in apicli.push(tag, stream=True):
-        print(line)
+
+    last_build_time = -1
+    try:
+        last_build_time = tale['imageInfo']['last_build']
+    except KeyError:
+        pass
+
+    logging.info('Last build time {}'.format(last_build_time))
+
+    # Only rebuild if files have changed since last build
+    if last_build_time > 0:
+        last_mtime = _get_workspace_mtime(self.girder_client,
+                                          tale['workspaceId'])
+
+        if last_mtime > 0 and last_mtime < last_build_time:
+           logging.info('Workspace not modified since last build. Skipping')
+           return {
+               'image_digest': tale['imageInfo']['digest'], 
+               'repo2docker_version': tale['imageInfo']['repo2docker_version'],
+               'last_build': last_build_time
+           }
+  
+
+    # We're going to try to build. Download the workspace folder.
+    try:
+        temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
+
+        logging.info('Copying workspace contents to %s (%s)', temp_dir,
+                     tale_id)
+
+        workspace = _get_workspace_folder(self.girder_client, tale_id)
+
+        self.girder_client.downloadFolderRecursive(
+            workspace['_id'], temp_dir)
+
+    except Exception as e:
+        raise ValueError('Error accessing Girder: {}'.format(e))
+    except KeyError:
+        logging.info('KeyError')
+        pass  # no workspace folderId
+    except girder_client.HttpError:
+        logging.warn("Workspace folder not found for tale: %s", tale_id)
+        pass
+
 
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
+
+    # Use the current time as the image build time and tag
+    build_time = int(time.time())
+
+    tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
+                            tale_id, str(build_time))
+
+    # Image is required for config information
+    image = self.girder_client.get('/image/%s' % tale['imageId'])
+
+    # TODO: need to configure version of repo2docker
+    repo2docker_version = 'craigwillis/repo2docker:latest'
+
+    # Build the image from the workspace
+    ret = _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version)
+
+    # Remove the temporary directory whether the build succeeded or not
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if ret['StatusCode'] != 0:
+        # repo2docker build failed
+        raise ValueError('Error building tale {}'.format(tale_id))
+
+    # If the repo2docker build succeeded, push the image to our registry
+    apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
+    apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+                 registry=DEPLOYMENT.registry_url)
+
+    for line in apicli.push(tag, stream=True):
+        print(line.decode('utf-8'))
+
+    # TODO: if push succeeded, delete old image?
+
+    # Get the built image digest
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
-    return {'image_digest': digest}
+
+    logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
+
+    # Image digest used by updateBuildStatus handler
+    return {
+        'image_digest': digest, 
+        'repo2docker_version': repo2docker_version,
+        'last_build': build_time
+    }
 
 
 @girder_job(title='Publish Tale')

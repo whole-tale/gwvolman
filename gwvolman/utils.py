@@ -13,6 +13,7 @@ import uuid
 import logging
 import jwt
 import hashlib
+import dateutil.parser
 
 try:
     from urlparse import urlparse
@@ -188,6 +189,8 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
+        digest=tale['imageInfo']['digest'] or ""
+
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
         except (ValueError, TypeError):
@@ -198,7 +201,7 @@ def _get_container_config(gc, tale):
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
             environment=get_env_with_csp(tale_config),
-            image=urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale['imageId'],
+            image=digest,
             mem_limit=mem_limit,
             target_mount=tale_config.get('targetMount'),
             url_path=tale_config.get('urlPath')
@@ -623,3 +626,87 @@ def find_initial_pid(path):
         return 'doi:{}'.format(doi.group())
     else:
         return path
+
+def _get_workspace_folder(gc, tale_id):
+    """
+    Get the workspace folder for the specified tale
+    """
+    user = gc.get('/user/me')
+
+    path = '/collection/WholeTale Workspaces/WholeTale Workspaces'
+    parent = gc.get('resource/lookup',
+                    parameters={'path': path})
+
+    workspace = gc.get(
+        '/folder',
+        parameters={
+            'parentId': parent['_id'],
+            'parentType': 'folder',
+            'name': tale_id
+        },
+    )
+    return workspace[0]
+
+def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
+    """
+    Run repo2docker on the workspace using a shared temp directory. Note that
+    this uses the "local" provider.  Use the same default user-id and
+    user-name as BinderHub
+    """  
+    r2d_cmd = ('jupyter-repo2docker '
+               '--target-repo-dir="/home/jovyan/work/workspace" '
+               '--template={} --buildpack-name={} '
+               '--user-id=1000 --user-name={} '
+               '--no-clean --no-run --debug '
+               '--image-name {} {}'.format(
+                                           image['config']['template'],
+                                           image['config']['buildpack'],
+                                           image['config']['user'],
+                                           tag, temp_dir))
+
+    logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
+
+    container = cli.containers.run(
+        image=repo2docker_version,
+        command=r2d_cmd,
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        privileged=True,
+        detach=True,
+        remove=True,
+        volumes={
+            '/var/run/docker.sock': {
+                'bind': '/var/run/docker.sock', 'mode': 'rw'
+            },
+            '/tmp': {
+                'bind': '/host/tmp', 'mode': 'ro'
+            }
+        }
+    )
+
+    # Job output must come from stdout/stderr
+    for line in container.logs(stream=True):
+        print(line.decode('utf-8'))
+
+    # Since detach=True, then we need to explicitly check for the
+    # container exit code
+    return container.wait()
+
+def _get_workspace_mtime(gc, workspace_id):
+    """
+    Return -1 or the last modification time of files in the root
+    of the workspace. This is used to determine whether to try to 
+    rebuild the image.
+ 
+    mtime is only present after modification
+    """
+    last_mtime = -1
+    for file in gc.get('/folder/{}/listing'.format(workspace_id))['files']:
+        if 'mtime' in file:
+           mtime = file['mtime']
+        else:
+           # 2019-03-10T01:44:34.509000+00:00
+           mtime = dateutil.parser.parse(file['created']).timestamp()
+
+        if mtime > last_mtime:
+           last_mtime = mtime
+    return last_mtime
