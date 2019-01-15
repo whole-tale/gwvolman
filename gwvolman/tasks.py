@@ -181,14 +181,17 @@ def update_container(self, instanceId, **kwargs):
     
     # Assume containers launched from gwvolman come from its configured registry
     repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
+    newImageString = repoLoc + '/' + kwargs['image']
     
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
-        service.update(image=repoLoc + '/' + kwargs['image'])
+        service.update(image=newImageString)
         logging.info("Restart command has been sent to Container [%s].", service.name)
     except Exception as e:
         logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
+        
+    return { 'image': newImageString }
 
 
 @girder_job(title='Shutdown Instance')
