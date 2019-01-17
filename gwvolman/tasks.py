@@ -75,8 +75,6 @@ def create_volume(self, instanceId: str):
 
     homeDir = self.girder_client.loadOrCreateFolder(
         'Home', user['_id'], 'user')
-    data_dir = os.path.join(mountpoint, 'data')
-    _safe_mkdir(HOSTDIR + data_dir)
     home_dir = os.path.join(mountpoint, 'home')
     _safe_mkdir(HOSTDIR + home_dir)
     if ENABLE_WORKSPACES:
@@ -84,12 +82,24 @@ def create_volume(self, instanceId: str):
         _safe_mkdir(HOSTDIR + work_dir)
         if not os.path.isdir(work_dir):
             os.makedirs(work_dir)
+        data_dir = os.path.join(work_dir, 'data')
+    else:
+        data_dir = os.path.join(mountpoint, 'data')
+        _safe_mkdir(HOSTDIR + data_dir)
 
     # FUSE is silly and needs to have mirror inside container
     for directory in (data_dir, home_dir):
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
+
+    if ENABLE_WORKSPACES:
+        cmd = 'girderfs -c wt_work --api-url '
+        cmd += '{} --api-key {} {} {}'.format(
+            GIRDER_API_URL, api_key, work_dir, tale['_id'])
+        logging.info("Calling: %s", cmd)
+        subprocess.call(cmd, shell=True)
+        _safe_mkdir(HOSTDIR + data_dir)
 
     if tale.get('folderId'):
         data_set = [
@@ -115,13 +125,6 @@ def create_volume(self, instanceId: str):
         GIRDER_API_URL, api_key, home_dir, homeDir['_id'])
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
-
-    if ENABLE_WORKSPACES:
-        cmd = 'girderfs -c wt_work --api-url '
-        cmd += '{} --api-key {} {} {}'.format(
-            GIRDER_API_URL, api_key, work_dir, tale['_id'])
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
 
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
@@ -201,6 +204,10 @@ def remove_volume(self, instanceId):
 
     cli = docker.from_env(version='1.28')
     for suffix in MOUNTPOINTS:
+        if suffix == 'workspace':
+            dest = os.path.join(containerInfo['mountPoint'], suffix, 'data')
+            logging.info("Unmounting %s", dest)
+            subprocess.call("umount %s" % dest, shell=True)
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)

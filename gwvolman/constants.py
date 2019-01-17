@@ -8,9 +8,10 @@ API_VERSION = '2.1'
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
 ENABLE_WORKSPACES = True
-MOUNTPOINTS = ['data', 'home']
 if ENABLE_WORKSPACES:
-    MOUNTPOINTS.append('workspace')
+    MOUNTPOINTS = ['home', 'workspace']
+else:
+    MOUNTPOINTS = ['data', 'home']
 
 try:
     DEFAULT_GIRDER_API_URL = 'http://' + socket.gethostbyname('girder') + ':8080/api/v1'
