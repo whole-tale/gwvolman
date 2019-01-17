@@ -144,6 +144,23 @@ def launch_container(self, payload):
         self.girder_client, payload['instanceId'])
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
 
+    if 'imageInfo' not in tale:
+
+        # Wait for image to be built
+        tic = time.time()
+        timeout = 180.0
+
+        while time.time() - tic < timeout:
+
+            logging.info("Waiting for image build to complete.")
+
+            tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
+
+            if 'imageInfo' in tale and 'digest' in tale['imageInfo']:
+                break
+
+            time.sleep(5)
+
     # _pull_image() #FIXME
     container_config = _get_container_config(self.girder_client, tale)
     service, attrs = _launch_container(
