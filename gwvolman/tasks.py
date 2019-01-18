@@ -281,8 +281,9 @@ def build_image(image_id, repo_url, commit_id):
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
     image = cli.images.get(tag)
-    # Only image.attrs['Id'] is used in Girder right now
-    return image.attrs
+    digest = next((_ for _ in image.attrs['RepoDigests']
+               if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+    return {'image_digest': digest}
 
 
 @girder_job(title='Publish Tale')
