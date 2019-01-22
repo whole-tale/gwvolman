@@ -91,7 +91,7 @@ def create_volume(self, instanceId: str):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
 
-    if tale.get('involatileData') is not None:
+    if tale.get('dataSet') is not None:
         session = self.girder_client.post(
             '/dm/session', parameters={'taleId': tale['_id']})
     elif tale.get('folderId'):  # old format, keep it for now
@@ -357,7 +357,7 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
     payload = {
         'authors': user['firstName'] + ' ' + user['lastName'],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
-        'involatileData': [
+        'dataSet': [
             {'mountPath': '/' + resource['name'], 'itemId': resource['_id']}
         ],
         'public': False,
