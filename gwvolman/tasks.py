@@ -91,7 +91,10 @@ def create_volume(self, instanceId: str):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
 
-    if tale.get('folderId'):
+    if tale.get('dataSet') is not None:
+        session = self.girder_client.post(
+            '/dm/session', parameters={'taleId': tale['_id']})
+    elif tale.get('folderId'):  # old format, keep it for now
         data_set = [
             {'itemId': folder['_id'], 'mountPath': '/' + folder['name']}
             for folder in self.girder_client.listFolder(tale['folderId'])
@@ -102,13 +105,14 @@ def create_volume(self, instanceId: str):
         ]
         session = self.girder_client.post(
             '/dm/session', parameters={'dataSet': json.dumps(data_set)})
+    else:
+        session = {'_id': None}
 
+    if session['_id'] is not None:
         cmd = "girderfs --hostns -c wt_dms --api-url {} --api-key {} {} {}"
         cmd = cmd.format(GIRDER_API_URL, api_key, data_dir, session['_id'])
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
-    else:
-        session = {'_id': None}
     #  webdav relies on mount.c module, don't use hostns for now
     cmd = 'girderfs -c wt_home --api-url '
     cmd += '{} --api-key {} {} {}'.format(
@@ -353,8 +357,8 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
     payload = {
         'authors': user['firstName'] + ' ' + user['lastName'],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
-        'involatileData': [
-            {'type': resource['_modelType'], 'id': resource['_id']}
+        'dataSet': [
+            {'mountPath': '/' + resource['name'], 'itemId': resource['_id']}
         ],
         'public': False,
         'published': False
