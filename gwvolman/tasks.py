@@ -168,6 +168,36 @@ def launch_container(self, payload):
     return payload
 
 
+@girder_job(title='Update Instance')
+@app.task(bind=True)
+def update_container(self, instanceId, **kwargs):
+    user, instance = _get_user_and_instance(self.girder_client, instanceId)
+
+    cli = docker.from_env(version='1.28')
+    if 'containerInfo' not in instance:
+        return
+    containerInfo = instance['containerInfo']  # VALIDATE
+    try:
+        service = cli.services.get(containerInfo['name'])
+    except docker.errors.NotFound:
+        logging.info("Service not present [%s].", containerInfo['name'])
+        return
+    
+    # Assume containers launched from gwvolman come from its configured registry
+    repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
+    digest = repoLoc + '/' + kwargs['image']
+    
+    try:
+        # NOTE: Only "image" passed currently, but this can be easily extended
+        logging.info("Restarting container [%s].", service.name)
+        service.update(image=digest)
+        logging.info("Restart command has been sent to Container [%s].", service.name)
+    except Exception as e:
+        logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
+        
+    return { 'image_digest': digest }
+
+
 @girder_job(title='Shutdown Instance')
 @app.task(bind=True)
 def shutdown_container(self, instanceId):
@@ -255,8 +285,9 @@ def build_image(image_id, repo_url, commit_id):
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
     image = cli.images.get(tag)
-    # Only image.attrs['Id'] is used in Girder right now
-    return image.attrs
+    digest = next((_ for _ in image.attrs['RepoDigests']
+               if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+    return {'image_digest': digest}
 
 
 @girder_job(title='Publish Tale')
