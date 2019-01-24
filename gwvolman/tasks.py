@@ -361,6 +361,8 @@ def build_tale_image(self, tale_id):
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=DEPLOYMENT.registry_url)
 
+    # remove clone
+    shutil.rmtree(temp_dir, ignore_errors=True)
     for line in apicli.push(tag, stream=True):
         print(line.decode('utf-8'))
 
@@ -393,13 +395,6 @@ def publish(self,
             prov_info,
             license_id):
     """
-<<<<<<< HEAD
-    Publish a Tale to DataONE.
-
-=======
-    Publishes a Tale to DataONE
-    :param self: self
->>>>>>> 0870cba... Bind the Publish Task
     :param item_ids: A list of item ids that are in the package
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
