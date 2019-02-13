@@ -20,9 +20,10 @@ from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .utils import \
-    HOSTDIR, REGISTRY_USER, REGISTRY_URL, REGISTRY_PASS, \
+    HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
-    _get_container_config, _launch_container, _get_user_and_instance
+    _get_container_config, _launch_container, _get_user_and_instance, \
+    DEPLOYMENT
 from .publish import publish_tale
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
@@ -90,7 +91,10 @@ def create_volume(self, instanceId: str):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
 
-    if tale.get('folderId'):
+    if tale.get('dataSet') is not None:
+        session = self.girder_client.post(
+            '/dm/session', parameters={'taleId': tale['_id']})
+    elif tale.get('folderId'):  # old format, keep it for now
         data_set = [
             {'itemId': folder['_id'], 'mountPath': '/' + folder['name']}
             for folder in self.girder_client.listFolder(tale['folderId'])
@@ -101,13 +105,14 @@ def create_volume(self, instanceId: str):
         ]
         session = self.girder_client.post(
             '/dm/session', parameters={'dataSet': json.dumps(data_set)})
+    else:
+        session = {'_id': None}
 
+    if session['_id'] is not None:
         cmd = "girderfs --hostns -c wt_dms --api-url {} --api-key {} {} {}"
         cmd = cmd.format(GIRDER_API_URL, api_key, data_dir, session['_id'])
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
-    else:
-        session = {'_id': None}
     #  webdav relies on mount.c module, don't use hostns for now
     cmd = 'girderfs -c wt_home --api-url '
     cmd += '{} --api-key {} {} {}'.format(
@@ -161,6 +166,36 @@ def launch_container(self, payload):
     payload.update(attrs)
     payload['name'] = service.name
     return payload
+
+
+@girder_job(title='Update Instance')
+@app.task(bind=True)
+def update_container(self, instanceId, **kwargs):
+    user, instance = _get_user_and_instance(self.girder_client, instanceId)
+
+    cli = docker.from_env(version='1.28')
+    if 'containerInfo' not in instance:
+        return
+    containerInfo = instance['containerInfo']  # VALIDATE
+    try:
+        service = cli.services.get(containerInfo['name'])
+    except docker.errors.NotFound:
+        logging.info("Service not present [%s].", containerInfo['name'])
+        return
+    
+    # Assume containers launched from gwvolman come from its configured registry
+    repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
+    digest = repoLoc + '/' + kwargs['image']
+    
+    try:
+        # NOTE: Only "image" passed currently, but this can be easily extended
+        logging.info("Restarting container [%s].", service.name)
+        service.update(image=digest)
+        logging.info("Restart command has been sent to Container [%s].", service.name)
+    except Exception as e:
+        logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
+        
+    return { 'image_digest': digest }
 
 
 @girder_job(title='Shutdown Instance')
@@ -235,8 +270,8 @@ def build_image(image_id, repo_url, commit_id):
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-                 registry=REGISTRY_URL)
-    tag = urlparse(REGISTRY_URL).netloc + '/' + image_id
+                 registry=DEPLOYMENT.registry_url)
+    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + image_id
     for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
 
@@ -248,10 +283,11 @@ def build_image(image_id, repo_url, commit_id):
 
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=REGISTRY_URL)
+              registry=DEPLOYMENT.registry_url)
     image = cli.images.get(tag)
-    # Only image.attrs['Id'] is used in Girder right now
-    return image.attrs
+    digest = next((_ for _ in image.attrs['RepoDigests']
+               if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+    return {'image_digest': digest}
 
 
 @girder_job(title='Publish Tale')
@@ -352,8 +388,8 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
     payload = {
         'authors': user['firstName'] + ' ' + user['lastName'],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
-        'involatileData': [
-            {'type': resource['_modelType'], 'id': resource['_id']}
+        'dataSet': [
+            {'mountPath': '/' + resource['name'], 'itemId': resource['_id']}
         ],
         'public': False,
         'published': False
