@@ -182,11 +182,11 @@ def update_container(self, instanceId, **kwargs):
     except docker.errors.NotFound:
         logging.info("Service not present [%s].", containerInfo['name'])
         return
-    
+
     # Assume containers launched from gwvolman come from its configured registry
     repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
     digest = repoLoc + '/' + kwargs['image']
-    
+
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
@@ -194,8 +194,8 @@ def update_container(self, instanceId, **kwargs):
         logging.info("Restart command has been sent to Container [%s].", service.name)
     except Exception as e:
         logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
-        
-    return { 'image_digest': digest }
+
+    return {'image_digest': digest}
 
 
 @girder_job(title='Shutdown Instance')
@@ -286,7 +286,7 @@ def build_image(image_id, repo_url, commit_id):
               registry=DEPLOYMENT.registry_url)
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
-               if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+                   if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
     return {'image_digest': digest}
 
 
@@ -371,14 +371,20 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
         message='Registering the dataset in Whole Tale', total=total,
         current=2)
     self.girder_client.post(
-        '/dataset/register', parameters={'dataMap': json.dumps(dataMap),
-                                         'copyToHome': True})
+        '/dataset/register', parameters={'dataMap': json.dumps(dataMap)})
 
     # Get resulting folder/item by name
     user = self.girder_client.get('/user/me')
-    path = '/user/{}/Data/{}'.format(user['login'], dataMap[0]['name'])
-    resource = self.girder_client.get(
-        '/resource/lookup', parameters={'path': path})
+    datasets = self.girder_client.get(
+        '/dataset', parameters={'myData': True, 'limit': 1, 'sortdir': -1,
+                                'sort': 'updated'})
+    try:
+        resource = datasets[0]
+        if resource['name'] != dataMap[0]['name']:
+            raise IndexError
+    except IndexError:
+        errormsg = 'Registration failed. Aborting!'
+        raise ValueError(errormsg)
 
     # Try to come up with a good name for the dataset
     long_name = resource['name']
@@ -389,7 +395,11 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
         'authors': user['firstName'] + ' ' + user['lastName'],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
         'dataSet': [
-            {'mountPath': '/' + resource['name'], 'itemId': resource['_id']}
+            {
+                'mountPath': '/' + resource['name'],
+                'itemId': resource['_id'],
+                '_modelType': resource['_modelType']
+            }
         ],
         'public': False,
         'published': False
