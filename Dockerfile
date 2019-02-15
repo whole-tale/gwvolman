@@ -50,4 +50,10 @@ RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
   -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
 
+# https://github.com/whole-tale/gwvolman/issues/51
+# https://github.com/whole-tale/wt_home_dirs/issues/18
+RUN echo "use_locks 0" >> /etc/davfs2/davfs2.conf && \
+  echo "backup_dir .lost+found" >> /etc/davfs2/davfs2.conf && \
+  echo "gui_optimize 1" >> /etc/davfs2/davfs2.conf
+
 ENTRYPOINT ["python3", "-m", "girder_worker", "-l", "INFO"]
