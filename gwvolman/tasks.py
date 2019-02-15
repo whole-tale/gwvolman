@@ -374,23 +374,32 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
         '/dataset/register', parameters={'dataMap': json.dumps(dataMap)})
 
     # Get resulting folder/item by name
-    user = self.girder_client.get('/user/me')
-    datasets = self.girder_client.get(
-        '/dataset', parameters={'myData': True, 'limit': 1, 'sortdir': -1,
-                                'sort': 'updated'})
+    catalog_path = '/collection/WholeTale Catalog/WholeTale Catalog'
+    catalog = self.girder_client.get(
+        '/resource/lookup', parameters={'path': catalog_path})
+    folders = self.girder_client.get(
+        '/folder', parameters={'name': dataMap[0]['name'],
+                               'parentId': catalog['_id'],
+                               'parentType': 'folder'}
+    )
     try:
-        resource = datasets[0]
-        if resource['name'] != dataMap[0]['name']:
-            raise IndexError
+        resource = folders[0]
     except IndexError:
-        errormsg = 'Registration failed. Aborting!'
-        raise ValueError(errormsg)
+        items = self.girder_client.get(
+            '/item', parameters={'folderId': catalog['_id'],
+                                 'name': dataMap[0]['name']})
+        try:
+            resource = items[0]
+        except IndexError:
+            errormsg = 'Registration failed. Aborting!'
+            raise ValueError(errormsg)
 
     # Try to come up with a good name for the dataset
     long_name = resource['name']
     long_name = long_name.replace('-', ' ').replace('_', ' ')
     shortened_name = textwrap.shorten(text=long_name, width=30)
 
+    user = self.girder_client.get('/user/me')
     payload = {
         'authors': user['firstName'] + ' ' + user['lastName'],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
