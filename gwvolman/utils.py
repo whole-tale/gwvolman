@@ -42,6 +42,24 @@ ContainerConfig = namedtuple('ContainerConfig', [
     'url_path', 'environment'
 ])
 
+SIZE_NOTATION_RE = re.compile("^(\d+)([kmg]?b?)$", re.IGNORECASE)
+SIZE_TABLE = {
+    '': 1, 'b': 1,
+    'k': 1024, 'kb': 1024,
+    'm': 1024 ** 2, 'mb': 1024 ** 2,
+    'g': 1024 ** 3, 'gb': 1024 ** 3
+}
+
+
+def size_notation_to_bytes(size):
+    if isinstance(size, int):
+        return size
+    match = SIZE_NOTATION_RE.match(size)
+    if match:
+        val, suffix = match.groups()
+        return int(val) * SIZE_TABLE[suffix.lower()]
+    raise ValueError
+
 
 class Deployment(object):
     """Container for WT-specific docker stack deployment configuration.
@@ -169,6 +187,11 @@ def _get_container_config(gc, tale):
         tale_config = image['config'] or {}
         if tale['config']:
             tale_config.update(tale['config'])
+
+        try:
+            mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
+        except (ValueError, TypeError):
+            mem_limit = 2 * 1024 ** 3
         container_config = ContainerConfig(
             command=tale_config.get('command'),
             container_port=tale_config.get('port'),
@@ -176,7 +199,7 @@ def _get_container_config(gc, tale):
             cpu_shares=tale_config.get('cpuShares'),
             environment=get_env_with_csp(tale_config),
             image=urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale['imageId'],
-            mem_limit=tale_config.get('memLimit'),
+            mem_limit=mem_limit,
             target_mount=tale_config.get('targetMount'),
             url_path=tale_config.get('urlPath')
         )
@@ -244,11 +267,9 @@ def _launch_container(volumeName, nodeId, container_config):
         name=host,
         mounts=mounts,
         endpoint_spec=endpoint_spec,
-        constraints=['node.id == {}'.format(nodeId)]
+        constraints=['node.id == {}'.format(nodeId)],
+        resources=docker.types.Resources(mem_limit=container_config.mem_limit)
     )
-
-    # resources=docker.types.Resources(mem_limit='2g'),
-    # FIXME for some reason causes 500
 
     # Wait for the server to launch within the container before adding it
     # to the pool or serving it to a user.
