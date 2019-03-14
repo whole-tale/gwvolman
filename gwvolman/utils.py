@@ -189,7 +189,7 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
-        digest=tale['imageInfo']['digest'] or ""
+        digest=tale['imageInfo']['digest'] 
 
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
