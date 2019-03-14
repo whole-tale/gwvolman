@@ -23,7 +23,7 @@ from .utils import \
     HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _get_workspace_folder, _build_image, _get_workspace_mtime, DEPLOYMENT
+    _get_workspace_folder, _build_image, DEPLOYMENT
 from .publish import publish_tale
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
@@ -282,10 +282,10 @@ def build_tale_image(self, tale_id):
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
     """
+    print('Building image')
     logging.info('Building image for Tale %s', tale_id)
 
     tale = self.girder_client.get('/tale/%s' % tale_id)
-
 
     last_build_time = -1
     try:
@@ -297,24 +297,26 @@ def build_tale_image(self, tale_id):
 
     # Only rebuild if files have changed since last build
     if last_build_time > 0:
-        last_mtime = _get_workspace_mtime(self.girder_client,
-                                          tale['workspaceId'])
 
-        if last_mtime > 0 and last_mtime < last_build_time:
-           logging.info('Workspace not modified since last build. Skipping')
+        workspace_mtime = -1
+        try: 
+            workspace_mtime = tale['workspaceModified']
+        except KeyError:
+            pass
+
+        if last_build_time > 0 and workspace_mtime < last_build_time:
+           print('Workspace not modified since last build. Skipping.')
            return {
                'image_digest': tale['imageInfo']['digest'], 
                'repo2docker_version': tale['imageInfo']['repo2docker_version'],
                'last_build': last_build_time
            }
   
-
-    # We're going to try to build. Download the workspace folder.
+    # Workspace modified so try to build.
     try:
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
 
-        logging.info('Copying workspace contents to %s (%s)', temp_dir,
-                     tale_id)
+        logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
 
         workspace = _get_workspace_folder(self.girder_client, tale_id)
 

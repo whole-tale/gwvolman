@@ -690,23 +690,3 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     # Since detach=True, then we need to explicitly check for the
     # container exit code
     return container.wait()
-
-def _get_workspace_mtime(gc, workspace_id):
-    """
-    Return -1 or the last modification time of files in the root
-    of the workspace. This is used to determine whether to try to 
-    rebuild the image.
- 
-    mtime is only present after modification
-    """
-    last_mtime = -1
-    for file in gc.get('/folder/{}/listing'.format(workspace_id))['files']:
-        if 'mtime' in file:
-           mtime = file['mtime']
-        else:
-           # 2019-03-10T01:44:34.509000+00:00
-           mtime = dateutil.parser.parse(file['created']).timestamp()
-
-        if mtime > last_mtime:
-           last_mtime = mtime
-    return last_mtime
