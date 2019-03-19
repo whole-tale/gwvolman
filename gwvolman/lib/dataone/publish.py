@@ -29,14 +29,12 @@ from .utils import \
     get_dataone_mimetype, \
     retrieve_supported_mimetypes
 
-from .dataone_metadata import \
+from .metadata import \
     generate_system_metadata, \
     create_minimum_eml, \
     create_resource_map
 
-from .constants import \
-    ExtraFileNames, \
-    GIRDER_API_URL
+from .constants import ExtraFileNames
 
 
 def create_upload_eml(tale,
@@ -402,24 +400,23 @@ def get_tale_license(gc, tale):
 
 
 
-def publish_tale(job_manager,
+def publish_tale(gc, 
+                 job_manager,
                  tale_id,
                  dataone_node,
                  dataone_auth_token,
-                 girder_token,
                  girder_id):
     """
     Acts as the main function for publishing a Tale to DataONE.
+    :param gc: Authenticated Girder client
     :param job_manager: Helper object that allows you to set the job progress
     :param tale_id: The tale Id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
-    :param girder_token: The user's girder token
     :param girder_id: The user's ID
     :type tale_id: str
     :type dataone_node: str
     :type dataone_auth_token: str
-    :type girder_token: str
     :type prov_info: dict
     :return: The pid of the package's resource map
     :rtype: str
@@ -429,13 +426,6 @@ def publish_tale(job_manager,
     job_manager.updateProgress(message='Establishing external connections',
                                total=100,
                                current=current_progress)
-    try:
-        gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
-        gc.token = str(girder_token)
-    except Exception as e:
-        logging.warning(e)
-        raise ValueError('Error authenticating with Girder.')
-
     tale = gc.get('tale/{}/'.format(tale_id))
     if not len(tale):
         raise ValueError('Failed to retrieve Tale.')
