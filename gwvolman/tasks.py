@@ -23,7 +23,7 @@ from .utils import \
     HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _get_workspace_folder, _build_image, DEPLOYMENT
+    _build_image, DEPLOYMENT
 from .publish import publish_tale
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
@@ -315,11 +315,8 @@ def build_tale_image(self, tale_id):
     # Workspace modified so try to build.
     try:
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
-
         logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
-
-        workspace = _get_workspace_folder(self.girder_client, tale_id)
-
+        workspace = self.girder_client.get('/folder/{workspaceId}'.format(**tale))
         self.girder_client.downloadFolderRecursive(
             workspace['_id'], temp_dir)
 

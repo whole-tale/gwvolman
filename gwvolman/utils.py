@@ -627,26 +627,6 @@ def find_initial_pid(path):
     else:
         return path
 
-def _get_workspace_folder(gc, tale_id):
-    """
-    Get the workspace folder for the specified tale
-    """
-    user = gc.get('/user/me')
-
-    path = '/collection/WholeTale Workspaces/WholeTale Workspaces'
-    parent = gc.get('resource/lookup',
-                    parameters={'path': path})
-
-    workspace = gc.get(
-        '/folder',
-        parameters={
-            'parentId': parent['_id'],
-            'parentType': 'folder',
-            'name': tale_id
-        },
-    )
-    return workspace[0]
-
 def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     """
     Run repo2docker on the workspace using a shared temp directory. Note that
