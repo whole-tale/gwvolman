@@ -344,7 +344,7 @@ def build_tale_image(self, tale_id):
     image = self.girder_client.get('/image/%s' % tale['imageId'])
 
     # TODO: need to configure version of repo2docker
-    repo2docker_version = 'craigwillis/repo2docker:latest'
+    repo2docker_version = 'wholetale/repo2docker:latest'
 
     # Build the image from the workspace
     ret = _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version)
