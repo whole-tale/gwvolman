@@ -164,6 +164,11 @@ class DataONEPublishProvider(PublishProvider):
                                     system_metadata=file_meta)
                         uploaded_pids.append(file_pid)
 
+                # Update the tale now that it has been published
+                tale = gc.get('tale/{}/'.format(tale_id))
+                if not 'publishInfo' in tale:
+                    tale['publishInfo'] = []
+
                 if job_manager:
                     job_manager.updateProgress(
                         message='Uploading EML metadata record',
@@ -177,6 +182,11 @@ class DataONEPublishProvider(PublishProvider):
                                size=len(eml_doc), 
                                md5=md5(eml_doc).hexdigest(),
                                rights_holder=user_id)
+                # This fails: The supplied system metadata is invalid. 
+                # The obsoletes field cannot have a value when creating entries.
+                #if tale['publishInfo']:
+                #    old_pid = tale['publishInfo'][-1]['pid']
+                #    eml_meta.obsoletes = old_pid
 
                 self._upload_file(client=client, pid=eml_pid,
                             file_object=io.BytesIO(eml_doc),
@@ -206,19 +216,30 @@ class DataONEPublishProvider(PublishProvider):
                 package_url = self._get_dataone_package_url(dataone_node, eml_pid)
                 logging.info("Package URL {}".format(package_url))
 
-                # Update the tale now that it has been published
-                tale = gc.get('tale/{}/'.format(tale_id))
-                tale['publishInfo'].append( { 'pid': eml_pid, 'url': package_url } )
-                gc.put('tale/{}'.format(tale['_id']), data=json.dumps(tale))
+
+                if job_manager:
+                    job_manager.updateProgress(message='Your Tale has successfully been published '
+                                       'to DataONE.',
+                               total=100,
+                               current=100)
+
+                tale['publishInfo'].append( { 'pid': eml_pid, 'uri': package_url } )
+                logging.info("TALE {}".format(tale))
+                try:
+                    gc.put('tale/{}'.format(tale['_id']), json=tale)
+                except Exception as e:
+                    logging.info("Error updating Tale {}".format(str(e)))
+                    raise
 
             except Exception as e:
-                logging.info("Rolling back on error {}".format(str(e)))
-                for pid in uploaded_pids:
-                    try:
-                        logging.info("Deleting pid {} if I could...".format(pid))
-                        #client.delete(pid)
-                    except Exception as e:
-                        logging.warning('Error deleting pid {}: {}'.format(pid, str(e)))
+                logging.info("Error. Should rollback... {}".format(str(e)))
+                # Getting permission denied on delete
+                #for pid in uploaded_pids:
+                #    try:
+                #        logging.info("Deleting pid {} if I could...".format(pid))
+                #        client.delete(pid)
+                #    except Exception as e:
+                #        logging.warning('Error deleting pid {}: {}'.format(pid, str(e)))
                 raise
 
     def _get_manifest_file_info(self, manifest, relpath):
