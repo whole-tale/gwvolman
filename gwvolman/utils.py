@@ -278,3 +278,47 @@ def _launch_container(volumeName, nodeId, container_config):
         path=rendered_url_path)
 
     return service, {'url': url}
+
+def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
+    """
+    Run repo2docker on the workspace using a shared temp directory. Note that
+    this uses the "local" provider.  Use the same default user-id and
+    user-name as BinderHub
+    """  
+    r2d_cmd = ('jupyter-repo2docker '
+               '--target-repo-dir="/home/jovyan/work/workspace" '
+               '--template={} --buildpack-name={} '
+               '--user-id=1000 --user-name={} '
+               '--no-clean --no-run --debug '
+               '--image-name {} {}'.format(
+                                           image['config']['template'],
+                                           image['config']['buildpack'],
+                                           image['config']['user'],
+                                           tag, temp_dir))
+
+    logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
+
+    container = cli.containers.run(
+        image=repo2docker_version,
+        command=r2d_cmd,
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        privileged=True,
+        detach=True,
+        remove=True,
+        volumes={
+            '/var/run/docker.sock': {
+                'bind': '/var/run/docker.sock', 'mode': 'rw'
+            },
+            '/tmp': {
+                'bind': '/host/tmp', 'mode': 'ro'
+            }
+        }
+    )
+
+    # Job output must come from stdout/stderr
+    for line in container.logs(stream=True):
+        print(line.decode('utf-8'))
+
+    # Since detach=True, then we need to explicitly check for the
+    # container exit code
+    return container.wait()
