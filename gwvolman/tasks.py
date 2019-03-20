@@ -25,7 +25,7 @@ from .utils import \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _build_image, DEPLOYMENT
 
-from .lib.dataone.publish import publish_tale
+from .lib.dataone.publish import DataONEPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
@@ -401,12 +401,14 @@ def publish(self,
     :type dataone_auth_token: str
     :type user_id: str
     """
-    publish_tale(self.girder_client,
-                 self.job_manager,
+    provider = DataONEPublishProvider()
+    return provider.publish(
                  tale,
+                 self.girder_client,
                  dataone_node,
                  dataone_auth_token,
-                 user_id)
+                 self.job_manager
+    )
 
 
 @girder_job(title='Import Tale')
