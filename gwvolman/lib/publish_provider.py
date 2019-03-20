@@ -1,7 +1,8 @@
 
 """
-Base class for Whole Tale publishing providers. 
+Base class for Whole Tale publishing providers.
 """
+
 
 class PublishProvider(object):
 

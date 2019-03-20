@@ -12,28 +12,28 @@ try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
-import docker
 
 from d1_client.mnclient_2_0 import MemberNodeClient_2_0
 from d1_common.types.exceptions import DataONEException
 
-from .metadata import DataONEMetadata 
+from .metadata import DataONEMetadata
 
 from .constants import DataONELocations
 
 from gwvolman.lib.publish_provider import PublishProvider
+
 
 class DataONEPublishProvider(PublishProvider):
 
     def _connect(self, dataone_node, dataone_auth_token):
         """
         Create a client object that is used to interface with a DataONE
-        member node.  The auth_token is the jwt token from DataONE. 
+        member node.  The auth_token is the jwt token from DataONE.
         Close the connection between uploads otherwise some uploads will fail.
         CW: What does this mean?
         """
         try:
-            return MemberNodeClient_2_0(dataone_node, 
+            return MemberNodeClient_2_0(dataone_node,
                **{
                     "headers": {
                         "Authorization": "Bearer " + dataone_auth_token,
@@ -45,30 +45,29 @@ class DataONEPublishProvider(PublishProvider):
         except DataONEException as e:
             logging.warning(e)
             raise ValueError('Failed to establish connection with DataONE.')
-        
 
-    def publish(self, tale_id, gc, dataone_node, dataone_auth_token, 
+    def publish(self, tale_id, gc, dataone_node, dataone_auth_token,
                 job_manager=None):
         """
         Workhorse method that downloads a zip file for a tale then
-          * Uploads individual files to DataONE 
+          * Uploads individual files to DataONE
           * Generates and uploads EML metadata
           * Generates and uploads resource map
           * If provided, updates job manager progress
         """
 
-        step=1
-        steps=100
+        # Progress indicators
+        step = 1
+        steps = 100
 
         if job_manager:
-            job_manager.updateProgress( 
-                message='Connecting to {}'.format(dataone_node), 
+            job_manager.updateProgress(
+                message='Connecting to {}'.format(dataone_node),
                 total=100, current=int(step/steps*100))
         step += 1
- 
+
         try:
             client = self._connect(dataone_node, dataone_auth_token)
-            logging.info('Connected to DataONE {}'.format(dataone_node))
         except DataONEException as e:
             logging.warning(e)
             # We'll want to exit if we can't create the client
@@ -76,11 +75,9 @@ class DataONEPublishProvider(PublishProvider):
 
         user_id, full_orcid_name = self._extract_user_info(dataone_auth_token)
         if not all([user_id, full_orcid_name]):
-            raise ValueError('Failed to process your DataONE credentials. Please '
-                             'ensure you are logged into DataONE.')
-        logging.info('DataONE user {} {}'.format(user_id, full_orcid_name))
+            raise ValueError('Failed to process your DataONE credentials. '
+                             'Please ensure you are logged into DataONE.')
 
-        logging.info('Exporting Tale')
         if job_manager:
             job_manager.updateProgress(
                 message='Exporting Tale',
@@ -98,13 +95,11 @@ class DataONEPublishProvider(PublishProvider):
             tmp.seek(0)
 
             # Read the zipfile
-            logging.info('Reading zipfile {}'.format(tmp))
             zip = zipfile.ZipFile(tmp, 'r')
             files = zip.namelist()
-           
+
             # Now we know the number of steps for progress
-            # Connect + Zip + number of files + upload manifest + upload environment + upload ore
-            steps = len(files) + 5 
+            steps = len(files) + 5
 
             # Get the manifest
             manifest_path = '{}/metadata/manifest.json'.format(tale_id)
@@ -113,24 +108,21 @@ class DataONEPublishProvider(PublishProvider):
                 data = f.read()
                 manifest_md5 = md5(data).hexdigest()
                 manifest = json.loads(data.decode('utf-8'))
-            logging.info('MANIFEST {}'.format(manifest))
 
             # Get the environment
             environment_path = '{}/environment.txt'.format(tale_id)
             environment_size = zip.getinfo(environment_path).file_size
-            with zip.open(environment_path) as f:
-                environment_mdf = md5(f.read()).hexdigest()
 
             if job_manager:
                 job_manager.updateProgress(
                     message='Creating EML document from manifest',
                     total=100, current=int(step/steps*100))
             step += 1
- 
+
             metadata = DataONEMetadata()
             # Create an EML document based on the manifest
-            eml_pid, eml_doc = metadata.create_eml_doc(manifest, user_id, manifest_size, environment_size)
-            logging.info('EML: {}'.format(eml_doc))
+            eml_pid, eml_doc = metadata.create_eml_doc(
+                manifest, user_id, manifest_size, environment_size)
 
             # Keep track of uploaded objects in case we need to rollback
             uploaded_pids = []
@@ -139,8 +131,7 @@ class DataONEPublishProvider(PublishProvider):
                     with zip.open(fpath) as f:
                         relpath = fpath.replace(tale_id, "..")
                         fname = os.path.basename(fpath)
-    
-                        logging.info('Uploading file {}'.format(fname))
+
                         if job_manager:
                             job_manager.updateProgress(
                                 message='Uploading file {}'.format(fname),
@@ -148,25 +139,28 @@ class DataONEPublishProvider(PublishProvider):
                         step += 1
 
                         # Generate uuid (TODO: Replace with D1 API call)
-                        file_pid =  metadata.generate_dataone_guid()
-    
-                        mimeType = metadata.get_dataone_mimetype(mimetypes.guess_type(fpath))
-     
+                        file_pid = metadata.generate_dataone_guid()
+
+                        mimeType = metadata.get_dataone_mimetype(
+                            mimetypes.guess_type(fpath))
+
                         if fname == 'manifest.json':
-                            size, hash =  manifest_size, manifest_md5
+                            size, hash = manifest_size, manifest_md5
                         else:
-                            size, hash =  self._get_manifest_file_info(manifest, relpath)
-                           
-                        file_meta = metadata.generate_system_metadata(file_pid, fname, mimeType, size, hash, user_id)
+                            size, hash = self._get_manifest_file_info(
+                                manifest, relpath)
+
+                        file_meta = metadata.generate_system_metadata(
+                                file_pid, fname, mimeType, size, hash, user_id)
 
                         self._upload_file(client=client, pid=file_pid,
-                                    file_object=f.read(),
-                                    system_metadata=file_meta)
+                                          file_object=f.read(),
+                                          system_metadata=file_meta)
                         uploaded_pids.append(file_pid)
 
                 # Update the tale now that it has been published
                 tale = gc.get('tale/{}/'.format(tale_id))
-                if not 'publishInfo' in tale:
+                if 'publishInfo' not in tale:
                     tale['publishInfo'] = []
 
                 if job_manager:
@@ -177,20 +171,22 @@ class DataONEPublishProvider(PublishProvider):
 
                 # Upload the EML document and system metadata
                 eml_meta = metadata.generate_system_metadata(
-                               pid=eml_pid, name='metadata.xml', 
-                               format_id='eml://ecoinformatics.org/eml-2.1.1', 
-                               size=len(eml_doc), 
+                               pid=eml_pid, name='metadata.xml',
+                               format_id='eml://ecoinformatics.org/eml-2.1.1',
+                               size=len(eml_doc),
                                md5=md5(eml_doc).hexdigest(),
                                rights_holder=user_id)
-                # This fails: The supplied system metadata is invalid. 
-                # The obsoletes field cannot have a value when creating entries.
-                #if tale['publishInfo']:
+
+                # This fails with:
+                #   The supplied system metadata is invalid. The obsoletes
+                #   field cannot have a value when creating entries.
+                # if tale['publishInfo']:
                 #    old_pid = tale['publishInfo'][-1]['pid']
                 #    eml_meta.obsoletes = old_pid
 
                 self._upload_file(client=client, pid=eml_pid,
-                            file_object=io.BytesIO(eml_doc),
-                            system_metadata=eml_meta)
+                                  file_object=io.BytesIO(eml_doc),
+                                  system_metadata=eml_meta)
 
                 uploaded_pids.append(eml_pid)
 
@@ -201,85 +197,95 @@ class DataONEPublishProvider(PublishProvider):
                 step += 1
 
                 # Create ORE
-                res_pid, res_map = metadata.create_resource_map(eml_pid, uploaded_pids)
+                res_pid, res_map = metadata.create_resource_map(
+                    eml_pid, uploaded_pids)
                 res_meta = metadata.generate_system_metadata(
-                               pid=res_pid, name=str(),
-                               format_id='http://www.openarchives.org/ore/terms',
-                               size=len(res_map),
-                               md5=md5(res_map).hexdigest(), 
-                               rights_holder=self._get_resource_map_user(user_id))
+                            pid=res_pid, name=str(),
+                            format_id='http://www.openarchives.org/ore/terms',
+                            size=len(res_map),
+                            md5=md5(res_map).hexdigest(),
+                            rights_holder=self._get_resource_map_user(user_id))
 
                 self._upload_file(client=client, pid=res_pid,
-                            file_object=io.BytesIO(res_map),
-                            system_metadata=res_meta)
+                                  file_object=io.BytesIO(res_map),
+                                  system_metadata=res_meta)
 
-                package_url = self._get_dataone_package_url(dataone_node, eml_pid)
-                logging.info("Package URL {}".format(package_url))
-
+                package_url = self._get_dataone_package_url(
+                    dataone_node, eml_pid)
 
                 if job_manager:
-                    job_manager.updateProgress(message='Your Tale has successfully been published '
-                                       'to DataONE.',
+                    job_manager.updateProgress(
+                               message='Your Tale has successfully been '
+                                       'published to DataONE.',
                                total=100,
                                current=100)
 
-                tale['publishInfo'].append( { 'pid': eml_pid, 'uri': package_url } )
-                logging.info("TALE {}".format(tale))
+                tale['publishInfo'].append(
+                    {
+                        'pid': eml_pid,
+                        'uri': package_url
+                    }
+                )
                 try:
                     gc.put('tale/{}'.format(tale['_id']), json=tale)
                 except Exception as e:
-                    logging.info("Error updating Tale {}".format(str(e)))
+                    logging.warning("Error updating Tale {}".format(str(e)))
                     raise
 
             except Exception as e:
-                logging.info("Error. Should rollback... {}".format(str(e)))
+                logging.warning("Error. Should rollback... {}".format(str(e)))
                 # Getting permission denied on delete
-                #for pid in uploaded_pids:
+                # for pid in uploaded_pids:
                 #    try:
-                #        logging.info("Deleting pid {} if I could...".format(pid))
+                #        logging.info("Deleting pid {} if I could...".format(
+                #            pid))
                 #        client.delete(pid)
                 #    except Exception as e:
-                #        logging.warning('Error deleting pid {}: {}'.format(pid, str(e)))
+                #        logging.warning('Error deleting pid {}: {}'.format(
+                #            pid, str(e)))
                 raise
 
     def _get_manifest_file_info(self, manifest, relpath):
         for file in manifest['aggregates']:
-           if file['uri'] == relpath:
-               md5 = file['md5']
-               #mimeType = file['mimeType']
-               size = file['size']
-               return size, md5
+            if file['uri'] == relpath:
+                md5 = file['md5']
+                # mimeType = file['mimeType']
+                size = file['size']
+                return size, md5
         return None, None
 
-      
     def _upload_file(self, client, pid, file_object, system_metadata):
         """
-        Uploads two files to a DataONE member node. The first is an object, which is just a data file.
-        The second is a metadata file describing the file object.
+        Uploads two files to a DataONE member node. The first is an object,
+        which is just a data file.  The second is a metadata file describing
+        the file object.
 
         :param client: A client for communicating with a member node
         :param pid: The pid of the data object
-        :param file_object: The file object that will be uploaded to the member node
+        :param file_object: The file object that will be uploaded
         :param system_metadata: The metadata object describing the file object
         :type client: MemberNodeClient_2_0
         :type pid: str
         :type file_object: str
         :type system_metadata: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
-        logging.info("Upload File {} {}".format(pid, system_metadata.toxml('utf-8')))
+        logging.info("Upload File {} {}".format(
+            pid, system_metadata.toxml('utf-8')))
 
-        #pid = check_pid(pid)
+        # TODO do we really need this?
+        # pid = check_pid(pid)
         try:
             client.create(pid, file_object, system_metadata)
         except DataONEException as e:
-            logging.warning('Error uploading file to DataONE {} {}'.format(pid, str(e)))
+            logging.warning('Error uploading file to DataONE {} {}'.format(
+                pid, str(e)))
             raise
 
     def _get_dataone_package_url(self, member_node, pid):
         """
         Given a repository url and a pid, construct a url that should
          be the package's landing page.
-    
+
         :param member_node: The member node that the package is on
         :param pid: The package pid
         :return: The package landing page
@@ -325,11 +331,11 @@ class DataONEPublishProvider(PublishProvider):
         :rtype: bool
         """
         return bool(user_id.find('orcid.org'))
-    
+
     def _make_url_https(self, url):
         """
         Given an http url, return it as https
-    
+
         :param url: The http url
         :type url: str
         :return: The url as https

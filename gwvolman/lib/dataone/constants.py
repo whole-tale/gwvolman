@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 import os
 
-DATAONE_URL=os.environ.get('DATAONE_URL', 'https://cn-stage-2.test.dataone.org/cn')
+DATAONE_URL = os.environ.get('DATAONE_URL',
+                             'https://cn-stage-2.test.dataone.org/cn')
+
 
 class DataONELocations:
     """
@@ -18,9 +20,9 @@ class DataONELocations:
 class ExtraFileNames:
     """
     When creating data packages we'll have to create additional files, such as
-     the zipped recipe, the tale.yml file, the metadata document, and possibly
-      more. Keep their names store here so that they can easily be referenced and
-      changed in a single place.
+    the zipped recipe, the tale.yml file, the metadata document, and possibly
+    more. Keep their names store here so that they can easily be referenced and
+    changed in a single place.
     """
     # Name for the tale config file
     tale_config = 'manifest.json'
@@ -33,9 +35,8 @@ A dictionary for the descriptions of the manually added package files.
 """
 file_descriptions = {
     ExtraFileNames.environment_file:
-        'Holds the dockerfile and additional configurations for the '
-        'underlying compute environment. This environment was used as the '
-        'base image, and includes the the IDE that is used while running the Tale.',
+        'Contains configuration information about the underlying compute '
+        'environment required to run the Tale.',
     ExtraFileNames.tale_config:
         'A configuration file, holding information that is needed to '
         'reproduce the compute environment.',

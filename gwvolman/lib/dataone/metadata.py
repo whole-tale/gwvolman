@@ -1,4 +1,3 @@
-import logging
 import io
 import os
 import re
@@ -53,7 +52,7 @@ class DataONEMetadata(object):
         """
         If a mimeType isn't found in DataONE's supported list,
         default to application/octet-stream.
-  
+
         :param supported_types:
         :param mimetype:
         :return:
@@ -75,21 +74,23 @@ class DataONEMetadata(object):
 
         if not self.access_policy:
             self.access_policy = dataoneTypes.accessPolicy()
-    
+
             public_access_rule = dataoneTypes.AccessRule()
             public_access_rule.subject.append(d1_const.SUBJECT_PUBLIC)
-            permission = dataoneTypes.Permission(dataoneTypes.Permission('read'))
+            permission = dataoneTypes.Permission(
+                dataoneTypes.Permission('read'))
             public_access_rule.permission.append(permission)
             self.access_policy.append(public_access_rule)
-    
+
             admin_access_rule = dataoneTypes.AccessRule()
-            admin_access_rule.subject.append("CN=knb-data-admins,DC=dataone,DC=org")
-            admin_access_rule.permission.append(dataoneTypes.Permission('write'))
+            admin_access_rule.subject.append(
+                "CN=knb-data-admins,DC=dataone,DC=org")
+            admin_access_rule.permission.append(
+                dataoneTypes.Permission('write'))
             admin_access_rule.permission.append(permission)
             self.access_policy.append(admin_access_rule)
-    
-        return self.access_policy
 
+        return self.access_policy
 
     def create_resource_map(self, scimeta_pid, sciobj_pid_list):
         """
@@ -105,17 +106,15 @@ class DataONEMetadata(object):
         :return: The ORE object
         :rtype: d1_common.resource_map.ResourceMap
         """
-    
+
         pid = self.generate_dataone_guid()
         ore = ResourceMap(base_url=DATAONE_URL+'/cn')
         ore.initialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
-    
-        # createSimpleResourceMap returns type d1_common.resource_map.ResourceMap
+
         return pid, ore.serialize()
-    
-    
+
     def create_entity(self, root, name, description):
         """
         Create an otherEntity section
@@ -133,8 +132,7 @@ class DataONEMetadata(object):
         if description:
             ET.SubElement(entity, 'entityDescription').text = description
         return entity
-    
-    
+
     def create_physical(self, other_entity_section, name, size):
         """
         Creates a `physical` section.
@@ -153,23 +151,22 @@ class DataONEMetadata(object):
         size_element.text = str(size)
         size_element.set('unit', 'bytes')
         return physical
-    
-    
+
     def create_format(self, object_format, physical_section):
         """
         Creates a `dataFormat` field in the EML to describe the format
          of the object
         :param object_format: The format of the object
-        :param physical_section: The etree element defining a `physical` EML section
+        :param physical_section: The element defining a `physical` EML section
         :type object_format: str
         :type physical_section: xml.etree.ElementTree.Element
         :return: None
         """
         data_format = ET.SubElement(physical_section, 'dataFormat')
-        externally_defined = ET.SubElement(data_format, 'externallyDefinedFormat')
+        externally_defined = ET.SubElement(
+            data_format, 'externallyDefinedFormat')
         ET.SubElement(externally_defined, 'formatName').text = object_format
-    
-    
+
     def create_intellectual_rights(self, dataset_element, tale_license):
         """
         :param dataset_element: The xml element that defines the `dataset`
@@ -178,13 +175,13 @@ class DataONEMetadata(object):
         :type tale_license: dict
         :return: None
         """
-        intellectual_rights = ET.SubElement(dataset_element, 'intellectualRights')
+        intellectual_rights = ET.SubElement(
+            dataset_element, 'intellectualRights')
         section = ET.SubElement(intellectual_rights, 'section')
         para = ET.SubElement(section, 'para')
         ET.SubElement(para, 'literalLayout').text = \
             tale_license['text']
-    
-    
+
     def add_object_record(self, root, name, description, size, object_format):
         """
         Add a section to the EML that describes an object.
@@ -200,14 +197,13 @@ class DataONEMetadata(object):
         :type object_format: str
         :return: None
         """
-        entity_section = self.create_entity(root, name, self._strip_html_tags(description))
-        physical_section = self.create_physical(entity_section,
-                                           name,
-                                           size)
+        entity_section = self.create_entity(
+            root, name, self._strip_html_tags(description))
+        physical_section = self.create_physical(
+            entity_section, name, size)
         self.create_format(object_format, physical_section)
         ET.SubElement(entity_section, 'entityType').text = 'dataTable'
-    
-    
+
     def set_user_name(self, root, first_name, last_name):
         """
         Creates a section in the EML that describes a user's name.
@@ -222,8 +218,7 @@ class DataONEMetadata(object):
         individual_name = ET.SubElement(root, 'individualName')
         ET.SubElement(individual_name, 'givenName').text = first_name
         ET.SubElement(individual_name, 'surName').text = last_name
-    
-    
+
     def set_user_contact(self, root, user_id, email):
         """
         Creates a section that describes the contact and owner
@@ -239,30 +234,31 @@ class DataONEMetadata(object):
         users_id = ET.SubElement(root, 'userId')
         users_id.text = user_id
         users_id.set('directory', self._get_directory(user_id))
-    
-    
-    def create_eml_doc(self, manifest, user_id, manifest_size, environment_size):
+
+    def create_eml_doc(self, manifest, user_id, manifest_size,
+                       environment_size):
         """
         Creates an initial EML record for the package based on a manifest.
         Individual objects will be added after-the-fact.
-    
+
         :param manifest: Tale manifest
         :type manifest: dict
         :return: etree object
         """
-    
+
         eml_pid = self.generate_dataone_guid()
-    
+
         # Create the namespace
         ns = ET.Element('eml:eml')
-        ns.set('xmlns:eml', "eml://ecoinformatics.org/eml-2.1.1")
-        ns.set('xsi:schemaLocation', "eml://ecoinformatics.org/eml-2.1.1 eml.xsd")
-        ns.set('xmlns:stmml', "http://www.xml-cml.org/schema/stmml-1.1")
-        ns.set('xmlns:xsi', "http://www.w3.org/2001/XMLSchema-instance")
-        ns.set('scope', "system")
-        ns.set('system', "knb")
+        ns.set('xmlns:eml', 'eml://ecoinformatics.org/eml-2.1.1')
+        ns.set('xsi:schemaLocation',
+               'eml://ecoinformatics.org/eml-2.1.1 eml.xsd')
+        ns.set('xmlns:stmml', 'http://www.xml-cml.org/schema/stmml-1.1')
+        ns.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+        ns.set('scope', 'system')
+        ns.set('system', 'knb')
         ns.set('packageId', eml_pid)
-    
+
         """
         Create a `dataset` field, and assign the title to
         the name of the Tale. The DataONE Quality Engine
@@ -270,11 +266,11 @@ class DataONEMetadata(object):
         """
         dataset = ET.SubElement(ns, 'dataset')
         ET.SubElement(dataset, 'title').text = manifest['schema:name']
-    
+
         first_name = manifest['createdBy']['schema:givenName']
         last_name = manifest['createdBy']['schema:familyName']
         email = manifest['createdBy']['schema:email']
-    
+
         """
         Create a `creator` section, using the information in the
          `model.user` object to provide values.
@@ -282,41 +278,42 @@ class DataONEMetadata(object):
         creator = ET.SubElement(dataset, 'creator')
         self.set_user_name(creator, first_name, last_name)
         self.set_user_contact(creator, user_id, email)
-    
+
         # Create a `description` field, but only if the Tale has a description.
         description = manifest['schema:description']
         if description is not str():
             abstract = ET.SubElement(dataset, 'abstract')
-            ET.SubElement(abstract, 'para').text = self._strip_html_tags(str(description))
-    
+            ET.SubElement(abstract, 'para').text = \
+                self._strip_html_tags(str(description))
+
         # Add a section for the license file
         # TODO: The license belongs elsewhere in the zip?
-        #create_intellectual_rights(dataset, manifest['schema:license'])
-    
+        # create_intellectual_rights(dataset, manifest['schema:license'])
+
         # Add a section for the contact
         contact = ET.SubElement(dataset, 'contact')
         self.set_user_name(contact, first_name, last_name)
         self.set_user_contact(contact, user_id, email)
-    
+
         for item in manifest['aggregates']:
-            if not 'bundledAs' in item:
+            if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
                 size = item['size']
                 mimeType = self.get_dataone_mimetype(item['mimeType'])
                 self.add_object_record(dataset, name, '', size, mimeType)
-    
+
         # Add the manifest itself
         name = ExtraFileNames.tale_config
         description = file_descriptions[ExtraFileNames.tale_config]
         self.add_object_record(dataset, name, description,
-                          manifest_size, 'application/json')
-    
+                               manifest_size, 'application/json')
+
         # Add the environment json
         name = ExtraFileNames.environment_file
         description = file_descriptions[ExtraFileNames.environment_file]
         self.add_object_record(dataset, name, description,
-                          environment_size, 'application/json')
-    
+                               environment_size, 'application/json')
+
         """
         Emulate the behavior of ElementTree.tostring in Python 3.6.0
         Write the contents to a stream and then return its content.
@@ -330,13 +327,14 @@ class DataONEMetadata(object):
                                  xml_declaration=True,
                                  method='xml',
                                  short_empty_elements=True)
-    
+
         return eml_pid, stream.getvalue()
-    
-    def generate_system_metadata(self, pid, name, format_id, size, md5, rights_holder):
+
+    def generate_system_metadata(self, pid, name, format_id, size, md5,
+                                 rights_holder):
         """
         Generates a metadata document describing the file_object.
-    
+
         :param pid: The pid that the object will have
         :param name: The name of the object being described
         :param format_id: The format of the object (e.g text/csv)
@@ -352,7 +350,7 @@ class DataONEMetadata(object):
         :return: The metadata describing file_object
         :rtype: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
-    
+
         pid = self.check_pid(pid)
         sys_meta = dataoneTypes.systemMetadata()
         sys_meta.identifier = pid
@@ -378,15 +376,15 @@ class DataONEMetadata(object):
     def check_pid(self, pid):
         """
         Check that a pid is of type str. Pids are generated as uuid4, and this
-        check is done to make sure the programmer has converted it to a str before
-        attempting to use it with the DataONE client.
-    
+        check is done to make sure the programmer has converted it to a str
+        before attempting to use it with the DataONE client.
+
         :param pid: The pid that is being checked
         :type pid: str, int
-        :return: Returns the pid as a str, or just the pid if it was already a str
+        :return: Returns the pid as a str
         :rtype: str
         """
-    
+
         if not isinstance(pid, str):
             return str(pid)
         else:
