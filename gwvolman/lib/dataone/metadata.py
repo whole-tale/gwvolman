@@ -298,8 +298,8 @@ class DataONEMetadata(object):
                 self.add_object_record(dataset, name, '', size, mimeType)
 
         # Add the manifest itself
-        name = ExtraFileNames.tale_config
-        description = file_descriptions[ExtraFileNames.tale_config]
+        name = ExtraFileNames.manifest_file
+        description = file_descriptions[ExtraFileNames.manifest_file]
         self.add_object_record(dataset, name, description,
                                manifest_size, 'application/json')
 

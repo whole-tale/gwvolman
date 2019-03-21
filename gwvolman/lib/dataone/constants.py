@@ -25,9 +25,9 @@ class ExtraFileNames:
     changed in a single place.
     """
     # Name for the tale config file
-    tale_config = 'manifest.json'
+    manifest_file = 'manifest.json'
     license_filename = 'LICENSE'
-    environment_file = 'docker-environment.tar.gz'
+    environment_file = 'environment.json'
 
 
 """
@@ -37,7 +37,7 @@ file_descriptions = {
     ExtraFileNames.environment_file:
         'Contains configuration information about the underlying compute '
         'environment required to run the Tale.',
-    ExtraFileNames.tale_config:
+    ExtraFileNames.manifest_file:
         'A configuration file, holding information that is needed to '
         'reproduce the compute environment.',
     ExtraFileNames.license_filename:

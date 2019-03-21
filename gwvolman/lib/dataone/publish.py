@@ -115,10 +115,12 @@ class DataONEPublishProvider(PublishProvider):
             with zip.open(license_path) as f:
                 license_text = str(f.read())
  
-
             # Get the environment
-            environment_path = '{}/environment.txt'.format(tale_id)
+            environment_path = '{}/metadata/environment.json'.format(tale_id)
             environment_size = zip.getinfo(environment_path).file_size
+            with zip.open(environment_path) as f:
+                data = f.read()
+                environment_md5 = md5(data).hexdigest()
 
             if job_manager:
                 job_manager.updateProgress(
@@ -154,6 +156,8 @@ class DataONEPublishProvider(PublishProvider):
 
                         if fname == 'manifest.json':
                             size, hash = manifest_size, manifest_md5
+                        elif fname == 'environment.json':
+                            size, hash = environment_size, environment_md5
                         else:
                             size, hash = self._get_manifest_file_info(
                                 manifest, relpath)
