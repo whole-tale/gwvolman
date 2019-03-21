@@ -1,3 +1,4 @@
+import datetime
 from hashlib import md5
 import io
 import json
@@ -127,8 +128,9 @@ class DataONEPublishProvider(PublishProvider):
 
             metadata = DataONEMetadata()
             # Create an EML document based on the manifest
-            eml_pid, eml_doc = metadata.create_eml_doc(
-                manifest, user_id, manifest_size, environment_size, license_text)
+            eml_pid = client.generateIdentifier(scheme="UUID").value()
+            eml_doc = metadata.create_eml_doc(eml_pid, manifest, user_id, 
+                manifest_size, environment_size, license_text)
 
             # Keep track of uploaded objects in case we need to rollback
             uploaded_pids = []
@@ -145,7 +147,7 @@ class DataONEPublishProvider(PublishProvider):
                         step += 1
 
                         # Generate uuid (TODO: Replace with D1 API call)
-                        file_pid = metadata.generate_dataone_guid()
+                        file_pid = client.generateIdentifier(scheme="UUID").value()
 
                         mimeType = metadata.get_dataone_mimetype(
                             mimetypes.guess_type(fpath))
@@ -203,8 +205,9 @@ class DataONEPublishProvider(PublishProvider):
                 step += 1
 
                 # Create ORE
-                res_pid, res_map = metadata.create_resource_map(
-                    eml_pid, uploaded_pids)
+                res_pid = client.generateIdentifier(scheme="DOI").value()
+                res_map = metadata.create_resource_map(
+                    res_pid, eml_pid, uploaded_pids)
                 res_meta = metadata.generate_system_metadata(
                             pid=res_pid, name=str(),
                             format_id='http://www.openarchives.org/ore/terms',
@@ -217,7 +220,7 @@ class DataONEPublishProvider(PublishProvider):
                                   system_metadata=res_meta)
 
                 package_url = self._get_dataone_package_url(
-                    dataone_node, eml_pid)
+                    dataone_node, res_pid)
 
                 if job_manager:
                     job_manager.updateProgress(
@@ -228,15 +231,16 @@ class DataONEPublishProvider(PublishProvider):
 
                 tale['publishInfo'].append(
                     {
-                        'pid': eml_pid,
-                        'uri': package_url
+                        'pid': res_pid,
+                        'uri': package_url,
+                        'date': datetime.datetime.utcnow().isoformat()
                     }
                 )
                 try:
                     gc.put('tale/{}'.format(tale['_id']), json=tale)
                 except Exception as e:
                     logging.warning("Error updating Tale {}".format(str(e)))
-                    raise
+                    raise ValueError("Error updating Tale {}".format(str(e)))
 
             except Exception as e:
                 logging.warning("Error. Should rollback... {}".format(str(e)))
@@ -276,8 +280,6 @@ class DataONEPublishProvider(PublishProvider):
         :type system_metadata: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
-        # TODO do we really need this?
-        # pid = check_pid(pid)
         try:
             client.create(pid, file_object, system_metadata)
         except DataONEException as e:

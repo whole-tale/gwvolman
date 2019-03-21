@@ -92,7 +92,7 @@ class DataONEMetadata(object):
 
         return self.access_policy
 
-    def create_resource_map(self, scimeta_pid, sciobj_pid_list):
+    def create_resource_map(self, pid, scimeta_pid, sciobj_pid_list):
         """
         Create a simple resource map with one science metadata document and any
         number of science data objects.
@@ -107,13 +107,12 @@ class DataONEMetadata(object):
         :rtype: d1_common.resource_map.ResourceMap
         """
 
-        pid = self.generate_dataone_guid()
         ore = ResourceMap(base_url=DATAONE_URL+'/cn')
         ore.initialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
 
-        return pid, ore.serialize()
+        return ore.serialize()
 
     def create_entity(self, root, name, description):
         """
@@ -234,7 +233,7 @@ class DataONEMetadata(object):
         users_id.text = user_id
         users_id.set('directory', self._get_directory(user_id))
 
-    def create_eml_doc(self, manifest, user_id, manifest_size,
+    def create_eml_doc(self, eml_pid, manifest, user_id, manifest_size,
                        environment_size, license_text):
         """
         Creates an initial EML record for the package based on a manifest.
@@ -244,8 +243,6 @@ class DataONEMetadata(object):
         :type manifest: dict
         :return: etree object
         """
-
-        eml_pid = self.generate_dataone_guid()
 
         # Create the namespace
         ns = ET.Element('eml:eml')
@@ -326,7 +323,7 @@ class DataONEMetadata(object):
                                  method='xml',
                                  short_empty_elements=True)
 
-        return eml_pid, stream.getvalue()
+        return stream.getvalue()
 
     def generate_system_metadata(self, pid, name, format_id, size, md5,
                                  rights_holder):
@@ -349,7 +346,6 @@ class DataONEMetadata(object):
         :rtype: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
-        pid = self.check_pid(pid)
         sys_meta = dataoneTypes.systemMetadata()
         sys_meta.identifier = pid
         sys_meta.formatId = format_id
@@ -361,32 +357,6 @@ class DataONEMetadata(object):
         sys_meta.accessPolicy = self.get_access_policy()
         sys_meta.fileName = name
         return sys_meta
-
-    def generate_dataone_guid(self):
-        """
-        DataONE requires that UUIDs are prepended with `urn:uuid:`. This method
-        returns a DataONE compliant guid.
-        :return: A DataONE compliant guid
-        :rtype: str
-        """
-        return 'urn:uuid:'+str(uuid.uuid4())
-
-    def check_pid(self, pid):
-        """
-        Check that a pid is of type str. Pids are generated as uuid4, and this
-        check is done to make sure the programmer has converted it to a str
-        before attempting to use it with the DataONE client.
-
-        :param pid: The pid that is being checked
-        :type pid: str, int
-        :return: Returns the pid as a str
-        :rtype: str
-        """
-
-        if not isinstance(pid, str):
-            return str(pid)
-        else:
-            return pid
 
     def _get_directory(self, user_id):
         """
