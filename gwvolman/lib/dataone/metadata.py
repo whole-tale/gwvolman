@@ -399,9 +399,9 @@ class DataONEMetadata(object):
         :return: The directory name
         :rtype: str
         """
-        if self._is_orcid_id(user_id):
-            return "https://orcid.org"
-        return "https://cilogon.org"
+        if bool(user_id.find('orcid.org')):
+            return 'https://orcid.org'
+        return 'https://cilogon.org'
 
     def _strip_html_tags(self, html_string):
         """
@@ -412,13 +412,3 @@ class DataONEMetadata(object):
         :rtype: str
         """
         return re.sub('<[^<]+?>', '', html_string)
-
-    def _is_orcid_id(self, user_id):
-        """
-        Checks whether a string is a link to an ORCID account
-        :param user_id: The string that may contain the ORCID account
-        :type user_id: str
-        :return: True/False if it is or isn't
-        :rtype: bool
-        """
-        return bool(user_id.find('orcid.org'))

@@ -304,7 +304,7 @@ class DataONEPublishProvider(PublishProvider):
         :return: An http version of the user
         :rtype: str
         """
-        if self._is_orcid_id(user_id):
+        if bool(user_id.find('orcid.org')):
             return self._make_url_http(user_id)
         return user_id
 
