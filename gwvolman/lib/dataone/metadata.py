@@ -108,7 +108,7 @@ class DataONEMetadata(object):
         """
 
         ore = ResourceMap(base_url=DATAONE_URL+'/cn')
-        ore.initialize(pid)
+        ore.oreInitialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
 
