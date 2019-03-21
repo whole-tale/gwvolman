@@ -109,6 +109,12 @@ class DataONEPublishProvider(PublishProvider):
                 manifest_md5 = md5(data).hexdigest()
                 manifest = json.loads(data.decode('utf-8'))
 
+            # Read the license text      
+            license_path = '{}/LICENSE'.format(tale_id)
+            with zip.open(license_path) as f:
+                license_text = str(f.read())
+ 
+
             # Get the environment
             environment_path = '{}/environment.txt'.format(tale_id)
             environment_size = zip.getinfo(environment_path).file_size
@@ -122,7 +128,7 @@ class DataONEPublishProvider(PublishProvider):
             metadata = DataONEMetadata()
             # Create an EML document based on the manifest
             eml_pid, eml_doc = metadata.create_eml_doc(
-                manifest, user_id, manifest_size, environment_size)
+                manifest, user_id, manifest_size, environment_size, license_text)
 
             # Keep track of uploaded objects in case we need to rollback
             uploaded_pids = []
@@ -269,8 +275,6 @@ class DataONEPublishProvider(PublishProvider):
         :type file_object: str
         :type system_metadata: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
-        logging.info("Upload File {} {}".format(
-            pid, system_metadata.toxml('utf-8')))
 
         # TODO do we really need this?
         # pid = check_pid(pid)

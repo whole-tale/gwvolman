@@ -179,8 +179,7 @@ class DataONEMetadata(object):
             dataset_element, 'intellectualRights')
         section = ET.SubElement(intellectual_rights, 'section')
         para = ET.SubElement(section, 'para')
-        ET.SubElement(para, 'literalLayout').text = \
-            tale_license['text']
+        ET.SubElement(para, 'literalLayout').text = tale_license
 
     def add_object_record(self, root, name, description, size, object_format):
         """
@@ -236,7 +235,7 @@ class DataONEMetadata(object):
         users_id.set('directory', self._get_directory(user_id))
 
     def create_eml_doc(self, manifest, user_id, manifest_size,
-                       environment_size):
+                       environment_size, license_text):
         """
         Creates an initial EML record for the package based on a manifest.
         Individual objects will be added after-the-fact.
@@ -287,8 +286,7 @@ class DataONEMetadata(object):
                 self._strip_html_tags(str(description))
 
         # Add a section for the license file
-        # TODO: The license belongs elsewhere in the zip?
-        # create_intellectual_rights(dataset, manifest['schema:license'])
+        self.create_intellectual_rights(dataset, license_text)
 
         # Add a section for the contact
         contact = ET.SubElement(dataset, 'contact')
