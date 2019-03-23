@@ -113,7 +113,7 @@ class DataONEPublishProvider(PublishProvider):
             # Read the license text      
             license_path = '{}/LICENSE'.format(tale_id)
             with zip.open(license_path) as f:
-                license_text = str(f.read())
+                license_text = str(f.read().decode('utf-8'))
  
             # Get the environment
             environment_path = '{}/metadata/environment.json'.format(tale_id)
