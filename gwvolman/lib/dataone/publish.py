@@ -31,7 +31,6 @@ class DataONEPublishProvider(PublishProvider):
         Create a client object that is used to interface with a DataONE
         member node.  The auth_token is the jwt token from DataONE.
         Close the connection between uploads otherwise some uploads will fail.
-        CW: What does this mean?
         """
         try:
             return MemberNodeClient_2_0(dataone_node,
@@ -110,11 +109,11 @@ class DataONEPublishProvider(PublishProvider):
                 manifest_md5 = md5(data).hexdigest()
                 manifest = json.loads(data.decode('utf-8'))
 
-            # Read the license text      
+            # Read the license text
             license_path = '{}/LICENSE'.format(tale_id)
             with zip.open(license_path) as f:
                 license_text = str(f.read().decode('utf-8'))
- 
+
             # Get the environment
             environment_path = '{}/metadata/environment.json'.format(tale_id)
             environment_size = zip.getinfo(environment_path).file_size
@@ -131,8 +130,9 @@ class DataONEPublishProvider(PublishProvider):
             metadata = DataONEMetadata()
             # Create an EML document based on the manifest
             eml_pid = client.generateIdentifier(scheme="UUID").value()
-            eml_doc = metadata.create_eml_doc(eml_pid, manifest, user_id, 
-                manifest_size, environment_size, license_text)
+            eml_doc = metadata.create_eml_doc(
+                eml_pid, manifest, user_id, manifest_size,
+                environment_size, license_text)
 
             # Keep track of uploaded objects in case we need to rollback
             uploaded_pids = []

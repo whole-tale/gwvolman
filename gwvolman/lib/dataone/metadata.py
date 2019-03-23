@@ -1,7 +1,6 @@
 import io
 import os
 import re
-import uuid
 import xml.etree.cElementTree as ET
 
 try:
