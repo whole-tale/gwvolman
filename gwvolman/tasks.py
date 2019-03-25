@@ -24,7 +24,9 @@ from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _build_image, DEPLOYMENT
-from .publish import publish_tale
+
+from .lib.dataone.publish import DataONEPublishProvider
+
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
 
@@ -361,6 +363,8 @@ def build_tale_image(self, tale_id):
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=DEPLOYMENT.registry_url)
 
+    # remove clone
+    shutil.rmtree(temp_dir, ignore_errors=True)
     for line in apicli.push(tag, stream=True):
         print(line.decode('utf-8'))
 
@@ -380,46 +384,31 @@ def build_tale_image(self, tale_id):
         'last_build': build_time
     }
 
-
 @girder_job(title='Publish Tale')
-@app.task
-def publish(item_ids,
+@app.task(bind=True)
+def publish(self,
             tale,
             dataone_node,
             dataone_auth_token,
-            girder_token,
-            userId,
-            prov_info,
-            license_id):
+            user_id):
     """
-    Publish a Tale to DataONE.
-
-    :param item_ids: A list of item ids that are in the package
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
-    :param girder_token: The user's girder token
-    :param userId: The user's ID
-    :param prov_info: Additional information included in the tale yaml
-    :param license_id: The spdx of the license used
-    :type item_ids: list
+    :param user_id: The user's ID
     :type tale: str
     :type dataone_node: str
     :type dataone_auth_token: str
-    :type girder_token: str
-    :type userId: str
-    :type prov_info: dict
-    :type license_id: str
+    :type user_id: str
     """
-    res = publish_tale(item_ids,
-                       tale,
-                       dataone_node,
-                       dataone_auth_token,
-                       girder_token,
-                       userId,
-                       prov_info,
-                       license_id)
-    return res
+    provider = DataONEPublishProvider()
+    return provider.publish(
+                 tale,
+                 self.girder_client,
+                 dataone_node,
+                 dataone_auth_token,
+                 self.job_manager
+    )
 
 
 @girder_job(title='Import Tale')
