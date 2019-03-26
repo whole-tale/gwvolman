@@ -52,14 +52,13 @@ class DataONEMetadata(object):
         If a mimeType isn't found in DataONE's supported list,
         default to application/octet-stream.
 
-        :param supported_types:
-        :param mimetype:
-        :return:
+        :param mimetype: The mimetype in question
+        :type mimetype: str
+        :return: A mimetype that is supported by DataONE
         """
 
         if not self.mimetypes:
             self.mimetypes = self.get_dataone_mimetypes()
-
         if mimetype not in self.mimetypes:
             return 'application/octet-stream'
         return mimetype

@@ -152,7 +152,7 @@ class DataONEPublishProvider(PublishProvider):
                         file_pid = client.generateIdentifier(scheme="UUID").value()
 
                         mimeType = metadata.get_dataone_mimetype(
-                            mimetypes.guess_type(fpath))
+                            mimetypes.guess_type(fpath)[0])
 
                         if fname == 'manifest.json':
                             size, hash = manifest_size, manifest_md5
