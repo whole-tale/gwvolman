@@ -485,7 +485,7 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
         'title': 'A Tale for \"{}\"'.format(shortened_name),
         'dataSet': [
             {
-                'mountPath': '/' + resource['name'],
+                'mountPath': resource['name'],
                 'itemId': resource['_id'],
                 '_modelType': resource['_modelType']
             }
