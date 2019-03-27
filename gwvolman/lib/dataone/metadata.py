@@ -265,31 +265,31 @@ class DataONEMetadata(object):
         prefers to have titles with at least 7 words.
         """
         dataset_elem = ET.SubElement(ns, 'dataset')
-        ET.SubElement(dataset_elem, 'title').text = manifest['schema:name']
+        ET.SubElement(dataset_elem, 'title').text = manifest['name']
 
 
         """
         Create a `creator` section for each Tale author.
         """
 
-        for author in manifest['schema:author']:
+        for author in manifest['author']:
             creator_elem = ET.SubElement(dataset_elem, 'creator')
-            first_name = author['schema:givenName']
-            last_name = author['schema:familyName']
+            first_name = author['givenName']
+            last_name = author['familyName']
             user_id = author['@id']
             self.set_user_name(creator_elem, first_name, last_name, user_id)
 
         # If the Tale doesn't have an author, use the Tale creator
-        if not len(manifest['schema:author']):
+        if not len(manifest['author']):
             creator_elem = ET.SubElement(dataset_elem, 'creator')
-            first_name = manifest['createdBy']['schema:givenName']
-            last_name = manifest['createdBy']['schema:familyName']
-            contact_email = manifest['createdBy']['schema:email']
+            first_name = manifest['createdBy']['givenName']
+            last_name = manifest['createdBy']['familyName']
+            contact_email = manifest['createdBy']['email']
             self.set_user_name(creator_elem, first_name, last_name, contact_email)
 
 
         # Create a `description` field, but only if the Tale has a description.
-        description = manifest['schema:description']
+        description = manifest['description']
         if description is not str():
             abstract_elem = ET.SubElement(dataset_elem, 'abstract')
             ET.SubElement(abstract_elem, 'para').text = \
@@ -303,9 +303,9 @@ class DataONEMetadata(object):
         Add a dataset contact. This is set to the person publishing
         the Tale.
         """
-        first_name = manifest['createdBy']['schema:givenName']
-        last_name = manifest['createdBy']['schema:familyName']
-        contact_email = manifest['createdBy']['schema:email']
+        first_name = manifest['createdBy']['givenName']
+        last_name = manifest['createdBy']['familyName']
+        contact_email = manifest['createdBy']['email']
         contact_elem = ET.SubElement(dataset_elem, 'contact')
         self.set_user_name(contact_elem, first_name, last_name)
         self.set_user_contact(contact_elem, user_id, contact_email)
