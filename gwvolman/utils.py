@@ -11,11 +11,6 @@ import re
 import string
 import uuid
 import logging
-
-try:
-    from urlparse import urlparse
-except ImportError:
-    from urllib.parse import urlparse
 import docker
 
 from .constants import MOUNTPOINTS
@@ -76,9 +71,12 @@ class Deployment(object):
     def traefik_network(self):
         """str: Name of the overlay network used by traefik for ingress."""
         if self._traefik_network is None:
-            service = self.docker_client.services.get('wt_dashboard')
-            self._traefik_network = \
-                service.attrs['Spec']['Labels']['traefik.docker.network']
+            try:
+                service = self.docker_client.services.get('wt_dashboard')
+                self._traefik_network = \
+                    service.attrs['Spec']['Labels']['traefik.docker.network']
+            except docker.errors.APIError:
+                self._traefik_network = 'wt_traefik-net'  # Default...
         return self._traefik_network
 
     @property
@@ -103,10 +101,16 @@ class Deployment(object):
         return self._registry_url
 
     def get_host_from_traefik_rule(self, service_name):
-        """Infer service's hostname from traefik frontend rule label."""
-        service = self.docker_client.services.get(service_name)
-        rule = service.attrs['Spec']['Labels']['traefik.frontend.rule']
-        return 'https://' + rule.split(':')[-1].split(',')[0].strip()
+        """Infer service's hostname from traefik frontend rule label
+
+        If services are unavailable (slave node), default to DOMAIN env settting
+        """
+        try:
+            service = self.docker_client.services.get(service_name)
+            rule = service.attrs['Spec']['Labels']['traefik.frontend.rule']
+            return 'https://' + rule.split(':')[-1].split(',')[0].strip()
+        except docker.errors.APIError:
+            return '{}://{}.{}'.format(TRAEFIK_ENTRYPOINT, service_name[3:], DOMAIN)
 
 
 DEPLOYMENT = Deployment()
@@ -184,7 +188,7 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
-        digest=tale['imageInfo']['digest'] 
+        digest=tale['imageInfo']['digest']
 
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
@@ -284,7 +288,7 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     Run repo2docker on the workspace using a shared temp directory. Note that
     this uses the "local" provider.  Use the same default user-id and
     user-name as BinderHub
-    """  
+    """
     r2d_cmd = ('jupyter-repo2docker '
                '--target-repo-dir="/home/jovyan/work/workspace" '
                '--template={} --buildpack-name={} '
