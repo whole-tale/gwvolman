@@ -1,4 +1,5 @@
 """A set of WT related Girder tasks."""
+from datetime import datetime, timedelta
 import os
 import shutil
 import socket
@@ -189,8 +190,8 @@ def launch_container(self, payload):
 
 @girder_job(title='Update Instance')
 @app.task(bind=True)
-def update_container(self, instanceId, **kwargs):
-    user, instance = _get_user_and_instance(self.girder_client, instanceId)
+def update_container(task, instanceId, **kwargs):
+    user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
     cli = docker.from_env(version='1.28')
     if 'containerInfo' not in instance:
@@ -204,6 +205,9 @@ def update_container(self, instanceId, **kwargs):
 
     digest = kwargs['image']
 
+    task.job_manager.updateProgress(
+        message='Restarting the Tale with a new image', total=2,
+        current=1, forceFlush=True)
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
@@ -213,6 +217,35 @@ def update_container(self, instanceId, **kwargs):
     except Exception as e:
         logging.error("Unable to send restart command to container [%s]: %s",
                       service.id, e)
+
+    updated = False
+    expired = False
+    timeout = datetime.now() + timedelta(minutes=3)
+    while not (updated or expired or task.canceled):
+        service = cli.services.get(containerInfo['name'])
+        try:
+            state = service.attrs['UpdateStatus']['State']
+        except KeyError:
+            state = ''
+
+        if state == 'paused':
+            raise RuntimeError(
+                'Restarting the Tale failed with "{}"'.format(
+                    service.attrs['UpdateStatus']['Message'])
+            )
+
+        updated = state == 'completed'
+        expired = datetime.now() > timeout
+        time.sleep(1.0)
+
+    if task.canceled:
+        raise RuntimeError('Tale restart cancelled')
+    elif expired:
+        raise RuntimeError('Tale update timed out')
+
+    task.job_manager.updateProgress(
+        message='Tale restarted with the new image', total=2,
+        current=2)
 
     return {'image_digest': digest}
 
