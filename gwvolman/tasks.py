@@ -481,7 +481,7 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
 
     user = self.girder_client.get('/user/me')
     payload = {
-        'authors': user['firstName'] + ' ' + user['lastName'],
+        'authors': [],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
         'dataSet': [
             {
