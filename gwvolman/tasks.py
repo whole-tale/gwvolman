@@ -317,6 +317,7 @@ def build_tale_image(self, tale_id):
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
     """
+
     print('Building image')
     logging.info('Building image for Tale %s', tale_id)
 
@@ -334,26 +335,25 @@ def build_tale_image(self, tale_id):
     if last_build_time > 0:
 
         workspace_mtime = -1
-        try: 
+        try:
             workspace_mtime = tale['workspaceModified']
         except KeyError:
             pass
 
         if last_build_time > 0 and workspace_mtime < last_build_time:
-           print('Workspace not modified since last build. Skipping.')
-           return {
-               'image_digest': tale['imageInfo']['digest'], 
-               'repo2docker_version': tale['imageInfo']['repo2docker_version'],
-               'last_build': last_build_time
-           }
-  
+            print('Workspace not modified since last build. Skipping.')
+            return {
+                'image_digest': tale['imageInfo']['digest'],
+                'repo2docker_version': tale['imageInfo']['repo2docker_version'],
+                'last_build': last_build_time
+            }
+
     # Workspace modified so try to build.
     try:
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
         logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
         workspace = self.girder_client.get('/folder/{workspaceId}'.format(**tale))
-        self.girder_client.downloadFolderRecursive(
-            workspace['_id'], temp_dir)
+        self.girder_client.downloadFolderRecursive(workspace['_id'], temp_dir)
 
     except Exception as e:
         raise ValueError('Error accessing Girder: {}'.format(e))
@@ -363,7 +363,6 @@ def build_tale_image(self, tale_id):
     except girder_client.HttpError:
         logging.warn("Workspace folder not found for tale: %s", tale_id)
         pass
-
 
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
@@ -412,10 +411,11 @@ def build_tale_image(self, tale_id):
 
     # Image digest used by updateBuildStatus handler
     return {
-        'image_digest': digest, 
+        'image_digest': digest,
         'repo2docker_version': repo2docker_version,
         'last_build': build_time
     }
+
 
 @girder_job(title='Publish Tale')
 @app.task(bind=True)
@@ -434,6 +434,7 @@ def publish(self,
     :type dataone_auth_token: str
     :type user_id: str
     """
+
     provider = DataONEPublishProvider()
     return provider.publish(
                  tale,
