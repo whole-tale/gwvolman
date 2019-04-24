@@ -159,9 +159,9 @@ class DataONEMetadata(object):
         :type physical_section: xml.etree.ElementTree.Element
         :return: None
         """
-        data_format = ET.SubElement(physical_section, 'dataFormat')
+        data_format_elem = ET.SubElement(physical_section, 'dataFormat')
         externally_defined = ET.SubElement(
-            data_format, 'externallyDefinedFormat')
+            data_format_elem, 'externallyDefinedFormat')
         ET.SubElement(externally_defined, 'formatName').text = object_format
 
     def create_intellectual_rights(self, dataset_element, tale_license):
@@ -172,11 +172,11 @@ class DataONEMetadata(object):
         :type tale_license: dict
         :return: None
         """
-        intellectual_rights = ET.SubElement(
+        intellectual_rights_elem = ET.SubElement(
             dataset_element, 'intellectualRights')
-        section = ET.SubElement(intellectual_rights, 'section')
-        para = ET.SubElement(section, 'para')
-        ET.SubElement(para, 'literalLayout').text = tale_license
+        section_elem = ET.SubElement(intellectual_rights_elem, 'section')
+        para_elem = ET.SubElement(section_elem, 'para')
+        ET.SubElement(para_elem, 'literalLayout').text = tale_license
 
     def add_object_record(self, root, name, description, size, object_format):
         """
@@ -200,7 +200,7 @@ class DataONEMetadata(object):
         self.create_format(object_format, physical_section)
         ET.SubElement(entity_section, 'entityType').text = 'dataTable'
 
-    def set_user_name(self, root, first_name, last_name):
+    def set_user_name(self, root, first_name, last_name, user_id=None):
         """
         Creates a section in the EML that describes a user's name.
         :param root: The parent XML element
@@ -211,9 +211,13 @@ class DataONEMetadata(object):
         :type last_name: str
         :return: None
         """
-        individual_name = ET.SubElement(root, 'individualName')
-        ET.SubElement(individual_name, 'givenName').text = first_name
-        ET.SubElement(individual_name, 'surName').text = last_name
+        individual_name_elem = ET.SubElement(root, 'individualName')
+        ET.SubElement(individual_name_elem, 'givenName').text = first_name
+        ET.SubElement(individual_name_elem, 'surName').text = last_name
+        if user_id is not None:
+            userid_elem = ET.SubElement(root, 'userId')
+            userid_elem.text = user_id
+            userid_elem.set('directory', self._get_directory(user_id))
 
     def set_user_contact(self, root, user_id, email):
         """
@@ -227,9 +231,9 @@ class DataONEMetadata(object):
         :return: None
         """
         ET.SubElement(root, 'electronicMailAddress').text = email
-        users_id = ET.SubElement(root, 'userId')
-        users_id.text = user_id
-        users_id.set('directory', self._get_directory(user_id))
+        userid_elem = ET.SubElement(root, 'userId')
+        userid_elem.text = user_id
+        userid_elem.set('directory', self._get_directory(user_id))
 
     def create_eml_doc(self, eml_pid, manifest, user_id, manifest_size,
                        environment_size, license_text):
@@ -258,53 +262,69 @@ class DataONEMetadata(object):
         the name of the Tale. The DataONE Quality Engine
         prefers to have titles with at least 7 words.
         """
-        dataset = ET.SubElement(ns, 'dataset')
-        ET.SubElement(dataset, 'title').text = manifest['schema:name']
+        dataset_elem = ET.SubElement(ns, 'dataset')
+        ET.SubElement(dataset_elem, 'title').text = manifest['schema:name']
 
-        first_name = manifest['createdBy']['schema:givenName']
-        last_name = manifest['createdBy']['schema:familyName']
-        email = manifest['createdBy']['schema:email']
 
         """
-        Create a `creator` section, using the information in the
-         `model.user` object to provide values.
+        Create a `creator` section for each Tale author.
         """
-        creator = ET.SubElement(dataset, 'creator')
-        self.set_user_name(creator, first_name, last_name)
-        self.set_user_contact(creator, user_id, email)
+
+        for author in manifest['schema:author']:
+            creator_elem = ET.SubElement(dataset_elem, 'creator')
+            first_name = author['schema:givenName']
+            last_name = author['schema:familyName']
+            user_id = author['@id']
+            self.set_user_name(creator_elem, first_name, last_name, user_id)
+
+        # If the Tale doesn't have an author, use the Tale creator
+        if not len(manifest['schema:author']):
+            creator_elem = ET.SubElement(dataset_elem, 'creator')
+            first_name = manifest['createdBy']['schema:givenName']
+            last_name = manifest['createdBy']['schema:familyName']
+            contact_email = manifest['createdBy']['schema:email']
+            self.set_user_name(creator_elem, first_name, last_name, contact_email)
+
 
         # Create a `description` field, but only if the Tale has a description.
         description = manifest['schema:description']
         if description is not str():
-            abstract = ET.SubElement(dataset, 'abstract')
-            ET.SubElement(abstract, 'para').text = \
+            abstract_elem = ET.SubElement(dataset_elem, 'abstract')
+            ET.SubElement(abstract_elem, 'para').text = \
                 self._strip_html_tags(str(description))
 
-        # Add a section for the license file
-        self.create_intellectual_rights(dataset, license_text)
 
-        # Add a section for the contact
-        contact = ET.SubElement(dataset, 'contact')
-        self.set_user_name(contact, first_name, last_name)
-        self.set_user_contact(contact, user_id, email)
+        # Add a section for the license file
+        self.create_intellectual_rights(dataset_elem, license_text)
+
+        """
+        Add a dataset contact. This is set to the person publishing
+        the Tale.
+        """
+        first_name = manifest['createdBy']['schema:givenName']
+        last_name = manifest['createdBy']['schema:familyName']
+        contact_email = manifest['createdBy']['schema:email']
+        contact_elem = ET.SubElement(dataset_elem, 'contact')
+        self.set_user_name(contact_elem, first_name, last_name)
+        self.set_user_contact(contact_elem, user_id, contact_email)
 
         for item in manifest['aggregates']:
             if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
                 size = item['size']
                 mimeType = self.get_dataone_mimetype(item['mimeType'])
-                self.add_object_record(dataset, name, '', size, mimeType)
+                self.add_object_record(dataset_elem, name, '', size, mimeType)
 
         # Add the manifest itself
         name = ExtraFileNames.manifest_file
         description = file_descriptions[ExtraFileNames.manifest_file]
-        self.add_object_record(dataset, name, description,
+        self.add_object_record(dataset_elem, name, description,
                                manifest_size, 'application/json')
 
         # Add the environment json
         name = ExtraFileNames.environment_file
         description = file_descriptions[ExtraFileNames.environment_file]
-        self.add_object_record(dataset, name, description,
+        self.add_object_record(dataset_elem, name, description,
                                environment_size, 'application/json')
 
         """
@@ -320,7 +340,6 @@ class DataONEMetadata(object):
                                  xml_declaration=True,
                                  method='xml',
                                  short_empty_elements=True)
-
         return stream.getvalue()
 
     def generate_system_metadata(self, pid, name, format_id, size, md5,
