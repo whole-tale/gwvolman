@@ -15,7 +15,7 @@ except ImportError:
     from urllib.parse import urlparse
 
 from d1_client.mnclient_2_0 import MemberNodeClient_2_0
-from d1_common.types.exceptions import DataONEException
+from d1_common.types.exceptions import DataONEException, InvalidToken
 
 from .metadata import DataONEMetadata
 
@@ -42,6 +42,9 @@ class DataONEPublishProvider(PublishProvider):
                     "user_agent": "safari",
                 }
             )
+        except InvalidToken as e:
+            logging.warning(e)
+            raise ValueError('Invalid DataONE JWT token. Please refresh the token.')
         except DataONEException as e:
             logging.warning(e)
             raise ValueError('Failed to establish connection with DataONE.')
@@ -129,7 +132,7 @@ class DataONEPublishProvider(PublishProvider):
 
             metadata = DataONEMetadata()
             # Create an EML document based on the manifest
-            eml_pid = client.generateIdentifier(scheme="UUID").value()
+            eml_pid = self._generate_pid(client)
             eml_doc = metadata.create_eml_doc(
                 eml_pid, manifest, user_id, manifest_size,
                 environment_size, license_text)
@@ -149,7 +152,7 @@ class DataONEPublishProvider(PublishProvider):
                         step += 1
 
                         # Generate uuid (TODO: Replace with D1 API call)
-                        file_pid = client.generateIdentifier(scheme="UUID").value()
+                        file_pid = self._generate_pid(client)
 
                         mimeType = metadata.get_dataone_mimetype(
                             mimetypes.guess_type(fpath)[0])
@@ -209,7 +212,7 @@ class DataONEPublishProvider(PublishProvider):
                 step += 1
 
                 # Create ORE
-                res_pid = client.generateIdentifier(scheme="DOI").value()
+                res_pid = self._generate_pid(client)
                 res_map = metadata.create_resource_map(
                     res_pid, eml_pid, uploaded_pids)
                 res_meta = metadata.generate_system_metadata(
@@ -364,3 +367,17 @@ class DataONEPublishProvider(PublishProvider):
         """
         parsed = urlparse(url)
         return parsed._replace(scheme="http").geturl()
+
+    def _generate_pid(self, client, scheme="DOI"):
+        """
+        Generates a DataONE identifier.
+        :return: A valid DataONE identifier
+        """
+        try:
+            return client.generateIdentifier(scheme=scheme).value()
+        except InvalidToken as e:
+            logging.warning(e)
+            raise ValueError('Invalid DataONE JWT. Please refresh the token.')
+        except DataONEException as e:
+            logging.warning(e)
+            raise ValueError('Failed to generate identifier.')
