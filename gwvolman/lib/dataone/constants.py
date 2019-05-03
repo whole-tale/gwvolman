@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os
-
-DATAONE_URL = os.environ.get('DATAONE_URL',
-                             'https://cn-stage-2.test.dataone.org/cn')
 
 
 class DataONELocations:

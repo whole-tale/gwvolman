@@ -423,15 +423,18 @@ def publish(self,
             tale,
             dataone_node,
             dataone_auth_token,
+            is_production,
             user_id):
     """
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
+    :param is_production: Flag set to true when publishing to a production server
     :param user_id: The user's ID
     :type tale: str
     :type dataone_node: str
     :type dataone_auth_token: str
+    :type is_production: bool
     :type user_id: str
     """
 
@@ -441,6 +444,7 @@ def publish(self,
                  self.girder_client,
                  dataone_node,
                  dataone_auth_token,
+                 is_production,
                  self.job_manager
     )
 
