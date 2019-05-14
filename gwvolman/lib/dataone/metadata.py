@@ -29,8 +29,8 @@ class DataONEMetadata(object):
     mimetypes = set()
     access_policy = None
 
-    def __init__(self, coordinating_node_url):
-        self.coordinating_node = coordinating_node_url
+    def __init__(self, coordinating_node):
+        self.coordinating_node = coordinating_node
 
     def get_dataone_mimetypes(self):
         """
@@ -39,7 +39,7 @@ class DataONEMetadata(object):
         :return: A list of mimetypes
         :rtype: list
         """
-        response = urlopen(self.coordinating_node+'/v2/formats')
+        response = urlopen(self.coordinating_node+'/formats')
         e = ET.ElementTree(ET.fromstring(response.read()))
         root = e.getroot()
         mime_types = set()

@@ -50,7 +50,7 @@ class DataONEPublishProvider(PublishProvider):
             logging.warning(e)
             raise ValueError('Failed to establish connection with DataONE.')
 
-    def publish(self, tale_id, gc, dataone_node, dataone_auth_token, is_production,
+    def publish(self, tale_id, gc, dataone_node, dataone_auth_token, coordinating_node,
                 job_manager=None):
         """
         Workhorse method that downloads a zip file for a tale then
@@ -76,11 +76,6 @@ class DataONEPublishProvider(PublishProvider):
             logging.warning(e)
             # We'll want to exit if we can't create the client
             raise ValueError('Failed to establish connection with DataONE.')
-
-        # Set the coordinating node
-        coordinating_node_url = D1_ENV_DICT['dev']['base_url']
-        if is_production:
-            D1_ENV_DICT['prod']['base_url']
 
         user_id, full_orcid_name = self._extract_user_info(dataone_auth_token)
         if not all([user_id, full_orcid_name]):
@@ -135,8 +130,7 @@ class DataONEPublishProvider(PublishProvider):
                     message='Creating EML document from manifest',
                     total=100, current=int(step/steps*100))
             step += 1
-
-            metadata = DataONEMetadata(coordinating_node_url)
+            metadata = DataONEMetadata(coordinating_node)
             # Create an EML document based on the manifest
             eml_pid = self._generate_pid(client)
             eml_doc = metadata.create_eml_doc(
@@ -233,7 +227,7 @@ class DataONEPublishProvider(PublishProvider):
                                   system_metadata=res_meta)
 
                 package_url = self._get_dataone_package_url(
-                    dataone_node, res_pid)
+                    coordinating_node, res_pid)
 
                 if job_manager:
                     job_manager.updateProgress(
@@ -309,9 +303,9 @@ class DataONEPublishProvider(PublishProvider):
         :param pid: The package pid
         :return: The package landing page
         """
-        if member_node in DataONELocations.prod_mn:
+        if member_node in D1_ENV_DICT['prod']:
             return str('https://search.dataone.org/view/'+pid)
-        elif member_node in DataONELocations.dev_mn:
+        else:
             return str('https://dev.nceas.ucsb.edu/view/'+pid)
 
     def _get_resource_map_user(self, user_id):
