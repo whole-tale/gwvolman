@@ -16,6 +16,7 @@ except ImportError:
 
 from d1_client.mnclient_2_0 import MemberNodeClient_2_0
 from d1_common.types.exceptions import DataONEException, InvalidToken
+from d1_common.env import D1_ENV_DICT
 
 from .metadata import DataONEMetadata
 
@@ -49,7 +50,7 @@ class DataONEPublishProvider(PublishProvider):
             logging.warning(e)
             raise ValueError('Failed to establish connection with DataONE.')
 
-    def publish(self, tale_id, gc, dataone_node, dataone_auth_token,
+    def publish(self, tale_id, gc, dataone_node, dataone_auth_token, coordinating_node,
                 job_manager=None):
         """
         Workhorse method that downloads a zip file for a tale then
@@ -129,8 +130,7 @@ class DataONEPublishProvider(PublishProvider):
                     message='Creating EML document from manifest',
                     total=100, current=int(step/steps*100))
             step += 1
-
-            metadata = DataONEMetadata()
+            metadata = DataONEMetadata(coordinating_node)
             # Create an EML document based on the manifest
             eml_pid = self._generate_pid(client)
             eml_doc = metadata.create_eml_doc(
@@ -227,7 +227,7 @@ class DataONEPublishProvider(PublishProvider):
                                   system_metadata=res_meta)
 
                 package_url = self._get_dataone_package_url(
-                    dataone_node, res_pid)
+                    coordinating_node, res_pid)
 
                 if job_manager:
                     job_manager.updateProgress(
@@ -303,9 +303,9 @@ class DataONEPublishProvider(PublishProvider):
         :param pid: The package pid
         :return: The package landing page
         """
-        if member_node in DataONELocations.prod_mn:
+        if member_node in D1_ENV_DICT['prod']:
             return str('https://search.dataone.org/view/'+pid)
-        elif member_node in DataONELocations.dev_mn:
+        else:
             return str('https://dev.nceas.ucsb.edu/view/'+pid)
 
     def _get_resource_map_user(self, user_id):
