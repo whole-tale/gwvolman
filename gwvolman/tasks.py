@@ -312,16 +312,19 @@ def remove_volume(self, instanceId):
 
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
-def build_tale_image(self, tale_id):
+def build_tale_image(task, tale_id, notification_id):
     """
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
     """
 
-    print('Building image')
     logging.info('Building image for Tale %s', tale_id)
 
-    tale = self.girder_client.get('/tale/%s' % tale_id)
+    task.job_manager.updateProgress(
+        message='Building image for Tale', total=5,
+        current=1, forceFlush=True)
+
+    tale = task.girder_client.get('/tale/%s' % tale_id)
 
     last_build_time = -1
     try:
@@ -331,6 +334,7 @@ def build_tale_image(self, tale_id):
 
     logging.info('Last build time {}'.format(last_build_time))
 
+    # TODO: Move this check to the model?
     # Only rebuild if files have changed since last build
     if last_build_time > 0:
 
@@ -342,6 +346,10 @@ def build_tale_image(self, tale_id):
 
         if last_build_time > 0 and workspace_mtime < last_build_time:
             print('Workspace not modified since last build. Skipping.')
+            task.job_manager.updateProgress(
+                message='Workspace not modified, no need to build', total=5,
+                current=5, forceFlush=True)
+
             return {
                 'image_digest': tale['imageInfo']['digest'],
                 'repo2docker_version': tale['imageInfo']['repo2docker_version'],
@@ -350,10 +358,14 @@ def build_tale_image(self, tale_id):
 
     # Workspace modified so try to build.
     try:
+        task.job_manager.updateProgress(
+            message='Copying workspace contents', total=5,
+            current=2, forceFlush=True)
+
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
         logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
-        workspace = self.girder_client.get('/folder/{workspaceId}'.format(**tale))
-        self.girder_client.downloadFolderRecursive(workspace['_id'], temp_dir)
+        workspace = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
+        task.girder_client.downloadFolderRecursive(workspace['_id'], temp_dir)
 
     except Exception as e:
         raise ValueError('Error accessing Girder: {}'.format(e))
@@ -375,10 +387,14 @@ def build_tale_image(self, tale_id):
                             tale_id, str(build_time))
 
     # Image is required for config information
-    image = self.girder_client.get('/image/%s' % tale['imageId'])
+    image = task.girder_client.get('/image/%s' % tale['imageId'])
 
     # TODO: need to configure version of repo2docker
     repo2docker_version = 'wholetale/repo2docker:latest'
+
+    task.job_manager.updateProgress(
+        message='Building image', total=5,
+        current=3, forceFlush=True)
 
     # Build the image from the workspace
     ret = _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version)
@@ -395,6 +411,10 @@ def build_tale_image(self, tale_id):
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=DEPLOYMENT.registry_url)
 
+    task.job_manager.updateProgress(
+        message='Pushing image to registry', total=5,
+        current=4, forceFlush=True)
+
     # remove clone
     shutil.rmtree(temp_dir, ignore_errors=True)
     for line in apicli.push(tag, stream=True):
@@ -406,6 +426,10 @@ def build_tale_image(self, tale_id):
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+
+    task.job_manager.updateProgress(
+        message='Image build succeeded', total=5,
+        current=5, forceFlush=True)
 
     logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
 
