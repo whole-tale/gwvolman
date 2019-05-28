@@ -151,8 +151,7 @@ class DataONEPublishProvider(PublishProvider):
                                 total=100, current=int(step/steps*100))
                         step += 1
 
-                        # Generate uuid (TODO: Replace with D1 API call)
-                        file_pid = self._generate_pid(client)
+                        file_pid = self._generate_pid(client, scheme='UUID')
 
                         mimeType = metadata.get_dataone_mimetype(
                             mimetypes.guess_type(fpath)[0])
@@ -212,7 +211,7 @@ class DataONEPublishProvider(PublishProvider):
                 step += 1
 
                 # Create ORE
-                res_pid = self._generate_pid(client)
+                res_pid = self._generate_pid(client, scheme='UUID')
                 res_map = metadata.create_resource_map(
                     res_pid, eml_pid, uploaded_pids)
                 res_meta = metadata.generate_system_metadata(
