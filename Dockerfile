@@ -50,6 +50,11 @@ RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
   -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
 
+# Temporary fix for girder_utils (chain tasks and kwargs)
+RUN sed \
+  -e "/'kwargs':/ s/task_kwargs/json.dumps(&)/" \
+  -i /usr/local/lib/python3.5/dist-packages/girder_worker/context/nongirder_context.py
+
 # https://github.com/whole-tale/gwvolman/issues/51
 # https://github.com/whole-tale/wt_home_dirs/issues/18
 RUN echo "use_locks 0" >> /etc/davfs2/davfs2.conf && \
