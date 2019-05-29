@@ -34,7 +34,7 @@ from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
 UPDATE_CONTAINER_STEP_TOTAL = 2
-BUILD_TALE_IMAGE_STEP_TOTAL = 5
+BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
 
 @girder_job(title='Create Tale Data Volume')
@@ -379,10 +379,6 @@ def build_tale_image(task, tale_id, notification_id=None):
 
     # Workspace modified so try to build.
     try:
-        task.job_manager.updateProgress(
-            message='Copying workspace contents', total=BUILD_TALE_IMAGE_STEP_TOTAL,
-            current=2, forceFlush=True)
-
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
         logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
         workspace = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
@@ -413,10 +409,6 @@ def build_tale_image(task, tale_id, notification_id=None):
     # TODO: need to configure version of repo2docker
     repo2docker_version = 'wholetale/repo2docker:latest'
 
-    task.job_manager.updateProgress(
-        message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
-        current=3, forceFlush=True)
-
     # Build the image from the workspace
     ret = _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version)
 
@@ -431,10 +423,6 @@ def build_tale_image(task, tale_id, notification_id=None):
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=DEPLOYMENT.registry_url)
-
-    task.job_manager.updateProgress(
-        message='Pushing image to registry', total=BUILD_TALE_IMAGE_STEP_TOTAL,
-        current=4, forceFlush=True)
 
     # remove clone
     shutil.rmtree(temp_dir, ignore_errors=True)
