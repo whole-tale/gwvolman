@@ -31,16 +31,25 @@ from .lib.dataone.publish import DataONEPublishProvider
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
 
+CREATE_VOLUME_STEP_TOTAL = 2
+LAUNCH_CONTAINER_STEP_TOTAL = 2
+UPDATE_CONTAINER_STEP_TOTAL = 2
+BUILD_TALE_IMAGE_STEP_TOTAL = 5
+IMPORT_TALE_STEP_TOTAL = 2
 
 @girder_job(title='Create Tale Data Volume')
 @app.task(bind=True)
-def create_volume(self, instanceId: str):
+def create_volume(self, instance_id, notification_id=None):
     """Create a mountpoint and compose WT-fs."""
-    user, instance = _get_user_and_instance(self.girder_client, instanceId)
+    user, instance = _get_user_and_instance(self.girder_client, instance_id)
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
 
     vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
     cli = docker.from_env(version='1.28')
+
+    self.job_manager.updateProgress(
+        message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
+        current=1, forceFlush=True)
 
     try:
         volume = cli.volumes.create(name=vol_name, driver='local')
@@ -130,12 +139,16 @@ def create_volume(self, instanceId: str):
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
 
+    self.job_manager.updateProgress(
+        message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
+        current=CREATE_VOLUME_STEP_TOTAL, forceFlush=True)
+
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
         mountPoint=mountpoint,
         volumeName=volume.name,
         sessionId=session['_id'],
-        instanceId=instanceId,
+        instanceId=instance_id,
     )
 
 
@@ -146,6 +159,10 @@ def launch_container(self, payload):
     user, instance = _get_user_and_instance(
         self.girder_client, payload['instanceId'])
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
+
+    self.job_manager.updateProgress(
+        message='Starting container', total=LAUNCH_CONTAINER_STEP_TOTAL,
+        current=1, forceFlush=True)
 
     if 'imageInfo' not in tale:
 
@@ -183,6 +200,10 @@ def launch_container(self, payload):
             break
         time.sleep(0.2)
 
+    self.job_manager.updateProgress(
+        message='Container started', total=LAUNCH_CONTAINER_STEP_TOTAL,
+        current=LAUNCH_CONTAINER_STEP_TOTAL, forceFlush=True)
+
     payload.update(attrs)
     payload['name'] = service.name
     return payload
@@ -206,7 +227,8 @@ def update_container(task, instanceId, **kwargs):
     digest = kwargs['image']
 
     task.job_manager.updateProgress(
-        message='Restarting the Tale with a new image', total=2,
+        message='Restarting the Tale with a new image', 
+        total=UPDATE_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
@@ -244,8 +266,9 @@ def update_container(task, instanceId, **kwargs):
         raise RuntimeError('Tale update timed out')
 
     task.job_manager.updateProgress(
-        message='Tale restarted with the new image', total=2,
-        current=2)
+        message='Tale restarted with the new image', 
+        total=UPDATE_CONTAINER_STEP_TOTAL,
+        current=UPDATE_CONTAINER_STEP_TOTAL)
 
     return {'image_digest': digest}
 
@@ -312,7 +335,7 @@ def remove_volume(self, instanceId):
 
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
-def build_tale_image(task, tale_id, notification_id):
+def build_tale_image(task, tale_id, notification_id=None):
     """
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
@@ -321,7 +344,7 @@ def build_tale_image(task, tale_id, notification_id):
     logging.info('Building image for Tale %s', tale_id)
 
     task.job_manager.updateProgress(
-        message='Building image for Tale', total=5,
+        message='Building image for Tale', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=1, forceFlush=True)
 
     tale = task.girder_client.get('/tale/%s' % tale_id)
@@ -347,8 +370,8 @@ def build_tale_image(task, tale_id, notification_id):
         if last_build_time > 0 and workspace_mtime < last_build_time:
             print('Workspace not modified since last build. Skipping.')
             task.job_manager.updateProgress(
-                message='Workspace not modified, no need to build', total=5,
-                current=5, forceFlush=True)
+                message='Workspace not modified, no need to build', total=BUILD_TALE_IMAGE_STEP_TOTAL,
+                current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
 
             return {
                 'image_digest': tale['imageInfo']['digest'],
@@ -359,7 +382,7 @@ def build_tale_image(task, tale_id, notification_id):
     # Workspace modified so try to build.
     try:
         task.job_manager.updateProgress(
-            message='Copying workspace contents', total=5,
+            message='Copying workspace contents', total=BUILD_TALE_IMAGE_STEP_TOTAL,
             current=2, forceFlush=True)
 
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
@@ -393,7 +416,7 @@ def build_tale_image(task, tale_id, notification_id):
     repo2docker_version = 'wholetale/repo2docker:latest'
 
     task.job_manager.updateProgress(
-        message='Building image', total=5,
+        message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=3, forceFlush=True)
 
     # Build the image from the workspace
@@ -412,7 +435,7 @@ def build_tale_image(task, tale_id, notification_id):
                  registry=DEPLOYMENT.registry_url)
 
     task.job_manager.updateProgress(
-        message='Pushing image to registry', total=5,
+        message='Pushing image to registry', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=4, forceFlush=True)
 
     # remove clone
@@ -428,8 +451,8 @@ def build_tale_image(task, tale_id, notification_id):
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
 
     task.job_manager.updateProgress(
-        message='Image build succeeded', total=5,
-        current=5, forceFlush=True)
+        message='Image build succeeded', total=BUILD_TALE_IMAGE_STEP_TOTAL,
+        current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
 
     logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
 
