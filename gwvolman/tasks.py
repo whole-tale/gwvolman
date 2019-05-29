@@ -154,7 +154,7 @@ def create_volume(self, instance_id, notification_id=None):
 
 @girder_job(title='Spawn Instance')
 @app.task(bind=True)
-def launch_container(self, payload):
+def launch_container(self, payload, notification_id=None):
     """Launch a container using a Tale object."""
     user, instance = _get_user_and_instance(
         self.girder_client, payload['instanceId'])
