@@ -211,7 +211,7 @@ def launch_container(self, payload, notification_id=None):
 
 @girder_job(title='Update Instance')
 @app.task(bind=True)
-def update_container(task, instanceId, **kwargs):
+def update_container(task, instanceId, digest=None, notification_id=None):
     user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
     cli = docker.from_env(version='1.28')
@@ -223,8 +223,6 @@ def update_container(task, instanceId, **kwargs):
     except docker.errors.NotFound:
         logging.info("Service not present [%s].", containerInfo['name'])
         return
-
-    digest = kwargs['image']
 
     task.job_manager.updateProgress(
         message='Restarting the Tale with a new image', 
