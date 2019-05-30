@@ -229,6 +229,19 @@ def update_container(task, instanceId, digest=None):
         total=UPDATE_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
 
+    # Don't try to restart if the image hasn't changed
+    try:
+        previous_image = service.attrs['Spec']['TaskTemplate']['ContainerSpec']['Image']
+    except KeyError:
+        previous_image = ''
+
+    if (previous_image == digest):
+        task.job_manager.updateProgress(
+            message='Image has not changed',
+            total=UPDATE_CONTAINER_STEP_TOTAL,
+            current=UPDATE_CONTAINER_STEP_TOTAL)
+        return {'image_digest': digest}
+
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
