@@ -23,3 +23,5 @@ class InstanceStatus(object):
     LAUNCHING = 0
     RUNNING = 1
     ERROR = 2
+
+DEPLOYMENT_TYPE = os.environ.get('DEPLOYMENT_TYPE', 'docker')

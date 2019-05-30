@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{deploymentName}}
+  labels:
+    app: WholeTale
+    instanceId: "{{instanceId}}"
+    ingressHost: "{{ingressHost}}"
+    component: {{deploymentName}}
+spec:
+  selector:
+    matchLabels:
+      app: WholeTale
+      instanceId: "{{instanceId}}"
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: WholeTale
+        instanceId: "{{instanceId}}"
+    spec:
+      initContainers:
+      - name: fs-builder
+        image: {{workerImage}}
+        command:
+        - "/usr/local/bin/init-tale-pod"
+        args:
+        - "{{girderApiUrl}}"
+        - "{{instanceId}}"
+        - "/workspace"
+        env:
+        - name: GIRDER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: girder-secret
+              key: apiKey
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        # wish we could only mount /etc, but 
+        # resolv.conf is a symlink to /run...
+        - name: host
+          mountPath: /host
+        - name: registry-cert
+          mountPath: /registry-cert
+          readOnly: true
+      containers:
+      - name: mounter
+        image: {{workerImage}}
+        command:
+        # need init process to reap fuse deaemons, otherwise
+        # webdav unmount hangs indefinitely waiting for the
+        # zombie pid to go away.
+        - "/tini"
+        - "--"
+        - "/bin/sleep"
+        - "infinity"
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - "/usr/local/bin/talefs"
+              - "mount"
+              - "{{instanceId}}"
+              - "{{girderApiUrl}}"
+              - "{{#dmsMountEnabled}}{{dmsSessionId}}{{/dmsMountEnabled}}"
+              - "{{homeDirId}}"
+              - "{{#workspacesEnabled}}{{taleId}}{{/workspacesEnabled}}"
+          preStop:
+            exec:
+              command: 
+              - "/usr/local/bin/talefs"
+              - "unmount"
+        env:
+        - name: GIRDER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: girder-secret
+              key: apiKey
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+          allowPrivilegeEscalation: true
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+          mountPropagation: Bidirectional
+
+      # name is important since update_image uses it to find
+      # the right container to update
+      - name: main
+        image: {{image}}
+        ports:
+        - containerPort: {{containerPort}}
+          name: container-port
+
+        command: 
+        {{#command}}
+        - "{{arg}}"
+        {{/command}}
+        resources:
+          requests:
+            {{#cpuSharesFractionEnabled}}
+            cpu: {{cpuSharesFraction}}
+            {{/cpuSharesFractionEnabled}}
+          limits:
+            {{#memLimitEnabled}}
+            memory: {{memLimit}}
+            {{/memLimitEnabled}}
+        
+        volumeMounts:
+        - name: workspace
+          mountPath: {{mountpoint}}
+          mountPropagation: HostToContainer
+        env:
+        {{#environment}}
+        - name: {{name}}
+          value: "{{value}}"
+        {{/environment}}
+      imagePullSecrets: 
+      - name: registry-credentials
+
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: {{claimName}}
+      - name: host
+        hostPath:
+          path: /
+          type: Directory
+      - name: registry-cert
+        secret:
+          secretName: registry-cert-secret
+          items:
+          - key: tls.crt
+            path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{serviceName}}
+  labels:
+    app: WholeTale
+    instanceId: "{{instanceId}}"
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: {{containerPort}}
+  selector:
+    app: WholeTale
+    instanceId: "{{instanceId}}"
+

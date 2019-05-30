@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gwvolman',
-    version='0.7.0rc2',
+    version='dev-kube-2.0',
     description='An example girder worker extension',
     author='Kacper Kowalik',
     author_email='xarthisius.kk@gmail.com',
@@ -17,6 +17,9 @@ setup(
     entry_points={
         'girder_worker_plugins': [
             'gwvolman = gwvolman:GWVolumeManagerPlugin',
+        ],
+        'console_scripts': [
+        	'build-tale-workspace = gwvolman:__build_tale_workspace__',
         ]
     },
     install_requires=[
@@ -26,5 +29,8 @@ setup(
         'requests'
     ],
     packages=find_packages(),
-    zip_safe=False
+    zip_safe=False,
+    package_data={
+        '': ['*.yaml']
+    }
 )
