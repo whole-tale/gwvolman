@@ -39,7 +39,7 @@ IMPORT_TALE_STEP_TOTAL = 2
 
 @girder_job(title='Create Tale Data Volume')
 @app.task(bind=True)
-def create_volume(self, instance_id, notification_id=None):
+def create_volume(self, instance_id):
     """Create a mountpoint and compose WT-fs."""
     user, instance = _get_user_and_instance(self.girder_client, instance_id)
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
@@ -154,7 +154,7 @@ def create_volume(self, instance_id, notification_id=None):
 
 @girder_job(title='Spawn Instance')
 @app.task(bind=True)
-def launch_container(self, payload, notification_id=None):
+def launch_container(self, payload):
     """Launch a container using a Tale object."""
     user, instance = _get_user_and_instance(
         self.girder_client, payload['instanceId'])
@@ -211,7 +211,7 @@ def launch_container(self, payload, notification_id=None):
 
 @girder_job(title='Update Instance')
 @app.task(bind=True)
-def update_container(task, instanceId, digest=None, notification_id=None):
+def update_container(task, instanceId, digest=None):
     user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
     cli = docker.from_env(version='1.28')
@@ -228,6 +228,7 @@ def update_container(task, instanceId, digest=None, notification_id=None):
         message='Restarting the Tale with a new image', 
         total=UPDATE_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
+
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
@@ -243,6 +244,7 @@ def update_container(task, instanceId, digest=None, notification_id=None):
     timeout = datetime.now() + timedelta(minutes=3)
     while not (updated or expired or task.canceled):
         service = cli.services.get(containerInfo['name'])
+
         try:
             state = service.attrs['UpdateStatus']['State']
         except KeyError:
@@ -333,7 +335,7 @@ def remove_volume(self, instanceId):
 
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
-def build_tale_image(task, tale_id, notification_id=None):
+def build_tale_image(task, tale_id):
     """
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
