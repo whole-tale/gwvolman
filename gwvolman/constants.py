@@ -18,7 +18,7 @@ except socket.gaierror:
     DEFAULT_GIRDER_API_URL = 'https://girder.dev.wholetale.org/api/v1'
 GIRDER_API_URL = os.environ.get('GIRDER_API_URL', DEFAULT_GIRDER_API_URL)
 
-REPO2DOCKER_VERSION = 'wholetale/repo2docker_wholetale:latest'
+REPO2DOCKER_VERSION = 'wholetale/repo2docker_wholetale:v0.7rc3'
 
 
 class InstanceStatus(object):
