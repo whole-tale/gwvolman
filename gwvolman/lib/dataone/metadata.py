@@ -11,8 +11,7 @@ except ImportError:
 
 from .constants import \
     ExtraFileNames, \
-    file_descriptions, \
-    DATAONE_URL
+    file_descriptions
 
 from d1_common.types import dataoneTypes
 from d1_common import const as d1_const
@@ -30,6 +29,9 @@ class DataONEMetadata(object):
     mimetypes = set()
     access_policy = None
 
+    def __init__(self, coordinating_node):
+        self.coordinating_node = coordinating_node
+
     def get_dataone_mimetypes(self):
         """
         Returns a list of DataONE supported mimetypes. The endpoint returns
@@ -37,7 +39,7 @@ class DataONEMetadata(object):
         :return: A list of mimetypes
         :rtype: list
         """
-        response = urlopen(DATAONE_URL+'/v2/formats')
+        response = urlopen(self.coordinating_node+'/formats')
         e = ET.ElementTree(ET.fromstring(response.read()))
         root = e.getroot()
         mime_types = set()
@@ -105,7 +107,7 @@ class DataONEMetadata(object):
         :rtype: d1_common.resource_map.ResourceMap
         """
 
-        ore = ResourceMap(base_url=DATAONE_URL+'/cn')
+        ore = ResourceMap(base_url=self.coordinating_node)
         ore.oreInitialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)

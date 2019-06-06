@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import os
 import shutil
 import socket
+import stat
 import json
 import time
 import tempfile
@@ -29,18 +30,27 @@ from .utils import \
 from .lib.dataone.publish import DataONEPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION
 
+CREATE_VOLUME_STEP_TOTAL = 2
+LAUNCH_CONTAINER_STEP_TOTAL = 2
+UPDATE_CONTAINER_STEP_TOTAL = 2
+BUILD_TALE_IMAGE_STEP_TOTAL = 2
+IMPORT_TALE_STEP_TOTAL = 2
 
 @girder_job(title='Create Tale Data Volume')
 @app.task(bind=True)
-def create_volume(self, instanceId: str):
+def create_volume(self, instance_id):
     """Create a mountpoint and compose WT-fs."""
-    user, instance = _get_user_and_instance(self.girder_client, instanceId)
+    user, instance = _get_user_and_instance(self.girder_client, instance_id)
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
 
     vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
     cli = docker.from_env(version='1.28')
+
+    self.job_manager.updateProgress(
+        message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
+        current=1, forceFlush=True)
 
     try:
         volume = cli.volumes.create(name=vol_name, driver='local')
@@ -130,12 +140,16 @@ def create_volume(self, instanceId: str):
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
 
+    self.job_manager.updateProgress(
+        message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
+        current=CREATE_VOLUME_STEP_TOTAL, forceFlush=True)
+
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
         mountPoint=mountpoint,
         volumeName=volume.name,
         sessionId=session['_id'],
-        instanceId=instanceId,
+        instanceId=instance_id,
     )
 
 
@@ -146,6 +160,10 @@ def launch_container(self, payload):
     user, instance = _get_user_and_instance(
         self.girder_client, payload['instanceId'])
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
+
+    self.job_manager.updateProgress(
+        message='Starting container', total=LAUNCH_CONTAINER_STEP_TOTAL,
+        current=1, forceFlush=True)
 
     if 'imageInfo' not in tale:
 
@@ -183,6 +201,10 @@ def launch_container(self, payload):
             break
         time.sleep(0.2)
 
+    self.job_manager.updateProgress(
+        message='Container started', total=LAUNCH_CONTAINER_STEP_TOTAL,
+        current=LAUNCH_CONTAINER_STEP_TOTAL, forceFlush=True)
+
     payload.update(attrs)
     payload['name'] = service.name
     return payload
@@ -190,7 +212,7 @@ def launch_container(self, payload):
 
 @girder_job(title='Update Instance')
 @app.task(bind=True)
-def update_container(task, instanceId, **kwargs):
+def update_container(task, instanceId, digest=None):
     user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
     cli = docker.from_env(version='1.28')
@@ -203,11 +225,24 @@ def update_container(task, instanceId, **kwargs):
         logging.info("Service not present [%s].", containerInfo['name'])
         return
 
-    digest = kwargs['image']
-
     task.job_manager.updateProgress(
-        message='Restarting the Tale with a new image', total=2,
+        message='Restarting the Tale with a new image', 
+        total=UPDATE_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
+
+    # Don't try to restart if the image hasn't changed
+    try:
+        previous_image = service.attrs['Spec']['TaskTemplate']['ContainerSpec']['Image']
+    except KeyError:
+        previous_image = ''
+
+    if (previous_image == digest):
+        task.job_manager.updateProgress(
+            message='Image has not changed',
+            total=UPDATE_CONTAINER_STEP_TOTAL,
+            current=UPDATE_CONTAINER_STEP_TOTAL)
+        return {'image_digest': digest}
+
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
@@ -223,6 +258,7 @@ def update_container(task, instanceId, **kwargs):
     timeout = datetime.now() + timedelta(minutes=3)
     while not (updated or expired or task.canceled):
         service = cli.services.get(containerInfo['name'])
+
         try:
             state = service.attrs['UpdateStatus']['State']
         except KeyError:
@@ -244,8 +280,9 @@ def update_container(task, instanceId, **kwargs):
         raise RuntimeError('Tale update timed out')
 
     task.job_manager.updateProgress(
-        message='Tale restarted with the new image', total=2,
-        current=2)
+        message='Tale restarted with the new image', 
+        total=UPDATE_CONTAINER_STEP_TOTAL,
+        current=UPDATE_CONTAINER_STEP_TOTAL)
 
     return {'image_digest': digest}
 
@@ -312,16 +349,19 @@ def remove_volume(self, instanceId):
 
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
-def build_tale_image(self, tale_id):
+def build_tale_image(task, tale_id, force=False):
     """
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
     """
 
-    print('Building image')
     logging.info('Building image for Tale %s', tale_id)
 
-    tale = self.girder_client.get('/tale/%s' % tale_id)
+    task.job_manager.updateProgress(
+        message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
+        current=1, forceFlush=True)
+
+    tale = task.girder_client.get('/tale/%s' % tale_id)
 
     last_build_time = -1
     try:
@@ -331,6 +371,7 @@ def build_tale_image(self, tale_id):
 
     logging.info('Last build time {}'.format(last_build_time))
 
+    # TODO: Move this check to the model?
     # Only rebuild if files have changed since last build
     if last_build_time > 0:
 
@@ -340,8 +381,12 @@ def build_tale_image(self, tale_id):
         except KeyError:
             pass
 
-        if last_build_time > 0 and workspace_mtime < last_build_time:
+        if not force and last_build_time > 0 and workspace_mtime < last_build_time:
             print('Workspace not modified since last build. Skipping.')
+            task.job_manager.updateProgress(
+                message='Workspace not modified, no need to build', total=BUILD_TALE_IMAGE_STEP_TOTAL,
+                current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
+
             return {
                 'image_digest': tale['imageInfo']['digest'],
                 'repo2docker_version': tale['imageInfo']['repo2docker_version'],
@@ -352,8 +397,8 @@ def build_tale_image(self, tale_id):
     try:
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
         logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
-        workspace = self.girder_client.get('/folder/{workspaceId}'.format(**tale))
-        self.girder_client.downloadFolderRecursive(workspace['_id'], temp_dir)
+        workspace = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
+        task.girder_client.downloadFolderRecursive(workspace['_id'], temp_dir)
 
     except Exception as e:
         raise ValueError('Error accessing Girder: {}'.format(e))
@@ -375,13 +420,14 @@ def build_tale_image(self, tale_id):
                             tale_id, str(build_time))
 
     # Image is required for config information
-    image = self.girder_client.get('/image/%s' % tale['imageId'])
+    image = task.girder_client.get('/image/%s' % tale['imageId'])
 
-    # TODO: need to configure version of repo2docker
-    repo2docker_version = 'wholetale/repo2docker:latest'
+    # Write the environment.json to the workspace
+    with open(os.path.join(temp_dir, 'environment.json'), 'w') as fp:
+        json.dump(image, fp)
 
     # Build the image from the workspace
-    ret = _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version)
+    ret = _build_image(cli, tale_id, image, tag, temp_dir, REPO2DOCKER_VERSION)
 
     # Remove the temporary directory whether the build succeeded or not
     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -407,12 +453,16 @@ def build_tale_image(self, tale_id):
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
 
+    task.job_manager.updateProgress(
+        message='Image build succeeded', total=BUILD_TALE_IMAGE_STEP_TOTAL,
+        current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
+
     logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
 
     # Image digest used by updateBuildStatus handler
     return {
         'image_digest': digest,
-        'repo2docker_version': repo2docker_version,
+        'repo2docker_version': REPO2DOCKER_VERSION,
         'last_build': build_time
     }
 
@@ -423,15 +473,18 @@ def publish(self,
             tale,
             dataone_node,
             dataone_auth_token,
+            coordinating_node,
             user_id):
     """
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
+    :param coordinating_node: URL to the coordinating node
     :param user_id: The user's ID
     :type tale: str
     :type dataone_node: str
     :type dataone_auth_token: str
+    :type coordinating_node: str
     :type user_id: str
     """
 
@@ -441,6 +494,7 @@ def publish(self,
                  self.girder_client,
                  dataone_node,
                  dataone_auth_token,
+                 coordinating_node,
                  self.job_manager
     )
 

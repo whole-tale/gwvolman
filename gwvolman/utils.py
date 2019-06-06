@@ -290,17 +290,15 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     user-name as BinderHub
     """
     r2d_cmd = ('jupyter-repo2docker '
+               '--config="/wholetale/repo2docker_config.py" '
                '--target-repo-dir="/home/jovyan/work/workspace" '
-               '--template={} --buildpack-name={} '
                '--user-id=1000 --user-name={} '
                '--no-clean --no-run --debug '
                '--image-name {} {}'.format(
-                                           image['config']['template'],
-                                           image['config']['buildpack'],
                                            image['config']['user'],
                                            tag, temp_dir))
 
-    logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
+    logging.info('Calling %s (%s)', r2d_cmd, tale_id)
 
     container = cli.containers.run(
         image=repo2docker_version,
