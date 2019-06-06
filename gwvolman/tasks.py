@@ -30,7 +30,7 @@ from .utils import \
 from .lib.dataone.publish import DataONEPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -422,11 +422,12 @@ def build_tale_image(task, tale_id, force=False):
     # Image is required for config information
     image = task.girder_client.get('/image/%s' % tale['imageId'])
 
-    # TODO: need to configure version of repo2docker
-    repo2docker_version = 'wholetale/repo2docker:latest'
+    # Write the environment.json to the workspace
+    with open(os.path.join(temp_dir, 'environment.json'), 'w') as fp:
+        json.dump(image, fp)
 
     # Build the image from the workspace
-    ret = _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version)
+    ret = _build_image(cli, tale_id, image, tag, temp_dir, REPO2DOCKER_VERSION)
 
     # Remove the temporary directory whether the build succeeded or not
     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -461,7 +462,7 @@ def build_tale_image(task, tale_id, force=False):
     # Image digest used by updateBuildStatus handler
     return {
         'image_digest': digest,
-        'repo2docker_version': repo2docker_version,
+        'repo2docker_version': REPO2DOCKER_VERSION,
         'last_build': build_time
     }
 
