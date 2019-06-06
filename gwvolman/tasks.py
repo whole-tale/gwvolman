@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import os
 import shutil
 import socket
+import stat
 import json
 import time
 import tempfile
@@ -348,7 +349,7 @@ def remove_volume(self, instanceId):
 
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
-def build_tale_image(task, tale_id):
+def build_tale_image(task, tale_id, force=False):
     """
     Build docker image from Tale workspace using repo2docker
     and push to Whole Tale registry.
@@ -357,7 +358,7 @@ def build_tale_image(task, tale_id):
     logging.info('Building image for Tale %s', tale_id)
 
     task.job_manager.updateProgress(
-        message='Building image for Tale', total=BUILD_TALE_IMAGE_STEP_TOTAL,
+        message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=1, forceFlush=True)
 
     tale = task.girder_client.get('/tale/%s' % tale_id)
@@ -380,7 +381,7 @@ def build_tale_image(task, tale_id):
         except KeyError:
             pass
 
-        if last_build_time > 0 and workspace_mtime < last_build_time:
+        if not force and last_build_time > 0 and workspace_mtime < last_build_time:
             print('Workspace not modified since last build. Skipping.')
             task.job_manager.updateProgress(
                 message='Workspace not modified, no need to build', total=BUILD_TALE_IMAGE_STEP_TOTAL,
