@@ -186,7 +186,8 @@ def launch_container(self, payload):
     container_config = _get_container_config(self.girder_client, tale)
     service, attrs = _launch_container(
         payload['volumeName'], payload['nodeId'],
-        container_config=container_config)
+        container_config,
+        tale_id=tale['_id'], instance_id=payload['instanceId'])
 
     tic = time.time()
     timeout = 30.0
