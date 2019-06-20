@@ -319,7 +319,7 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
 
     # Job output must come from stdout/stderr
     for line in container.logs(stream=True):
-        print(line.decode('utf-8'))
+        print(line.decode('utf-8').strip())
 
     # Since detach=True, then we need to explicitly check for the
     # container exit code
