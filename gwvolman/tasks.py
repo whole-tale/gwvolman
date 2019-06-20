@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 import os
 import shutil
 import socket
-import stat
 import json
 import time
 import tempfile
@@ -37,6 +36,7 @@ LAUNCH_CONTAINER_STEP_TOTAL = 2
 UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
+
 
 @girder_job(title='Create Tale Data Volume')
 @app.task(bind=True)
@@ -226,7 +226,7 @@ def update_container(task, instanceId, digest=None):
         return
 
     task.job_manager.updateProgress(
-        message='Restarting the Tale with a new image', 
+        message='Restarting the Tale with a new image',
         total=UPDATE_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
 
@@ -280,7 +280,7 @@ def update_container(task, instanceId, digest=None):
         raise RuntimeError('Tale update timed out')
 
     task.job_manager.updateProgress(
-        message='Tale restarted with the new image', 
+        message='Tale restarted with the new image',
         total=UPDATE_CONTAINER_STEP_TOTAL,
         current=UPDATE_CONTAINER_STEP_TOTAL)
 
@@ -351,10 +351,8 @@ def remove_volume(self, instanceId):
 @app.task(bind=True)
 def build_tale_image(task, tale_id, force=False):
     """
-    Build docker image from Tale workspace using repo2docker
-    and push to Whole Tale registry.
+    Build docker image from Tale workspace using repo2docker and push to Whole Tale registry.
     """
-
     logging.info('Building image for Tale %s', tale_id)
 
     task.job_manager.updateProgress(
@@ -541,33 +539,30 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
     self.girder_client.post(
         '/dataset/register', parameters={'dataMap': json.dumps(dataMap)})
 
-    # Get resulting folder/item by name
+    # Currently, we register resources in two different ways:
+    #  1. DOIs (coming from Globus, Dataverse, DataONE, etc) create a root
+    #     folder in the Catalog, that's named exactly the same as dataset.
+    #  2. HTTP(S) files are registered into Catalog using a nested structure
+    #     based on their url (see whole-tale/girder_wholetale#266)
+    #  Knowing that, let's try to find the newly registered data by path.
     catalog_path = '/collection/WholeTale Catalog/WholeTale Catalog'
-    catalog = self.girder_client.get(
-        '/resource/lookup', parameters={'path': catalog_path})
-    folders = self.girder_client.get(
-        '/folder', parameters={'name': dataMap[0]['name'],
-                               'parentId': catalog['_id'],
-                               'parentType': 'folder'}
-    )
-    try:
-        resource = folders[0]
-    except IndexError:
-        items = self.girder_client.get(
-            '/item', parameters={'folderId': catalog['_id'],
-                                 'name': dataMap[0]['name']})
-        try:
-            resource = items[0]
-        except IndexError:
-            errormsg = 'Registration failed. Aborting!'
-            raise ValueError(errormsg)
+    if dataMap[0]['repository'].lower().startswith('http'):
+        url = urlparse(dataMap[0]['dataId'])
+        path = os.path.join(catalog_path, url.netloc, url.path[1:])
+    else:
+        path = os.path.join(catalog_path, dataMap[0]['name'])
+
+    resource = self.girder_client.get(
+        '/resource/lookup', parameters={'path': path})
+    if not resource:
+        errormsg = 'Registration of {} failed. Aborting!'.format(dataMap[0]['dataId'])
+        raise ValueError(errormsg)
 
     # Try to come up with a good name for the dataset
     long_name = resource['name']
     long_name = long_name.replace('-', ' ').replace('_', ' ')
     shortened_name = textwrap.shorten(text=long_name, width=30)
 
-    user = self.girder_client.get('/user/me')
     payload = {
         'authors': [],
         'title': 'A Tale for \"{}\"'.format(shortened_name),
