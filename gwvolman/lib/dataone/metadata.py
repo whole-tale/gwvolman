@@ -282,9 +282,9 @@ class DataONEMetadata(object):
         # If the Tale doesn't have an author, use the Tale creator
         if not len(manifest['author']):
             creator_elem = ET.SubElement(dataset_elem, 'creator')
-            first_name = manifest['createdBy']['givenName']
-            last_name = manifest['createdBy']['familyName']
-            contact_email = manifest['createdBy']['email']
+            first_name = manifest['creator']['givenName']
+            last_name = manifest['creator']['familyName']
+            contact_email = manifest['creator']['email']
             self.set_user_name(creator_elem, first_name, last_name, contact_email)
 
 
@@ -303,9 +303,9 @@ class DataONEMetadata(object):
         Add a dataset contact. This is set to the person publishing
         the Tale.
         """
-        first_name = manifest['createdBy']['givenName']
-        last_name = manifest['createdBy']['familyName']
-        contact_email = manifest['createdBy']['email']
+        first_name = manifest['creator']['givenName']
+        last_name = manifest['creator']['familyName']
+        contact_email = manifest['creator']['email']
         contact_elem = ET.SubElement(dataset_elem, 'contact')
         self.set_user_name(contact_elem, first_name, last_name)
         self.set_user_contact(contact_elem, user_id, contact_email)
