@@ -37,6 +37,7 @@ from .deployment_kubernetes import KubernetesDeployment
 
 class KubernetesTasks(TasksBase):
     def __init__(self):
+        kubernetes.config.load_incluster_config()
         self.deployment = KubernetesDeployment()
 
     def create_volume(self, ctx, instanceId: str):

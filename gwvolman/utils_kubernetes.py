@@ -6,8 +6,6 @@ import kubernetes
 import logging
 import time
 
-kubernetes.config.load_incluster_config()
-
 # Can't see an easy way to map these automatically
 _K8S_APIS={'v1': kubernetes.client.CoreV1Api(), 'apps/v1': kubernetes.client.AppsV1Api()}
 
