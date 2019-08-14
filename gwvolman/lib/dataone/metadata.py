@@ -273,7 +273,6 @@ class DataONEMetadata(object):
         dataset_elem = ET.SubElement(ns, 'dataset')
         ET.SubElement(dataset_elem, 'title').text = manifest['schema:name']
 
-
         """
         Create a `creator` section for each Tale author.
         """
@@ -293,14 +292,12 @@ class DataONEMetadata(object):
             contact_email = manifest['createdBy']['schema:email']
             self.set_user_name(creator_elem, first_name, last_name, contact_email)
 
-
         # Create a `description` field, but only if the Tale has a description.
         description = manifest['schema:description']
         if description is not str():
             abstract_elem = ET.SubElement(dataset_elem, 'abstract')
             ET.SubElement(abstract_elem, 'para').text = \
                 self._strip_html_tags(str(description))
-
 
         # Add a section for the license file
         self.create_intellectual_rights(dataset_elem, license_text)
@@ -335,7 +332,6 @@ class DataONEMetadata(object):
         self.add_object_record(dataset_elem, name, description,
                                environment_size, 'application/json')
 
-
         # Add the run-local.sh file
         description = file_descriptions[ExtraFileNames.run_local_file]
         self.add_object_record(dataset_elem, ExtraFileNames.run_local_file, description,
@@ -344,7 +340,6 @@ class DataONEMetadata(object):
         description = file_descriptions[ExtraFileNames.fetch_file]
         self.add_object_record(dataset_elem, ExtraFileNames.fetch_file, description,
                                fetch_size, 'text/plain')
-
 
         """
         Emulate the behavior of ElementTree.tostring in Python 3.6.0

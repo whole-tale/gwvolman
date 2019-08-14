@@ -19,9 +19,6 @@ from d1_common.types.exceptions import DataONEException, InvalidToken
 from d1_common.env import D1_ENV_DICT
 
 from .metadata import DataONEMetadata
-
-from .constants import DataONELocations
-
 from gwvolman.lib.publish_provider import PublishProvider
 
 
@@ -35,14 +32,14 @@ class DataONEPublishProvider(PublishProvider):
         """
         try:
             return MemberNodeClient_2_0(dataone_node,
-               **{
-                    "headers": {
-                        "Authorization": "Bearer " + dataone_auth_token,
-                        "Connection": "close"
-                    },
-                    "user_agent": "safari",
-                }
-            )
+                                        **{
+                                            "headers": {
+                                                "Authorization": "Bearer " + dataone_auth_token,
+                                                "Connection": "close"
+                                            },
+                                            "user_agent": "safari",
+                                        }
+                                        )
         except InvalidToken as e:
             logging.warning(e)
             raise ValueError('Invalid DataONE JWT token. Please refresh the token.')
