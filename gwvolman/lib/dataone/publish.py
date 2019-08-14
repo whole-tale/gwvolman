@@ -64,6 +64,10 @@ class DataONEPublishProvider(PublishProvider):
         step = 1
         steps = 100
 
+        # Files to ignore when uploading
+        ignore_files = ['tagmanifest-sha256.txt', 'tagmanifest-md5.txt',
+                        'manifest-sha256.txt', 'manifest-md5.txt',
+                        'bag-info.txt', 'bagit.txt']
         if job_manager:
             job_manager.updateProgress(
                 message='Connecting to {}'.format(dataone_node),
@@ -89,7 +93,7 @@ class DataONEPublishProvider(PublishProvider):
         step += 1
 
         # Export the tale to a temp directory
-        url = 'tale/{}/export'.format(tale_id)
+        url = 'tale/{}/export?taleFormat=bagit'.format(tale_id)
         stream = gc.sendRestRequest('get', url, stream=True, jsonResp=False)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
 
@@ -114,7 +118,7 @@ class DataONEPublishProvider(PublishProvider):
                 manifest = json.loads(data.decode('utf-8'))
 
             # Read the license text
-            license_path = '{}/LICENSE'.format(tale_id)
+            license_path = '{}/data/LICENSE'.format(tale_id)
             with zip.open(license_path) as f:
                 license_text = str(f.read().decode('utf-8'))
 
@@ -124,6 +128,20 @@ class DataONEPublishProvider(PublishProvider):
             with zip.open(environment_path) as f:
                 data = f.read()
                 environment_md5 = md5(data).hexdigest()
+
+            # Get the run-local.sh
+            run_local_path = '{}/run-local.sh'.format(tale_id)
+            run_local_size = zip.getinfo(run_local_path).file_size
+            with zip.open(run_local_path) as f:
+                data = f.read()
+                run_local_md5 = md5(data).hexdigest()
+
+            # Get the fetch.txt
+            fetch_path = '{}/fetch.txt'.format(tale_id)
+            fetch_size = zip.getinfo(fetch_path).file_size
+            with zip.open(fetch_path) as f:
+                data = f.read()
+                fetch_md5 = md5(data).hexdigest()
 
             if job_manager:
                 job_manager.updateProgress(
@@ -135,15 +153,21 @@ class DataONEPublishProvider(PublishProvider):
             eml_pid = self._generate_pid(client)
             eml_doc = metadata.create_eml_doc(
                 eml_pid, manifest, user_id, manifest_size,
-                environment_size, license_text)
+                environment_size, run_local_size, fetch_size,
+                license_text)
 
             # Keep track of uploaded objects in case we need to rollback
             uploaded_pids = []
             try:
                 for fpath in files:
                     with zip.open(fpath) as f:
+
                         relpath = fpath.replace(tale_id, "..")
                         fname = os.path.basename(fpath)
+
+                        # Skip over the files we want to ignore
+                        if fname in ignore_files:
+                            continue
 
                         if job_manager:
                             job_manager.updateProgress(
@@ -160,6 +184,10 @@ class DataONEPublishProvider(PublishProvider):
                             size, hash = manifest_size, manifest_md5
                         elif fname == 'environment.json':
                             size, hash = environment_size, environment_md5
+                        elif fname == 'run-local.sh':
+                            size, hash = run_local_size, run_local_md5
+                        elif fname == 'fetch.txt':
+                            size, hash = fetch_size, fetch_md5
                         else:
                             size, hash = self._get_manifest_file_info(
                                 manifest, relpath)

@@ -238,14 +238,20 @@ class DataONEMetadata(object):
         userid_elem.set('directory', self._get_directory(user_id))
 
     def create_eml_doc(self, eml_pid, manifest, user_id, manifest_size,
-                       environment_size, license_text):
+                       environment_size, run_local_size, fetch_size,
+                       license_text):
         """
-        Creates an initial EML record for the package based on a manifest.
+                Creates an initial EML record for the package based on a manifest.
         Individual objects will be added after-the-fact.
-
-        :param manifest: Tale manifest
-        :type manifest: dict
-        :return: etree object
+        :param eml_pid: The pid of the EML document
+        :param manifest: The manifest document
+        :param user_id: The ORCID of the publisher
+        :param manifest_size: The size of the manifest
+        :param environment_size: The size of the environment
+        :param run_local_size: The size of the run-local script
+        :param fetch_size: The size of the fetch file
+        :param license_text: The text of the license file
+        :return: ETree
         """
 
         # Create the namespace
@@ -328,6 +334,17 @@ class DataONEMetadata(object):
         description = file_descriptions[ExtraFileNames.environment_file]
         self.add_object_record(dataset_elem, name, description,
                                environment_size, 'application/json')
+
+
+        # Add the run-local.sh file
+        description = file_descriptions[ExtraFileNames.run_local_file]
+        self.add_object_record(dataset_elem, ExtraFileNames.run_local_file, description,
+                               run_local_size, 'application/octet-stream')
+        # Add the fetch.txt file
+        description = file_descriptions[ExtraFileNames.fetch_file]
+        self.add_object_record(dataset_elem, ExtraFileNames.fetch_file, description,
+                               fetch_size, 'text/plain')
+
 
         """
         Emulate the behavior of ElementTree.tostring in Python 3.6.0
