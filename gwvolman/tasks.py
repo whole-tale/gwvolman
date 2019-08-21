@@ -6,7 +6,6 @@ import socket
 import json
 import time
 import tempfile
-import textwrap
 import docker
 import subprocess
 from docker.errors import DockerException
@@ -500,7 +499,7 @@ def publish(self,
 
 @girder_job(title='Import Tale')
 @app.task(bind=True)
-def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
+def import_tale(self, lookup_kwargs, tale, spawn=True):
     """Create a Tale provided a url for an external data and an image Id.
 
     Currently, this task only handles importing raw data. In the future, it
@@ -559,28 +558,21 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
         errormsg = 'Registration of {} failed. Aborting!'.format(dataMap[0]['dataId'])
         raise ValueError(errormsg)
 
-    # Try to come up with a good name for the dataset
-    long_name = resource['name']
-    long_name = long_name.replace('-', ' ').replace('_', ' ')
-    shortened_name = textwrap.shorten(text=long_name, width=30)
-
-    payload = {
-        'authors': [],
-        'title': 'A Tale for \"{}\"'.format(shortened_name),
-        'dataSet': [
-            {
-                'mountPath': resource['name'],
-                'itemId': resource['_id'],
-                '_modelType': resource['_modelType']
-            }
-        ],
-        'public': False,
-        'published': False
-    }
-
-    # allow to override title, etc. MUST contain imageId
-    payload.update(tale_kwargs)
-    tale = self.girder_client.post('/tale', json=payload)
+    tale["dataSet"] = [
+        {
+            'mountPath': resource['name'],
+            'itemId': resource['_id'],
+            '_modelType': resource['_modelType']
+        }
+    ]
+    tale = self.girder_client.put(
+        '/tale/{_id}'.format(**tale),
+        json={
+            "dataSet": tale["dataSet"],
+            "imageId": str(tale["imageId"]),
+            "public": tale["public"],
+        }
+    )
 
     if spawn:
         self.job_manager.updateProgress(
