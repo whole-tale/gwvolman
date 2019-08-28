@@ -510,6 +510,18 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
     else:
         total = 3
 
+    if spawn:
+        try:
+            instance = self.girder_client.post(
+                '/instance', parameters={'taleId': tale['_id']})
+        except girder_client.HttpError as resp:
+            try:
+                message = json.loads(resp.responseText).get('message', '')
+            except json.JSONDecodeError:
+                message = str(resp)
+            errormsg = 'Unable to create instance. Server returned {}: {}'
+            errormsg = errormsg.format(resp.status, message)
+
     self.job_manager.updateProgress(
         message='Gathering basic info about the dataset', total=total,
         current=1)
@@ -577,18 +589,6 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
     if spawn:
         self.job_manager.updateProgress(
             message='Creating a Tale container', total=total, current=3)
-        try:
-            instance = self.girder_client.post(
-                '/instance', parameters={'taleId': tale['_id']})
-        except girder_client.HttpError as resp:
-            try:
-                message = json.loads(resp.responseText).get('message', '')
-            except json.JSONDecodeError:
-                message = str(resp)
-            errormsg = 'Unable to create instance. Server returned {}: {}'
-            errormsg = errormsg.format(resp.status, message)
-            raise ValueError(errormsg)
-
         while instance['status'] == InstanceStatus.LAUNCHING:
             # TODO: Timeout? Raise error?
             time.sleep(1)
