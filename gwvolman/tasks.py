@@ -26,6 +26,7 @@ from .utils import \
     _build_image, DEPLOYMENT
 
 from .lib.dataone.publish import DataONEPublishProvider
+from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus
@@ -476,33 +477,45 @@ def build_tale_image(task, tale_id, force=False):
 @girder_job(title='Publish Tale')
 @app.task(bind=True)
 def publish(self,
-            tale,
-            dataone_node,
-            dataone_auth_token,
-            coordinating_node,
-            user_id):
+            tale_id,
+            token,
+            repository=None,
+            draft=False):
     """
-    :param tale: The tale id
-    :param dataone_node: The DataONE member node endpoint
-    :param dataone_auth_token: The user's DataONE JWT
-    :param coordinating_node: URL to the coordinating node
-    :param user_id: The user's ID
-    :type tale: str
-    :type dataone_node: str
-    :type dataone_auth_token: str
-    :type coordinating_node: str
-    :type user_id: str
+    Publish a tale.
+
+    :param tale_id: The tale id
+    :param token: An access token for a given repository.
+    :param repository: Target repository.
+    :param draft: If True, don't mint DOI.
+    :type tale_id: str
+    :type token: obj
+    :type repository: str
+    :type draft: boolean
     """
 
-    provider = DataONEPublishProvider()
-    return provider.publish(
-                 tale,
-                 self.girder_client,
-                 dataone_node,
-                 dataone_auth_token,
-                 coordinating_node,
-                 self.job_manager
-    )
+    provider_name = token["provider"].lower()
+    if provider_name.startswith("dataone"):
+        provider = DataONEPublishProvider(
+            self.girder_client,
+            tale_id,
+            token,
+            draft=False,
+            job_manager=self.job_manager,
+            dataone_node=repository,
+        )
+    elif provider_name == "zenodo":
+        provider = ZenodoPublishProvider(
+            self.girder_client,
+            tale_id,
+            token,
+            draft=draft,
+            job_manager=self.job_manager
+        )
+    else:
+        raise ValueError("Unsupported publisher ({})".format(token["provider"]))
+
+    provider.publish()
 
 
 @girder_job(title='Import Tale')
