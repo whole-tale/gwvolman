@@ -208,7 +208,7 @@ def _get_container_config(gc, tale):
     return container_config
 
 
-def _launch_container(volumeName, nodeId, container_config):
+def _launch_container(volumeName, nodeId, container_config, tale_id='', instance_id=''):
 
     token = uuid.uuid4().hex
     # command
@@ -261,7 +261,9 @@ def _launch_container(volumeName, nodeId, container_config):
             'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
             'traefik.docker.network': DEPLOYMENT.traefik_network,
             'traefik.frontend.passHostHeader': 'true',
-            'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT
+            'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT,
+            'wholetale.instanceId': instance_id,
+            'wholetale.taleId': tale_id,
         },
         env=container_config.environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
@@ -319,7 +321,7 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
 
     # Job output must come from stdout/stderr
     for line in container.logs(stream=True):
-        print(line.decode('utf-8'))
+        print(line.decode('utf-8').strip())
 
     # Since detach=True, then we need to explicitly check for the
     # container exit code

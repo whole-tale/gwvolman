@@ -3,11 +3,9 @@ from datetime import datetime, timedelta
 import os
 import shutil
 import socket
-import stat
 import json
 import time
 import tempfile
-import textwrap
 import docker
 import subprocess
 from docker.errors import DockerException
@@ -37,6 +35,7 @@ LAUNCH_CONTAINER_STEP_TOTAL = 2
 UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
+
 
 @girder_job(title='Create Tale Data Volume')
 @app.task(bind=True)
@@ -186,7 +185,8 @@ def launch_container(self, payload):
     container_config = _get_container_config(self.girder_client, tale)
     service, attrs = _launch_container(
         payload['volumeName'], payload['nodeId'],
-        container_config=container_config)
+        container_config,
+        tale_id=tale['_id'], instance_id=payload['instanceId'])
 
     tic = time.time()
     timeout = 30.0
@@ -226,7 +226,7 @@ def update_container(task, instanceId, digest=None):
         return
 
     task.job_manager.updateProgress(
-        message='Restarting the Tale with a new image', 
+        message='Restarting the Tale with a new image',
         total=UPDATE_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
 
@@ -280,7 +280,7 @@ def update_container(task, instanceId, digest=None):
         raise RuntimeError('Tale update timed out')
 
     task.job_manager.updateProgress(
-        message='Tale restarted with the new image', 
+        message='Tale restarted with the new image',
         total=UPDATE_CONTAINER_STEP_TOTAL,
         current=UPDATE_CONTAINER_STEP_TOTAL)
 
@@ -351,10 +351,8 @@ def remove_volume(self, instanceId):
 @app.task(bind=True)
 def build_tale_image(task, tale_id, force=False):
     """
-    Build docker image from Tale workspace using repo2docker
-    and push to Whole Tale registry.
+    Build docker image from Tale workspace using repo2docker and push to Whole Tale registry.
     """
-
     logging.info('Building image for Tale %s', tale_id)
 
     task.job_manager.updateProgress(
@@ -501,7 +499,7 @@ def publish(self,
 
 @girder_job(title='Import Tale')
 @app.task(bind=True)
-def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
+def import_tale(self, lookup_kwargs, tale, spawn=True):
     """Create a Tale provided a url for an external data and an image Id.
 
     Currently, this task only handles importing raw data. In the future, it
@@ -511,6 +509,18 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
         total = 4
     else:
         total = 3
+
+    if spawn:
+        try:
+            instance = self.girder_client.post(
+                '/instance', parameters={'taleId': tale['_id']})
+        except girder_client.HttpError as resp:
+            try:
+                message = json.loads(resp.responseText).get('message', '')
+            except json.JSONDecodeError:
+                message = str(resp)
+            errormsg = 'Unable to create instance. Server returned {}: {}'
+            errormsg = errormsg.format(resp.status, message)
 
     self.job_manager.updateProgress(
         message='Gathering basic info about the dataset', total=total,
@@ -541,66 +551,44 @@ def import_tale(self, lookup_kwargs, tale_kwargs, spawn=True):
     self.girder_client.post(
         '/dataset/register', parameters={'dataMap': json.dumps(dataMap)})
 
-    # Get resulting folder/item by name
+    # Currently, we register resources in two different ways:
+    #  1. DOIs (coming from Globus, Dataverse, DataONE, etc) create a root
+    #     folder in the Catalog, that's named exactly the same as dataset.
+    #  2. HTTP(S) files are registered into Catalog using a nested structure
+    #     based on their url (see whole-tale/girder_wholetale#266)
+    #  Knowing that, let's try to find the newly registered data by path.
     catalog_path = '/collection/WholeTale Catalog/WholeTale Catalog'
-    catalog = self.girder_client.get(
-        '/resource/lookup', parameters={'path': catalog_path})
-    folders = self.girder_client.get(
-        '/folder', parameters={'name': dataMap[0]['name'],
-                               'parentId': catalog['_id'],
-                               'parentType': 'folder'}
+    if dataMap[0]['repository'].lower().startswith('http'):
+        url = urlparse(dataMap[0]['dataId'])
+        path = os.path.join(catalog_path, url.netloc, url.path[1:])
+    else:
+        path = os.path.join(catalog_path, dataMap[0]['name'])
+
+    resource = self.girder_client.get(
+        '/resource/lookup', parameters={'path': path})
+    if not resource:
+        errormsg = 'Registration of {} failed. Aborting!'.format(dataMap[0]['dataId'])
+        raise ValueError(errormsg)
+
+    tale["dataSet"] = [
+        {
+            'mountPath': resource['name'],
+            'itemId': resource['_id'],
+            '_modelType': resource['_modelType']
+        }
+    ]
+    tale = self.girder_client.put(
+        '/tale/{_id}'.format(**tale),
+        json={
+            "dataSet": tale["dataSet"],
+            "imageId": str(tale["imageId"]),
+            "public": tale["public"],
+        }
     )
-    try:
-        resource = folders[0]
-    except IndexError:
-        items = self.girder_client.get(
-            '/item', parameters={'folderId': catalog['_id'],
-                                 'name': dataMap[0]['name']})
-        try:
-            resource = items[0]
-        except IndexError:
-            errormsg = 'Registration failed. Aborting!'
-            raise ValueError(errormsg)
-
-    # Try to come up with a good name for the dataset
-    long_name = resource['name']
-    long_name = long_name.replace('-', ' ').replace('_', ' ')
-    shortened_name = textwrap.shorten(text=long_name, width=30)
-
-    user = self.girder_client.get('/user/me')
-    payload = {
-        'authors': [],
-        'title': 'A Tale for \"{}\"'.format(shortened_name),
-        'dataSet': [
-            {
-                'mountPath': resource['name'],
-                'itemId': resource['_id'],
-                '_modelType': resource['_modelType']
-            }
-        ],
-        'public': False,
-        'published': False
-    }
-
-    # allow to override title, etc. MUST contain imageId
-    payload.update(tale_kwargs)
-    tale = self.girder_client.post('/tale', json=payload)
 
     if spawn:
         self.job_manager.updateProgress(
             message='Creating a Tale container', total=total, current=3)
-        try:
-            instance = self.girder_client.post(
-                '/instance', parameters={'taleId': tale['_id']})
-        except girder_client.HttpError as resp:
-            try:
-                message = json.loads(resp.responseText).get('message', '')
-            except json.JSONDecodeError:
-                message = str(resp)
-            errormsg = 'Unable to create instance. Server returned {}: {}'
-            errormsg = errormsg.format(resp.status, message)
-            raise ValueError(errormsg)
-
         while instance['status'] == InstanceStatus.LAUNCHING:
             # TODO: Timeout? Raise error?
             time.sleep(1)

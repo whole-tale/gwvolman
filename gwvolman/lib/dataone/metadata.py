@@ -238,14 +238,20 @@ class DataONEMetadata(object):
         userid_elem.set('directory', self._get_directory(user_id))
 
     def create_eml_doc(self, eml_pid, manifest, user_id, manifest_size,
-                       environment_size, license_text):
+                       environment_size, run_local_size, fetch_size,
+                       license_text):
         """
-        Creates an initial EML record for the package based on a manifest.
+                Creates an initial EML record for the package based on a manifest.
         Individual objects will be added after-the-fact.
-
-        :param manifest: Tale manifest
-        :type manifest: dict
-        :return: etree object
+        :param eml_pid: The pid of the EML document
+        :param manifest: The manifest document
+        :param user_id: The ORCID of the publisher
+        :param manifest_size: The size of the manifest
+        :param environment_size: The size of the environment
+        :param run_local_size: The size of the run-local script
+        :param fetch_size: The size of the fetch file
+        :param license_text: The text of the license file
+        :return: ETree
         """
 
         # Create the namespace
@@ -267,7 +273,6 @@ class DataONEMetadata(object):
         dataset_elem = ET.SubElement(ns, 'dataset')
         ET.SubElement(dataset_elem, 'title').text = manifest['schema:name']
 
-
         """
         Create a `creator` section for each Tale author.
         """
@@ -287,14 +292,12 @@ class DataONEMetadata(object):
             contact_email = manifest['createdBy']['schema:email']
             self.set_user_name(creator_elem, first_name, last_name, contact_email)
 
-
         # Create a `description` field, but only if the Tale has a description.
         description = manifest['schema:description']
         if description is not str():
             abstract_elem = ET.SubElement(dataset_elem, 'abstract')
             ET.SubElement(abstract_elem, 'para').text = \
                 self._strip_html_tags(str(description))
-
 
         # Add a section for the license file
         self.create_intellectual_rights(dataset_elem, license_text)
@@ -328,6 +331,15 @@ class DataONEMetadata(object):
         description = file_descriptions[ExtraFileNames.environment_file]
         self.add_object_record(dataset_elem, name, description,
                                environment_size, 'application/json')
+
+        # Add the run-local.sh file
+        description = file_descriptions[ExtraFileNames.run_local_file]
+        self.add_object_record(dataset_elem, ExtraFileNames.run_local_file, description,
+                               run_local_size, 'application/octet-stream')
+        # Add the fetch.txt file
+        description = file_descriptions[ExtraFileNames.fetch_file]
+        self.add_object_record(dataset_elem, ExtraFileNames.fetch_file, description,
+                               fetch_size, 'text/plain')
 
         """
         Emulate the behavior of ElementTree.tostring in Python 3.6.0
