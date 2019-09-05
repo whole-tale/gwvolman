@@ -31,15 +31,16 @@ class DataONEPublishProvider(PublishProvider):
         Close the connection between uploads otherwise some uploads will fail.
         """
         try:
-            return MemberNodeClient_2_0(dataone_node,
-                                        **{
-                                            "headers": {
-                                                "Authorization": "Bearer " + dataone_auth_token,
-                                                "Connection": "close"
-                                            },
-                                            "user_agent": "safari",
-                                        }
-                                        )
+            return MemberNodeClient_2_0(
+                dataone_node,
+                **{
+                    "headers": {
+                        "Authorization": "Bearer " + dataone_auth_token,
+                        "Connection": "close",
+                    },
+                    "user_agent": "safari",
+                }
+            )
         except InvalidToken as e:
             logging.warning(e)
             raise ValueError('Invalid DataONE JWT token. Please refresh the token.')
