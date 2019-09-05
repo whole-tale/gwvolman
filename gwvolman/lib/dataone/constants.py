@@ -15,15 +15,16 @@ class DataONELocations:
 
 class ExtraFileNames:
     """
-    When creating data packages we'll have to create additional files, such as
-    the zipped recipe, the tale.yml file, the metadata document, and possibly
-    more. Keep their names store here so that they can easily be referenced and
-    changed in a single place.
+    There are a couple of extra files that we generate when creating
+    the bag that gets uploaded to DataONE. Keep track of their filenames
+    here.
     """
     # Name for the tale config file
     manifest_file = 'manifest.json'
     license_filename = 'LICENSE'
     environment_file = 'environment.json'
+    fetch_file = 'fetch.txt'
+    run_local_file = 'run-local.sh'
 
 
 """
@@ -37,5 +38,11 @@ file_descriptions = {
         'A configuration file, holding information that is needed to '
         'reproduce the compute environment.',
     ExtraFileNames.license_filename:
-        'The package\'s licensing information.'
+        'The package\'s licensing information.',
+    ExtraFileNames.fetch_file:
+        'Contains references to external data that needs to be downloaded '
+        'before running the Tale',
+    ExtraFileNames.run_local_file:
+        'A bash script that downloads the neccessary external data and then runs '
+        'the Tale.'
 }
