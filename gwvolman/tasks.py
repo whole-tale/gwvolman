@@ -28,7 +28,7 @@ from .utils import \
 from .lib.dataone.publish import DataONEPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -360,6 +360,11 @@ def build_tale_image(task, tale_id, force=False):
         current=1, forceFlush=True)
 
     tale = task.girder_client.get('/tale/%s' % tale_id)
+    while tale["status"] != TaleStatus.READY:
+        time.sleep(2)
+        tale = self.girder_client.get('/tale/{_id}'.format(**tale))
+        if tale["status"] == TaleStatus.ERROR:
+            raise ValueError("Cannot build image for a Tale in error state.")
 
     last_build_time = -1
     try:
