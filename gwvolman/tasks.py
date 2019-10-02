@@ -359,12 +359,15 @@ def build_tale_image(task, tale_id, force=False):
         message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=1, forceFlush=True)
 
+    tic = time.time()
     tale = task.girder_client.get('/tale/%s' % tale_id)
     while tale["status"] != TaleStatus.READY:
         time.sleep(2)
         tale = task.girder_client.get('/tale/{_id}'.format(**tale))
         if tale["status"] == TaleStatus.ERROR:
             raise ValueError("Cannot build image for a Tale in error state.")
+        if time.time() - tic > 5 * 60.0:
+            raise ValueError("Cannot build image. Tale preparing for more than 5 minutes.")
 
     last_build_time = -1
     try:
