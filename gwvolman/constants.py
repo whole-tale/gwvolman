@@ -25,3 +25,8 @@ class InstanceStatus(object):
     LAUNCHING = 0
     RUNNING = 1
     ERROR = 2
+
+class TaleStatus(object):
+    PREPARING = 0
+    READY = 1
+    ERROR = 2

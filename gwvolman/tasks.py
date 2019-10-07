@@ -28,7 +28,7 @@ from .utils import \
 from .lib.dataone.publish import DataONEPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -359,7 +359,15 @@ def build_tale_image(task, tale_id, force=False):
         message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=1, forceFlush=True)
 
+    tic = time.time()
     tale = task.girder_client.get('/tale/%s' % tale_id)
+    while tale["status"] != TaleStatus.READY:
+        time.sleep(2)
+        tale = task.girder_client.get('/tale/{_id}'.format(**tale))
+        if tale["status"] == TaleStatus.ERROR:
+            raise ValueError("Cannot build image for a Tale in error state.")
+        if time.time() - tic > 5 * 60.0:
+            raise ValueError("Cannot build image. Tale preparing for more than 5 minutes.")
 
     last_build_time = -1
     try:
@@ -522,6 +530,16 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
             errormsg = 'Unable to create instance. Server returned {}: {}'
             errormsg = errormsg.format(resp.status, message)
 
+    def set_tale_error_status():
+        self.girder_client.put(
+            "/tale/{_id}".format(**tale),
+            json={
+                "status": TaleStatus.ERROR,
+                "imageId": str(tale["imageId"]),
+                "public": tale["public"],
+            }
+        )
+
     self.job_manager.updateProgress(
         message='Gathering basic info about the dataset', total=total,
         current=1)
@@ -538,11 +556,13 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
             message = str(resp)
         errormsg = 'Unable to register \"{}\". Server returned {}: {}'
         errormsg = errormsg.format(dataId[0], resp.status, message)
+        set_tale_error_status()
         raise ValueError(errormsg)
 
     if not dataMap:
         errormsg = 'Unable to register \"{}\". Source is not supported'
         errormsg = errormsg.format(dataId[0])
+        set_tale_error_status()
         raise ValueError(errormsg)
 
     self.job_manager.updateProgress(
@@ -568,6 +588,7 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
         '/resource/lookup', parameters={'path': path})
     if not resource:
         errormsg = 'Registration of {} failed. Aborting!'.format(dataMap[0]['dataId'])
+        set_tale_error_status()
         raise ValueError(errormsg)
 
     tale["dataSet"] = [
