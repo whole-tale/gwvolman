@@ -12,4 +12,4 @@ jwt==0.5.4
 dataone.common==3.2.0
 dataone.libclient==3.2.0
 dataone.cli==3.2.0
-git+https://github.com/whole-tale/girderfs@v0.8rc1#egg=girderfs
+git+https://github.com/whole-tale/girderfs@v0.8rc2#egg=girderfs
