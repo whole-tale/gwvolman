@@ -604,6 +604,7 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
             "dataSet": tale["dataSet"],
             "imageId": str(tale["imageId"]),
             "public": tale["public"],
+            "status": TaleStatus.READY,
         }
     )
 
