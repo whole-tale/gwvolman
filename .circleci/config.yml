@@ -27,8 +27,9 @@ jobs: # A basic unit of work in a run
           command: |
             pipenv run pip install -e .
             pipenv run pytest --cov=gwvolman .
-      - store_test_results: # Upload test results for display in Test Summary: https://circleci.com/docs/2.0/collect-test-data/
-          path: test-results
-      - store_artifacts: # Upload test summary for display in Artifacts: https://circleci.com/docs/2.0/artifacts/
-          path: test-results
-          destination: tr1
+      - run:
+          name: Display coverage reports
+          command: pipenv run coverage report
+      - run:
+          name: Uploading Coverage Results
+          command: pipenv run codecov

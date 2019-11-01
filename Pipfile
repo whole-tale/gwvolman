@@ -9,7 +9,7 @@ pytest-cov = "*"
 mock = "*"
 httmock = "*"
 "flake8" = "*"
-
+codecov = "*"
 
 [packages]
 celery = "==4.2.1"
