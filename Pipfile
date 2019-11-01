@@ -9,7 +9,7 @@ pytest-cov = "*"
 mock = "*"
 httmock = "*"
 "flake8" = "*"
-
+codecov = "*"
 
 [packages]
 celery = "==4.2.1"
@@ -21,7 +21,7 @@ redis = "==2.10.6"
 pycurl = "*"
 requests = "*"
 jwt = "==0.5.4"
-girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "v0.8"}
+girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "master"}
 pyOpenSSL = "==18.0.0"
 PyYAML = "*"
 "dataone.common" = "==3.2.0"

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "89cc47145d57a00593a3283f836057a65c51df135115910c6fd0cc1aefd3fb17"
+            "sha256": "1174183564d9c0207f7fd9b6ba2c1194d9cc062eea29d901aa975a3fcda7af17"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -199,7 +199,7 @@
         },
         "girderfs": {
             "git": "https://github.com/whole-tale/girderfs",
-            "ref": "8e2eb08b76046af99f6ba9ccd184e91a279ff108"
+            "ref": "c6cdaad4d3af85b3315fa170072eb33528a44a6d"
         },
         "idna": {
             "hashes": [
@@ -480,6 +480,14 @@
                 "sha256:fc323ffcaeaed0e0a02bf4d117757b98aed530d9ed4531e3e15460124c106691"
             ],
             "version": "==3.0.4"
+        },
+        "codecov": {
+            "hashes": [
+                "sha256:8ed8b7c6791010d359baed66f84f061bba5bd41174bf324c31311e8737602788",
+                "sha256:ae00d68e18d8a20e9c3288ba3875ae03db3a8e892115bf9b83ef20507732bed4"
+            ],
+            "index": "pypi",
+            "version": "==2.0.15"
         },
         "coverage": {
             "hashes": [
