@@ -1,0 +1,32 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+pytest = "*"
+pytest-cov = "*"
+mock = "*"
+httmock = "*"
+"flake8" = "*"
+
+
+[packages]
+celery = "==4.2.1"
+kombu = "==4.2.2post1"
+fusepy = "==3.0.1"
+girder-client = "==2.4.0"
+girder-worker = "==0.5.0"
+redis = "==2.10.6"
+pycurl = "*"
+requests = "*"
+jwt = "==0.5.4"
+girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "v0.8"}
+pyOpenSSL = "==18.0.0"
+PyYAML = "*"
+"dataone.common" = "==3.2.0"
+"dataone.libclient" = "==3.2.0"
+"dataone.cli" = "==3.2.0"
+
+[requires]
+python_version = "3.6"
