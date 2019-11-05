@@ -24,13 +24,7 @@ from gwvolman.lib.publish_provider import PublishProvider
 
 class DataONEPublishProvider(PublishProvider):
     def __init__(
-        self,
-        gc,
-        tale_id,
-        token,
-        draft=False,
-        job_manager=None,
-        dataone_node=None,
+        self, gc, tale_id, token, draft=False, job_manager=None, dataone_node=None
     ):
         """
         Initiliaze DataONE Publish Provider.
@@ -240,11 +234,6 @@ class DataONEPublishProvider(PublishProvider):
                         )
                         uploaded_pids.append(file_pid)
 
-                # Update the tale now that it has been published
-                tale = self.gc.get("tale/{}/".format(self.tale["_id"]))
-                if "publishInfo" not in tale:
-                    tale["publishInfo"] = []
-
                 self.job_manager.updateProgress(
                     message="Uploading EML metadata record",
                     total=100,
@@ -277,6 +266,10 @@ class DataONEPublishProvider(PublishProvider):
                 )
 
                 uploaded_pids.append(eml_pid)
+
+                # Update the tale now that it has been published
+                if "publishInfo" not in self.tale:
+                    self.tale["publishInfo"] = []
 
                 self.job_manager.updateProgress(
                     message="Uploading resource map",
@@ -314,7 +307,7 @@ class DataONEPublishProvider(PublishProvider):
                     current=100,
                 )
 
-                tale["publishInfo"].append(
+                self.tale["publishInfo"].append(
                     {
                         "pid": res_pid,
                         "uri": package_url,
@@ -322,7 +315,7 @@ class DataONEPublishProvider(PublishProvider):
                     }
                 )
                 try:
-                    self.gc.put("tale/{}".format(tale["_id"]), json=tale)
+                    self.gc.put("tale/{}".format(self.tale["_id"]), json=self.tale)
                 except Exception as e:
                     logging.warning("Error updating Tale {}".format(str(e)))
                     raise ValueError("Error updating Tale {}".format(str(e)))

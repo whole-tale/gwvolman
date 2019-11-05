@@ -1,12 +1,15 @@
 import copy
-import pytest
-import mock
-import httmock
-
+from girder_client import GirderClient
 import girder_worker
+import httmock
+import jwt
+import mock
+import os
+import uuid
+import pytest
+
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
-from girder_client import GirderClient
 
 
 TALE = {
@@ -79,11 +82,6 @@ MANIFEST = {
         }
     ],
     "aggregates": [
-        {"uri": "../workspace/.ipynb_checkpoints/wt_quickstart-checkpoint.ipynb"},
-        {"uri": "../workspace/.ipynb_checkpoints/README-checkpoint.md"},
-        {"uri": "../workspace/.ipynb_checkpoints/apt-checkpoint.txt"},
-        {"uri": "../workspace/.ipynb_checkpoints/requirements-checkpoint.txt"},
-        {"uri": "../workspace/.ipynb_checkpoints/postBuild-checkpoint"},
         {"uri": "../workspace/postBuild"},
         {"uri": "../workspace/requirements.txt"},
         {"uri": "../workspace/wt_quickstart.ipynb"},
@@ -258,6 +256,62 @@ def mock_publish_deposit_ok(url, request):
 
 @httmock.urlmatch(
     scheme="https",
+    netloc="^dev.nceas.ucsb.edu$",
+    path="^/knb/d1/mn/v2/generate$",
+    method="POST",
+)
+def mock_generate_dataone_ok(url, request):
+    # import pudb; pudb.set_trace()
+    response = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<identifier '
+        'xmlns="http://ns.dataone.org/service/types/v1">{}</identifier>\n'
+    )
+    if request.body.fields["scheme"] == b"DOI":
+        content = response.format("doi:10.5072/FK26T0RF9D")
+    elif request.body.fields["scheme"] == b"UUID":
+        content = response.format("urn:uuid:{}".format(uuid.uuid1()))
+    return httmock.response(
+        status_code=200,
+        content=content.encode(),
+        headers={"Connection": "Close", "Content-Type": "text/xml"},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^dev.nceas.ucsb.edu$",
+    path="^/knb/d1/mn/v2/object$",
+    method="POST",
+)
+def mock_object_dataone_ok(url, request):
+    response = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<identifier '
+        'xmlns="http://ns.dataone.org/service/types/v1">{}</identifier>\n'
+    )
+
+    try:
+        pid = request.body.fields["pid"].decode()
+        content = response.format(pid)
+    except KeyError:
+        raise
+
+    return httmock.response(
+        status_code=200,
+        content=content.encode(),
+        headers={"Connection": "Close", "Content-Type": "text/xml"},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
     netloc="^sandbox.zenodo.org$",
     path="^/api/deposit/depositions/123$",
     method="DELETE",
@@ -283,6 +337,12 @@ def mock_tale_update(path, json=None):
     assert publish_info["uri"] == "http://dx.doi.org/10.123/123"
 
 
+def mock_tale_update_dataone(path, json=None):
+    assert path == "tale/" + TALE["_id"]
+    assert len(json["publishInfo"]) == 1
+    # TODO Check something
+
+
 def mock_tale_update_draft(path, json=None):
     assert path == "tale/" + TALE["_id"]
     assert len(json["publishInfo"]) == 1
@@ -292,7 +352,7 @@ def mock_tale_update_draft(path, json=None):
 
 
 def mock_gc_get(path):
-    if path == "/tale/123":
+    if path in ("/tale/123", "tale/5cfd57fca18691e5d1feeda6"):
         return copy.deepcopy(TALE)
     elif path == "/tale/123/manifest":
         return copy.deepcopy(MANIFEST)
@@ -300,11 +360,24 @@ def mock_gc_get(path):
         raise RuntimeError
 
 
+def stream_response(chunk_size=65536):
+    test_path = os.path.dirname(__file__)
+    with open("{}/data/{}.zip".format(test_path, TALE["_id"]), "rb") as fp:
+        while True:
+            data = fp.read(chunk_size)
+            if not data:
+                break
+            yield data
+
+
 @pytest.mark.celery(result_backend="rpc")
 def test_zenodo_publish():
     mock_gc = mock.MagicMock(spec=GirderClient)
+    mock_req = mock.MagicMock()
+    mock_req.iter_content = stream_response
     mock_gc.get = mock_gc_get
     mock_gc.put = mock_tale_update
+    mock_gc.sendRestRequest.return_value = mock_req
     publish.girder_client = mock_gc
     publish.job_manager = NullManager()
     girder_worker.task.Task.canceled = mock.PropertyMock(return_value=False)
@@ -364,3 +437,44 @@ def test_zenodo_publish():
         with pytest.raises(ValueError) as error:
             publish("123", token, repository="sandbox.zenodo.org")
             assert error.message.startswith("Error updating Tale")
+
+
+@pytest.mark.celery(result_backend="rpc")
+def test_dataone_publish():
+    mock_gc = mock.MagicMock(spec=GirderClient)
+    mock_req = mock.MagicMock()
+    mock_req.iter_content = stream_response
+    mock_gc.get = mock_gc_get
+    mock_gc.put = mock_tale_update_dataone
+    mock_gc.sendRestRequest.return_value = mock_req
+    publish.girder_client = mock_gc
+    publish.job_manager = NullManager()
+    girder_worker.task.Task.canceled = mock.PropertyMock(return_value=False)
+
+    token = {
+        "provider": "dataonestage2",
+        "access_token": "jwt_token",
+        "resource_server": "cn-stage-2.test.dataone.org",
+    }
+
+    with httmock.HTTMock(
+        mock_generate_dataone_ok, mock_object_dataone_ok, mock_other_request
+    ):
+        with pytest.raises(jwt.exceptions.DecodeError) as error:
+            publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
+            assert error.message.startswith("Not enough segments")
+
+        token["access_token"] = (
+            "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
+            "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
+            "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
+            "iOjE1NzI5NTc1ODAsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
+            "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTU3Mjg5Mjc4MH0.oNGDWmdePMYPUzt1Inhu1r1p95w"
+            "0kld6C24nohtgOyRROYtihdnIE0OcoxXd7KXdiVRdXLL34-qmiQTeRMPJEgMDtPNj6JUrP6yXP8Y"
+            "LG77iOGrSnKFRK8vJenc7-d8vJCqzebD8Xu6_pslw0GGiRMxfISa_UdGEYp0xyRgAIQmMr7q3H-T"
+            "K1P2KHb3M4RCWb5Ubv1XsTRJ5gXsLLu0WvBfXFu-EKAka7IO6uTAK1RZLnJqrotvCCT4lL6GyPPY"
+            "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
+            "3gJtWNeGCDw"
+        )
+
+        publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")

@@ -1,5 +1,4 @@
 import pytest
-import docker
 import mock
 
 import girder_worker
