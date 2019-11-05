@@ -23,7 +23,7 @@ setup(
         'girder-client',
         'girder-worker',
         'docker>=2.3.0',
-        'requests'
+        'requests',
     ],
     packages=find_packages(),
     zip_safe=False
