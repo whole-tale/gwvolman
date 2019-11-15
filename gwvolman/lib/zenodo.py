@@ -87,6 +87,8 @@ class ZenodoPublishProvider(PublishProvider):
                     deposition["id"]
                 )
                 msg += " Server returned: " + str(exc)
+                if r.status_code > 399 and r.status_code < 500:
+                    msg += "\n" + json.dumps(r.json(), sort_keys=True, indent=4) + "\n"
                 logging.warning(msg)
                 raise ValueError(msg)
             logging.debug(
@@ -147,6 +149,8 @@ class ZenodoPublishProvider(PublishProvider):
             r.raise_for_status()
         except requests.HTTPError as exc:
             msg = "Failed to create a deposition. Server returned: " + str(exc)
+            if r.status_code > 399 and r.status_code < 500:
+                msg += "\n" + json.dumps(r.json(), sort_keys=True, indent=4) + "\n"
             logging.warning(msg)
             raise ValueError(msg)
         logging.debug("[zenodo:create_deposition] deposition = {}".format(r.json()))
