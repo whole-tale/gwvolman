@@ -2,6 +2,7 @@ import copy
 from girder_client import GirderClient
 import girder_worker
 import httmock
+import io
 import jwt
 import mock
 import os
@@ -261,7 +262,6 @@ def mock_publish_deposit_ok(url, request):
     method="POST",
 )
 def mock_generate_dataone_ok(url, request):
-    # import pudb; pudb.set_trace()
     response = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<identifier '
         'xmlns="http://ns.dataone.org/service/types/v1">{}</identifier>\n'
@@ -370,6 +370,43 @@ def stream_response(chunk_size=65536):
             yield data
 
 
+def fake_urlopen(req):
+    return io.BytesIO(
+        b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
+<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
+    <objectFormat>
+        <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>
+        <formatName>Ecological Metadata Language, version 2.0.0</formatName>
+        <formatType>METADATA</formatType>
+        <mediaType name="text/xml"/>
+        <extension>xml</extension>
+    </objectFormat>
+    <objectFormat>
+        <formatId>text/plain</formatId>
+        <formatName>Plain Text</formatName>
+        <formatType>DATA</formatType>
+        <mediaType name="text/plain"/>
+        <extension>txt</extension>
+    </objectFormat>
+    <objectFormat>
+        <formatId>image/png</formatId>
+        <formatName>Portable Network Graphics</formatName>
+        <formatType>DATA</formatType>
+        <mediaType name="image/png"/>
+        <extension>png</extension>
+    </objectFormat>
+    <objectFormat>
+        <formatId>application/octet-stream</formatId>
+        <formatName>Octet Stream</formatName>
+        <formatType>DATA</formatType>
+        <mediaType name="application/octet-stream"/>
+        <extension>data</extension>
+    </objectFormat>
+</ns3:objectFormatList>
+"""
+    )
+
+
 @pytest.mark.celery(result_backend="rpc")
 def test_zenodo_publish():
     mock_gc = mock.MagicMock(spec=GirderClient)
@@ -440,6 +477,7 @@ def test_zenodo_publish():
 
 
 @pytest.mark.celery(result_backend="rpc")
+@mock.patch("gwvolman.lib.dataone.metadata.urlopen", fake_urlopen)
 def test_dataone_publish():
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_req = mock.MagicMock()
