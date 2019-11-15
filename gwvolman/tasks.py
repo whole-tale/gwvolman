@@ -568,8 +568,13 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
     self.job_manager.updateProgress(
         message='Registering the dataset in Whole Tale', total=total,
         current=2)
+    parameters = {'dataMap': json.dumps(dataMap)}
+    try:
+        parameters['base_url'] = lookup_kwargs.pop('base_url')
+    except KeyError:
+        pass
     self.girder_client.post(
-        '/dataset/register', parameters={'dataMap': json.dumps(dataMap)})
+        '/dataset/register', parameters=parameters)
 
     # Currently, we register resources in two different ways:
     #  1. DOIs (coming from Globus, Dataverse, DataONE, etc) create a root
