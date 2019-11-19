@@ -3,6 +3,7 @@ from girder_client import GirderClient
 import girder_worker
 import httmock
 import io
+import json
 import jwt
 import mock
 import os
@@ -153,6 +154,57 @@ def mock_create_deposit_ok(url, request):
         content={
             "id": 123,
             "links": {"self": "https://sandbox.zenodo.org/api/records/123"},
+            "metadata": {},
+        },
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/123$",
+    method="PUT",
+)
+def mock_update_deposit_ok(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    req_data = json.loads(request.body)
+    assert req_data["metadata"]["notes"].startswith("Run this ")
+    return httmock.response(
+        status_code=200,
+        content={
+            "id": 123,
+            "links": {"self": "https://sandbox.zenodo.org/api/records/123"},
+            "metadata": req_data["metadata"],
+        },
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/123$",
+    method="PUT",
+)
+def mock_update_deposit_fail(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    req_data = json.loads(request.body)
+    assert req_data["metadata"]["notes"].startswith("Run this ")
+    return httmock.response(
+        status_code=400,
+        content={
+            "message": "Validation error",
+            "status": 400,
+            "errors": [{"code": 10, "message": "Not a valid choice", "field": "notes"}],
         },
         headers={},
         reason=None,
@@ -172,15 +224,15 @@ def mock_create_deposit_fail(url, request):
     assert request.headers["Authorization"] == "Bearer zenodo_api_key"
     return httmock.response(
         status_code=400,
-        content=None,
-        headers={},
-        reason={
+        content={
             "message": "Validation error",
             "status": 400,
             "errors": [
                 {"code": 10, "message": "Not a valid choice", "field": "access_right"}
             ],
         },
+        headers={},
+        reason=None,
         elapsed=5,
         request=request,
         stream=False,
@@ -195,12 +247,12 @@ def mock_create_deposit_fail(url, request):
 )
 def mock_deposit_files_ok(url, request):
     assert request.headers["Authorization"] == "Bearer zenodo_api_key"
-    assert request.original.data == {"filename": "{}.zip".format(TALE["_id"])}
+    assert request.original.data == {"name": "{}.zip".format(TALE["_id"])}
     return httmock.response(
         status_code=201,
         content={
             "id": 1,
-            "filename": "{}.zip".format(TALE["_id"]),
+            "name": "{}.zip".format(TALE["_id"]),
             "filesize": 300,
             "checksum": "abcd",
         },
@@ -220,12 +272,12 @@ def mock_deposit_files_ok(url, request):
 )
 def mock_deposit_files_fail(url, request):
     assert request.headers["Authorization"] == "Bearer zenodo_api_key"
-    assert request.original.data == {"filename": "{}.zip".format(TALE["_id"])}
+    assert request.original.data == {"name": "{}.zip".format(TALE["_id"])}
     return httmock.response(
         status_code=404,
-        content=None,
+        content={"message": "Deposition not found", "status": 404},
         headers={},
-        reason={"message": "Deposition not found", "status": 404},
+        reason=None,
         elapsed=5,
         request=request,
         stream=False,
@@ -434,10 +486,22 @@ def test_zenodo_publish():
     ):
         with pytest.raises(ValueError) as error:
             publish("123", token, repository="sandbox.zenodo.org")
-            assert error.message.startswith("Failed to create a deposition.")
+
+        assert error.match("Failed to create a deposition.")
 
     with httmock.HTTMock(
         mock_create_deposit_ok,
+        mock_update_deposit_fail,
+        mock_delete_deposition,
+        mock_other_request,
+    ):
+        with pytest.raises(ValueError) as error:
+            publish("123", token, repository="sandbox.zenodo.org")
+        assert error.match("Failed to update the deposition")
+
+    with httmock.HTTMock(
+        mock_create_deposit_ok,
+        mock_update_deposit_ok,
         mock_deposit_files_fail,
         mock_publish_deposit_ok,
         mock_delete_deposition,
@@ -445,10 +509,11 @@ def test_zenodo_publish():
     ):
         with pytest.raises(ValueError) as error:
             publish("123", token, repository="sandbox.zenodo.org")
-            assert error.message.startswith("Failed to upload to a deposition")
+        assert error.match("Failed to upload to a deposition")
 
     with httmock.HTTMock(
         mock_create_deposit_ok,
+        mock_update_deposit_ok,
         mock_deposit_files_ok,
         mock_publish_deposit_ok,
         mock_other_request,
@@ -458,6 +523,7 @@ def test_zenodo_publish():
     mock_gc.put = mock_tale_update_draft
     with httmock.HTTMock(
         mock_create_deposit_ok,
+        mock_update_deposit_ok,
         mock_deposit_files_ok,
         mock_publish_deposit_ok,
         mock_other_request,
@@ -467,13 +533,14 @@ def test_zenodo_publish():
     mock_gc.put = lambda: (_ for _ in ()).throw(Exception("Girder Died"))
     with httmock.HTTMock(
         mock_create_deposit_ok,
+        mock_update_deposit_ok,
         mock_deposit_files_ok,
         mock_publish_deposit_ok,
         mock_other_request,
     ):
         with pytest.raises(ValueError) as error:
             publish("123", token, repository="sandbox.zenodo.org")
-            assert error.message.startswith("Error updating Tale")
+        assert error.match("Error updating Tale")
 
 
 @pytest.mark.celery(result_backend="rpc")

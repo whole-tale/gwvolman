@@ -5,6 +5,7 @@ import json
 import logging
 import requests
 import tempfile
+from urllib.parse import urlencode
 
 from markdown import Markdown
 from lxml.html.clean import Cleaner
@@ -76,7 +77,7 @@ class ZenodoPublishProvider(PublishProvider):
             r = self.request(
                 "/api/deposit/depositions/{}/files".format(deposition["id"]),
                 method="POST",
-                data={"filename": "{}.zip".format(self.tale["_id"])},
+                data={"name": "{}.zip".format(self.tale["_id"])},
                 files={"file": tmp},
             )
 
@@ -99,6 +100,11 @@ class ZenodoPublishProvider(PublishProvider):
 
     def get_tale_metadata(self):
         """Convert the Tale metadata to a Zenodo metadata."""
+
+        keywords = {"Tale"}
+        if self.manifest.get("schema:category"):
+            keywords.add(self.manifest["schema:category"].title())
+
         return {
             "metadata": {
                 "upload_type": "publication",
@@ -116,6 +122,7 @@ class ZenodoPublishProvider(PublishProvider):
                 "description": self._render_description(
                     self.manifest["schema:description"]
                 ),
+                "keywords": list(keywords),
                 "access_right": "open",
                 "license": self.tale["licenseSPDX"].lower(),
                 "prereserve_doi": True,
@@ -166,6 +173,27 @@ class ZenodoPublishProvider(PublishProvider):
         logging.debug("[zenodo:publish_deposition] deposition = {}".format(r.json()))
         return r.json()
 
+    def update_deposition(self, deposition):
+        """Update deposition, assumes that metadata is changed."""
+        r = self.request(
+            "/api/deposit/depositions/{}".format(deposition["id"]),
+            method="PUT",
+            data=json.dumps({"metadata": deposition["metadata"]}),
+            headers={"Content-Type": "application/json"},
+        )
+
+        try:
+            r.raise_for_status()
+        except requests.HTTPError as exc:
+            msg = "Failed to update the deposition (id={}).".format(deposition["id"])
+            msg += " Server returned: " + str(exc)
+            if r.status_code > 399 and r.status_code < 500:
+                msg += "\n" + json.dumps(r.json(), sort_keys=True, indent=4) + "\n"
+            logging.warning(msg)
+            raise ValueError(msg)
+        logging.debug("[zenodo:update_deposition] deposition = {}".format(r.json()))
+        return r.json()
+
     def publish(self):
         """Publish the specified Tale to Zenodo."""
         deposition = self.create_deposition()
@@ -174,6 +202,24 @@ class ZenodoPublishProvider(PublishProvider):
         # We should update the Tale before publishing so that
         # the manifest reflects that, shouldn't we?
         # TODO: update Tale's manifest
+        try:
+            # TODO: not sure why, but prereserve_doi doesn't work in sandbox occasionally
+            doi = deposition["metadata"]["prereserve_doi"]["doi"]
+        except KeyError:
+            doi = None
+
+        # Add a self reference pointing to WT
+        msg = (
+            "Run this Tale on Whole Tale by clicking "
+            '<a href="https://data.wholetale.org/api/v1/integration/zenodo?{}">here</a>.'
+        ).format(urlencode({"doi": doi}))
+        deposition["metadata"]["notes"] = msg
+        try:
+            deposition = self.update_deposition(deposition)
+        except Exception as exc:
+            # We should delete deposition if something goes wrong
+            self.rollback(deposition)
+            raise exc
 
         try:
             self.deposit_tale(deposition)
@@ -186,11 +232,6 @@ class ZenodoPublishProvider(PublishProvider):
         # "camera-ready" Tale deposited and ready for final click, it'd be stupendous
         # if we had a UI component...
         if self.draft:
-            try:
-                # TODO: not sure why, but prereserve_doi doesn't work in sandbox
-                doi = deposition["metadata"]["prereserve_doi"]["doi"]
-            except KeyError:
-                doi = None
             published_url = deposition["links"]["self"]
         else:
             # Rollback is not possible afterwards...

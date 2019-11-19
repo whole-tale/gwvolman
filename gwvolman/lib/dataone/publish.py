@@ -400,7 +400,10 @@ class DataONEPublishProvider(PublishProvider):
         :return: The ORCID ID
         :rtype: str, None if failure
         """
-        jwt_token = jwt.JWT().decode(self.dataone_auth_token, do_verify=False)
+        try:
+            jwt_token = jwt.JWT().decode(self.dataone_auth_token, do_verify=False)
+        except AttributeError:
+            jwt_token = jwt.decode(self.dataone_auth_token, verify=False)  # jwt <= 0.6
         user_id = jwt_token.get("userId")
         name = jwt_token.get("fullName")
         return user_id, name
