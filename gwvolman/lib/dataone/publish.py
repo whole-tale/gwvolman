@@ -309,7 +309,7 @@ class DataONEPublishProvider(PublishProvider):
 
                 self.tale["publishInfo"].append(
                     {
-                        "pid": res_pid,
+                        "pid": eml_pid,
                         "uri": package_url,
                         "date": datetime.datetime.utcnow().isoformat(),
                     }
