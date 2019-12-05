@@ -106,8 +106,9 @@ class DataONEMetadata(object):
         :return: The ORE object
         :rtype: d1_common.resource_map.ResourceMap
         """
-
-        ore = ResourceMap(base_url=self.coordinating_node)
+        if self.coordinating_node.endswith("v2"):
+            ore_endpoint = self.coordinating_node[:-2]
+        ore = ResourceMap(base_url=ore_endpoint)
         ore.oreInitialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
