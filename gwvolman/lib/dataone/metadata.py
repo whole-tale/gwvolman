@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import re
 import xml.etree.cElementTree as ET
@@ -13,7 +14,9 @@ from .constants import \
     ExtraFileNames, \
     file_descriptions
 
+from d1_client.cnclient_2_0 import CoordinatingNodeClient_2_0
 from d1_common.types import dataoneTypes
+from d1_common.types.exceptions import DataONEException
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap
@@ -31,25 +34,41 @@ class DataONEMetadata(object):
 
     def __init__(self, coordinating_node):
         self.coordinating_node = coordinating_node
+        self.mimetypes = self.get_dataone_mimetypes()
 
     def get_dataone_mimetypes(self):
         """
-        Returns a list of DataONE supported mimetypes. The endpoint returns
-        XML, which is parsed with ElementTree.
-        :return: A list of mimetypes
-        :rtype: list
+        Uses a coordinating node client to retrieve a list of supported
+        formats
+
+        :return: A list of mimetypes that DataONE supports
+        :rtype: set
         """
-        response = urlopen(self.coordinating_node+'/formats')
-        e = ET.ElementTree(ET.fromstring(response.read()))
-        root = e.getroot()
+        try:
+            cn_client = CoordinatingNodeClient_2_0(self.coordinating_node)
+            formats_response = cn_client.listFormats()
+        except DataONEException as e:
+            logging.error("Failed to connect to the DataONE coordinating node. {}".format(e))
+            return set()
+
+        if not formats_response:
+            # If the response is empty, we should exit before trying to parse it
+            return set()
+
+        # Use fromString to avoid length restrictions, and wrap fromString in ElementTree
+        # to get a full xml representation, rather than an ET.Element
+        element_tree_response = ET.ElementTree(ET.fromstring(formats_response.toxml("utf-8")))
+        root = element_tree_response.getroot()
         mime_types = set()
-
-        for element in root.iter('mediaType'):
-            mime_types.add(element.attrib['name'])
-
+        for element in root.iter('objectFormat'):
+            try:
+                mime_types.add(element.find("mediaType").attrib['name'])
+            except (KeyError, AttributeError):
+                # In case mediaType isn't found, or if it doesn't have 'name'
+                continue
         return mime_types
 
-    def get_dataone_mimetype(self, mimetype):
+    def check_dataone_mimetype(self, mimetype):
         """
         If a mimeType isn't found in DataONE's supported list,
         default to application/octet-stream.
@@ -58,9 +77,6 @@ class DataONEMetadata(object):
         :type mimetype: str
         :return: A mimetype that is supported by DataONE
         """
-
-        if not self.mimetypes:
-            self.mimetypes = self.get_dataone_mimetypes()
         if mimetype not in self.mimetypes:
             return 'application/octet-stream'
         return mimetype
@@ -106,10 +122,7 @@ class DataONEMetadata(object):
         :return: The ORE object
         :rtype: d1_common.resource_map.ResourceMap
         """
-        if self.coordinating_node.endswith("v2"):
-            ore = ResourceMap(base_url=self.coordinating_node[:-2])
-        else:
-            ore = ResourceMap(base_url=self.coordinating_node)
+        ore = ResourceMap(base_url=self.coordinating_node)
         ore.oreInitialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
@@ -319,7 +332,7 @@ class DataONEMetadata(object):
             if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
                 size = item['size']
-                mimeType = self.get_dataone_mimetype(item['mimeType'])
+                mimeType = self.check_dataone_mimetype(item['mimeType'])
                 self.add_object_record(dataset_elem, name, '', size, mimeType)
 
         # Add the manifest itself

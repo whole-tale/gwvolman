@@ -41,7 +41,7 @@ class DataONEPublishProvider(PublishProvider):
         super().__init__(gc, tale_id, token, draft=draft, job_manager=job_manager)
         self.dataone_node = dataone_node
         self.dataone_auth_token = token["access_token"]
-        self.coordinating_node = "https://{}/cn/v2".format(token["resource_server"])
+        self.coordinating_node = "https://{}/cn/".format(token["resource_server"])
 
     def _connect(self):
         """
@@ -207,7 +207,7 @@ class DataONEPublishProvider(PublishProvider):
 
                         file_pid = self._generate_pid(client, scheme="UUID")
 
-                        mimeType = metadata.get_dataone_mimetype(
+                        mimeType = metadata.check_dataone_mimetype(
                             mimetypes.guess_type(fpath)[0]
                         )
 
