@@ -248,6 +248,8 @@ class ZenodoPublishProvider(PublishProvider):
             "pid": doi,
             "uri": published_url,
             "date": datetime.datetime.utcnow().isoformat(),
+            "repository_id": str(deposition["id"]),
+            "repository": self.resource_server,
         }
         self.tale["publishInfo"].append(publish_info)
 
