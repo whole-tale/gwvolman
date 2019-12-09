@@ -9,6 +9,9 @@ class NullManager:
 
 
 class PublishProvider(object):
+    _published = None
+    _published_info_index = None
+
     def __init__(self, gc, tale_id, token, draft=False, job_manager=None):
         """
         Initialize PublishProvider
@@ -28,6 +31,25 @@ class PublishProvider(object):
 
         self.tale = self.gc.get("/tale/{}".format(tale_id))
         self.manifest = self.gc.get("/tale/{}/manifest".format(tale_id))
+
+    @property
+    def published(self):
+        if self._published is not None:
+            return self._published
+
+        for i, publish_info in enumerate(self.tale.get("publishInfo", [])):
+            if self.resource_server == publish_info.get("repository"):
+                self._published = True
+                self._published_info_index = i
+                break
+        else:
+            self._published = False
+        return self._published
+
+    @property
+    def publication_info(self):
+        if self.published:
+            return self.tale["publishInfo"][self._published_info_index]
 
     @property
     def access_token(self):
