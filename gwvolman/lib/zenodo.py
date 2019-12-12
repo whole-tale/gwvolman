@@ -11,6 +11,7 @@ from markdown import Markdown
 from lxml.html.clean import Cleaner
 
 from .publish_provider import PublishProvider
+from ..utils import DEPLOYMENT
 
 
 _ZENODO_ALLOWED_TAGS = {
@@ -289,8 +290,8 @@ class ZenodoPublishProvider(PublishProvider):
         # Add a self reference pointing to WT
         msg = (
             "Run this Tale on Whole Tale by clicking "
-            '<a href="https://data.wholetale.org/api/v1/integration/zenodo?{}">here</a>.'
-        ).format(urlencode({"doi": doi}))
+            '<a href="{girder_url}/api/v1/integration/zenodo?{query}">here</a>.'
+        ).format(girder_url=DEPLOYMENT.girder_url, query=urlencode({"doi": doi}))
         deposition["metadata"]["notes"] = msg
         try:
             deposition = self.update_deposition(deposition)

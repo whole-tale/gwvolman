@@ -138,6 +138,8 @@ MANIFEST = {
 
 @httmock.all_requests
 def mock_other_request(url, request):
+    if request.url.startswith("http+docker://"):
+        return httmock.response(status_code=403)
     raise Exception("Unexpected url %s" % str(request.url))
 
 
