@@ -422,9 +422,14 @@ def stream_response(chunk_size=65536):
             yield data
 
 
-def fake_urlopen(req):
-    return io.BytesIO(
-        b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^cn-stage-2.test.dataone.org$",
+    path="^/cn/v2/formats$",
+    method="GET",
+)
+def mock_dataone_formats(url, request):
+    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
 <ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
     <objectFormat>
         <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>
@@ -456,6 +461,14 @@ def fake_urlopen(req):
     </objectFormat>
 </ns3:objectFormatList>
 """
+    return httmock.response(
+        status_code=200,
+        content=response,
+        headers={"Connection": "Close", "Content-Type": "text/xml"},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
     )
 
 
@@ -544,7 +557,6 @@ def test_zenodo_publish():
 
 
 @pytest.mark.celery(result_backend="rpc")
-@mock.patch("gwvolman.lib.dataone.metadata.urlopen", fake_urlopen)
 def test_dataone_publish():
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_req = mock.MagicMock()
@@ -563,7 +575,10 @@ def test_dataone_publish():
     }
 
     with httmock.HTTMock(
-        mock_generate_dataone_ok, mock_object_dataone_ok, mock_other_request
+        mock_generate_dataone_ok,
+        mock_object_dataone_ok,
+        mock_dataone_formats,
+        mock_other_request,
     ):
         with pytest.raises(jwt.exceptions.JWTDecodeError) as error:
             publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
