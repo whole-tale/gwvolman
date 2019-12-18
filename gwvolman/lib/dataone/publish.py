@@ -296,7 +296,6 @@ class DataONEPublishProvider(PublishProvider):
                     file_object=io.BytesIO(res_map),
                     system_metadata=res_meta,
                 )
-
                 package_url = self._get_dataone_package_url(
                     self.coordinating_node, res_pid
                 )
@@ -309,7 +308,9 @@ class DataONEPublishProvider(PublishProvider):
 
                 self.tale["publishInfo"].append(
                     {
-                        "pid": res_pid,
+                        "pid": eml_pid,
+                        "repository": self.dataone_node,
+                        "repository_id": res_pid,
                         "uri": package_url,
                         "date": datetime.datetime.utcnow().isoformat(),
                     }
