@@ -138,6 +138,8 @@ MANIFEST = {
 
 @httmock.all_requests
 def mock_other_request(url, request):
+    if request.url.startswith("http+docker://"):
+        return httmock.response(status_code=403)
     raise Exception("Unexpected url %s" % str(request.url))
 
 
@@ -381,12 +383,137 @@ def mock_delete_deposition(url, request):
     )
 
 
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/456$",
+    method="GET",
+)
+def mock_get_original_deposit_ok(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    return httmock.response(
+        status_code=200,
+        content={
+            "id": 456,
+            "doi": "10.345/6789",
+            "links": {"doi": "http://dx.doi.org/10.345/6789"},
+        },
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/457$",
+    method="GET",
+)
+def mock_get_new_deposit_ok(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    return httmock.response(
+        status_code=200,
+        content={
+            "id": 457,
+            "doi": "10.345/6780",
+            "links": {"doi": "http://dx.doi.org/10.345/6780"},
+            "files": [
+                {
+                    "id": 1,
+                    "name": "already_published.zip",
+                    "filesize": 300,
+                    "checksum": "abcd",
+                }
+            ],
+        },
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/457/files/1$",
+    method="DELETE",
+)
+def mock_delete_files_ok(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    return httmock.response(
+        status_code=204,
+        content=None,
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/456/actions/newversion$",
+    method="POST",
+)
+def mock_new_version_ok(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    return httmock.response(
+        status_code=201,
+        content={
+            "id": 456,
+            "doi": "10.345/6789",
+            "links": {
+                "doi": "http://dx.doi.org/10.345/6789",
+                "latest_draft": "https://sandbox.zenodo.org/api/deposit/depositions/457",
+            },
+        },
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
+@httmock.urlmatch(
+    scheme="https",
+    netloc="^sandbox.zenodo.org$",
+    path="^/api/deposit/depositions/457$",
+    method="PUT",
+)
+def mock_update_newver_deposit_ok(url, request):
+    assert request.headers["Authorization"] == "Bearer zenodo_api_key"
+    req_data = json.loads(request.body)
+    return httmock.response(
+        status_code=200,
+        content={
+            "id": 457,
+            "links": {"self": "https://sandbox.zenodo.org/api/records/457"},
+            "metadata": req_data["metadata"],
+        },
+        headers={},
+        reason=None,
+        elapsed=5,
+        request=request,
+        stream=False,
+    )
+
+
 def mock_tale_update(path, json=None):
     assert path == "tale/" + TALE["_id"]
     assert len(json["publishInfo"]) == 1
     publish_info = json["publishInfo"][0]
     assert publish_info["pid"] == "10.123/123"
     assert publish_info["uri"] == "http://dx.doi.org/10.123/123"
+    assert publish_info["repository"] == "sandbox.zenodo.org"
+    assert publish_info["repository_id"] == "123"
 
 
 def mock_tale_update_dataone(path, json=None):
@@ -406,8 +533,20 @@ def mock_tale_update_draft(path, json=None):
 def mock_gc_get(path):
     if path in ("/tale/123", "tale/5cfd57fca18691e5d1feeda6"):
         return copy.deepcopy(TALE)
-    elif path == "/tale/123/manifest":
+    elif path.startswith("/tale") and path.endswith("/manifest"):
         return copy.deepcopy(MANIFEST)
+    elif path == "/tale/already_published":
+        tale = copy.deepcopy(TALE)
+        tale["_id"] = "already_published"
+        tale["publishInfo"] = [
+            {
+                "pid": "10.345/6789",
+                "uri": "http://dx.doi.org/10.345/6789",
+                "repository": "sandbox.zenodo.org",
+                "repository_id": "456",
+            }
+        ]
+        return tale
     else:
         raise RuntimeError
 
@@ -554,6 +693,20 @@ def test_zenodo_publish():
         with pytest.raises(ValueError) as error:
             publish("123", token, repository="sandbox.zenodo.org")
         assert error.match("Error updating Tale")
+
+    mock_gc.put = mock_tale_update
+    with httmock.HTTMock(
+        mock_get_original_deposit_ok,
+        mock_new_version_ok,
+        mock_get_new_deposit_ok,
+        mock_delete_files_ok,
+        mock_update_newver_deposit_ok,
+        mock_other_request,
+    ):
+        with mock.patch(
+            "gwvolman.tasks.ZenodoPublishProvider.publish_version", lambda x, y: None
+        ):
+            publish("already_published", token, repository="sandbox.zenodo.org")
 
 
 @pytest.mark.celery(result_backend="rpc")

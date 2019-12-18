@@ -5,12 +5,13 @@ import json
 import logging
 import requests
 import tempfile
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from markdown import Markdown
 from lxml.html.clean import Cleaner
 
 from .publish_provider import PublishProvider
+from ..utils import DEPLOYMENT
 
 
 _ZENODO_ALLOWED_TAGS = {
@@ -31,6 +32,8 @@ _ZENODO_ALLOWED_TAGS = {
     "div",
     "strike",
 }
+
+_ACTION_CODES = {"publish": 202, "newversion": 201}
 
 
 class ZenodoPublishProvider(PublishProvider):
@@ -58,6 +61,7 @@ class ZenodoPublishProvider(PublishProvider):
 
     def deposit_tale(self, deposition):
         """Given a Zenodo deposition, upload tarball with a Tale."""
+
         self.update_progress(message="Uploading data to " + self.resource_server)
 
         stream = self.gc.sendRestRequest(
@@ -67,7 +71,7 @@ class ZenodoPublishProvider(PublishProvider):
             stream=True,
             jsonResp=False,
         )
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".zip") as tmp:
 
             # Write the zip file
             for chunk in stream.iter_content(chunk_size=65536):
@@ -163,15 +167,29 @@ class ZenodoPublishProvider(PublishProvider):
         logging.debug("[zenodo:create_deposition] deposition = {}".format(r.json()))
         return r.json()
 
-    def publish_deposition(self, deposition):
-        """Publish publish, I mean REALLY publish."""
+    def _zenodo_action(self, deposition, action):
         r = self.request(
-            "/api/deposit/depositions/{}/actions/publish".format(deposition["id"]),
+            "/api/deposit/depositions/{dep_id}/actions/{action}".format(
+                dep_id=deposition["id"], action=action
+            ),
             method="POST",
         )
-        assert r.status_code == 202
-        logging.debug("[zenodo:publish_deposition] deposition = {}".format(r.json()))
+        assert r.status_code == _ACTION_CODES[action]
+        logging.debug("[zenodo:_action_{}] deposition = {}".format(action, r.json()))
         return r.json()
+
+    def publish_deposition(self, deposition):
+        """Publish publish, I mean REALLY publish."""
+        return self._zenodo_action(deposition, "publish")
+
+    def create_new_version(self, deposition):
+        """Create a new version of an exisiting deposition."""
+        current_deposition = self._zenodo_action(deposition, "newversion")
+        # From zenodo docs:
+        # NOTE: The response body of this action is NOT the new version deposit,
+        # but the original resource. The new version deposition can be accessed
+        # through the "latest_draft" under "links" in the response body.
+        return self.retrieve_deposition(current_deposition["links"]["latest_draft"])
 
     def update_deposition(self, deposition):
         """Update deposition, assumes that metadata is changed."""
@@ -194,10 +212,71 @@ class ZenodoPublishProvider(PublishProvider):
         logging.debug("[zenodo:update_deposition] deposition = {}".format(r.json()))
         return r.json()
 
+    def retrieve_deposition(self, deposition_id):
+        """Get an existing deposition provided id or url."""
+        if deposition_id.startswith("http"):
+            url = urlparse(deposition_id).path
+        else:
+            url = "/api/deposit/depositions/{}".format(deposition_id)
+
+        r = self.request(
+            url, method="GET", headers={"Content-Type": "application/json"}
+        )
+
+        try:
+            r.raise_for_status()
+        except requests.HTTPError as exc:
+            msg = "Failed to get the deposition (id={}).".format(deposition_id)
+            msg += " Server returned: " + str(exc)
+            if r.status_code > 399 and r.status_code < 500:
+                msg += "\n" + json.dumps(r.json(), sort_keys=True, indent=4) + "\n"
+            logging.warning(msg)
+            raise ValueError(msg)
+        logging.debug("[zenodo:retrieve_deposition] deposition = {}".format(r.json()))
+        return r.json()
+
+    def remove_files(self, deposition):
+        for fileobj in deposition["files"]:
+            r = self.request(
+                "/api/deposit/depositions/{dep_id}/files/{file_id}".format(
+                    dep_id=deposition["id"], file_id=fileobj["id"]
+                ),
+                method="DELETE",
+            )
+
+            try:
+                r.raise_for_status()
+            except requests.HTTPError as exc:
+                msg = "Failed to remove file (id={}) from the deposition (id={}).".format(
+                    fileobj["id"], deposition["id"]
+                )
+                msg += " Server returned: " + str(exc)
+                if r.status_code > 399 and r.status_code < 500:
+                    msg += "\n" + json.dumps(r.json(), sort_keys=True, indent=4) + "\n"
+                logging.warning(msg)
+                raise ValueError(msg)
+
     def publish(self):
         """Publish the specified Tale to Zenodo."""
-        deposition = self.create_deposition()
+        if self.published:
+            old_deposition = self.retrieve_deposition(
+                self.publication_info["repository_id"]
+            )
+            deposition = self.create_new_version(old_deposition)
 
+            # NOTE: If Tale was already published the only way to "update" the
+            # payload is to delete the file and upload a new file.
+            self.remove_files(deposition)
+
+            deposition.update(self.get_tale_metadata())
+            deposition = self.update_deposition(deposition)
+
+            # TODO: Discard version if something goes wrong...
+        else:
+            deposition = self.create_deposition()
+        self.publish_version(deposition)
+
+    def publish_version(self, deposition):
         # Zenodo is nice and gives up preserved DOI at this point.
         # We should update the Tale before publishing so that
         # the manifest reflects that, shouldn't we?
@@ -211,8 +290,8 @@ class ZenodoPublishProvider(PublishProvider):
         # Add a self reference pointing to WT
         msg = (
             "Run this Tale on Whole Tale by clicking "
-            '<a href="https://data.wholetale.org/api/v1/integration/zenodo?{}">here</a>.'
-        ).format(urlencode({"doi": doi}))
+            '<a href="{girder_url}/api/v1/integration/zenodo?{query}">here</a>.'
+        ).format(girder_url=DEPLOYMENT.girder_url, query=urlencode({"doi": doi}))
         deposition["metadata"]["notes"] = msg
         try:
             deposition = self.update_deposition(deposition)
@@ -239,7 +318,6 @@ class ZenodoPublishProvider(PublishProvider):
             doi = deposition["doi"]
             published_url = deposition["links"]["doi"]
 
-        logging.warning(deposition)
         self.update_progress(
             message="Your Tale has successfully been published to " + published_url
         )
@@ -248,8 +326,13 @@ class ZenodoPublishProvider(PublishProvider):
             "pid": doi,
             "uri": published_url,
             "date": datetime.datetime.utcnow().isoformat(),
+            "repository_id": str(deposition["id"]),
+            "repository": self.resource_server,
         }
-        self.tale["publishInfo"].append(publish_info)
+        if self.published:
+            self.tale["publishInfo"][self._published_info_index].update(publish_info)
+        else:
+            self.tale["publishInfo"].append(publish_info)
 
         # Update the Tale with a reference to the published resource
         try:
