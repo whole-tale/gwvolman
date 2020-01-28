@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gwvolman',
-    version='0.8.1',
+    version='0.9.0rc1',
     description='An example girder worker extension',
     author='Kacper Kowalik',
     author_email='xarthisius.kk@gmail.com',
@@ -23,7 +23,7 @@ setup(
         'girder-client',
         'girder-worker',
         'docker>=2.3.0',
-        'requests'
+        'requests',
     ],
     packages=find_packages(),
     zip_safe=False
