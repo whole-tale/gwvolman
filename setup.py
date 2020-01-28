@@ -24,6 +24,7 @@ setup(
         'girder-worker',
         'docker>=2.3.0',
         'requests',
+        'markdown',
     ],
     packages=find_packages(),
     zip_safe=False
