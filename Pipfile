@@ -21,7 +21,7 @@ redis = "==2.10.6"
 pycurl = "*"
 requests = "*"
 jwt = "==0.5.4"
-girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "master"}
+girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "v0.9rc1"}
 pyOpenSSL = "==18.0.0"
 PyYAML = "*"
 markdown = "*"
