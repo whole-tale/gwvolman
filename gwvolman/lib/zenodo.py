@@ -291,7 +291,10 @@ class ZenodoPublishProvider(PublishProvider):
         msg = (
             "Run this Tale on Whole Tale by clicking "
             '<a href="{girder_url}/api/v1/integration/zenodo?{query}">here</a>.'
-        ).format(girder_url=DEPLOYMENT.girder_url, query=urlencode({"doi": doi}))
+        ).format(
+            girder_url=DEPLOYMENT.girder_url,
+            query=urlencode({"doi": doi, "resource_server": self.resource_server}),
+        )
         deposition["metadata"]["notes"] = msg
         try:
             deposition = self.update_deposition(deposition)
