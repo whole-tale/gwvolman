@@ -322,6 +322,9 @@ class ZenodoPublishProvider(PublishProvider):
             message="Your Tale has successfully been published to " + published_url
         )
 
+        if doi and not doi.startswith("doi:"):
+            doi = "doi:{}".format(doi)
+
         publish_info = {
             "pid": doi,
             "uri": published_url,
