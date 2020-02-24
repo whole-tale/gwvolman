@@ -32,7 +32,33 @@ _ZENODO_ALLOWED_TAGS = {
     "div",
     "strike",
 }
-
+_ZENODO_ACCEPTED_RELATIONS = {
+    "isCitedBy",
+    "cites",
+    "isSupplementTo",
+    "isSupplementedBy",
+    "isContinuedBy",
+    "continues",
+    "hasMetadata",
+    "isMetadataFor",
+    "isNewVersionOf",
+    "isPreviousVersionOf",
+    "isPartOf",
+    "hasPart",
+    "isReferencedBy",
+    "references",
+    "isDocumentedBy",
+    "documents",
+    "isCompiledBy",
+    "compiles",
+    "isVariantFormOf",
+    "isOrignialFormOf",
+    "isIdenticalTo",
+    "isReviewedBy",
+    "reviews",
+    "isDerivedFrom",
+    "isSourceOf"
+}
 _ACTION_CODES = {"publish": 202, "newversion": 201}
 
 
@@ -109,6 +135,22 @@ class ZenodoPublishProvider(PublishProvider):
         if self.manifest.get("schema:category"):
             keywords.add(self.manifest["schema:category"].title())
 
+        def first_letter_lower(s):
+            return s[:1].lower() + s[1:] if s else ""
+
+        related_identifiers = []
+        for related_id in self.tale.get("relatedIdentifiers", []):
+            relation = first_letter_lower(related_id["relation"])
+            if relation not in _ZENODO_ACCEPTED_RELATIONS:
+                continue
+            related_identifiers.append(
+                {"relation": relation, "identifier": related_id["identifier"]}
+            )
+        related_identifiers += [
+            {"relation": "cites", "identifier": ds["identifier"]}
+            for ds in self.manifest.get("Datasets", [])
+        ]
+
         return {
             "metadata": {
                 "upload_type": "publication",
@@ -130,10 +172,7 @@ class ZenodoPublishProvider(PublishProvider):
                 "access_right": "open",
                 "license": self.tale["licenseSPDX"].lower(),
                 "prereserve_doi": True,
-                "related_identifiers": [
-                    {"relation": "cites", "identifier": ds["identifier"]}
-                    for ds in self.manifest.get("Datasets", [])
-                ],
+                "related_identifiers": related_identifiers,
                 "references": [
                     citation for citation in self.tale.get("dataSetCitation", [])
                 ],
@@ -321,6 +360,9 @@ class ZenodoPublishProvider(PublishProvider):
         self.update_progress(
             message="Your Tale has successfully been published to " + published_url
         )
+
+        if doi and not doi.startswith("doi:"):
+            doi = "doi:{}".format(doi)
 
         publish_info = {
             "pid": doi,

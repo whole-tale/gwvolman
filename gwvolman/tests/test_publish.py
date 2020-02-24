@@ -510,7 +510,7 @@ def mock_tale_update(path, json=None):
     assert path == "tale/" + TALE["_id"]
     assert len(json["publishInfo"]) == 1
     publish_info = json["publishInfo"][0]
-    assert publish_info["pid"] == "10.123/123"
+    assert publish_info["pid"] == "doi:10.123/123"
     assert publish_info["uri"] == "http://dx.doi.org/10.123/123"
     assert publish_info["repository"] == "sandbox.zenodo.org"
     assert publish_info["repository_id"] == "123"
