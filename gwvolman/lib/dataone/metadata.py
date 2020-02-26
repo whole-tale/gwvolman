@@ -1,8 +1,10 @@
 import io
 import logging
 import os
+from rdflib.term import Literal
 import re
 import xml.etree.cElementTree as ET
+
 
 try:
     from urllib.request import urlopen
@@ -19,7 +21,7 @@ from d1_common.types import dataoneTypes
 from d1_common.types.exceptions import DataONEException
 from d1_common import const as d1_const
 from d1_common.resource_map import \
-    ResourceMap
+    ResourceMap, DCTERMS
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -81,6 +83,24 @@ class DataONEMetadata(object):
             return 'application/octet-stream'
         return mimetype
 
+    def set_related_identifiers(self, manifest, resource_map, eml_pid):
+        """
+        Modifies a resource map to include cito:cites for any cited Tale entities
+        :return: The resource map
+        """
+        try:
+            eml_element = resource_map.getObjectByPid(eml_pid)
+            if eml_pid:
+                for relation in manifest["DataCite:relatedIdentifiers"]:
+                    related_object = relation["DataCite:relatedIdentifier"]
+                    if related_object["DataCite:relationType"] == "DataCite:Cites":
+                        resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
+        except KeyError:
+            pass
+
+        return resource_map
+
+
     def get_access_policy(self):
         """
         Returns or creates the access policy for the system metadata.
@@ -126,8 +146,7 @@ class DataONEMetadata(object):
         ore.oreInitialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
-
-        return ore.serialize()
+        return ore
 
     def create_entity(self, root, name, description):
         """
