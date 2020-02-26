@@ -5,7 +5,6 @@ from rdflib.term import Literal
 import re
 import xml.etree.cElementTree as ET
 
-
 try:
     from urllib.request import urlopen
 except ImportError:
@@ -86,6 +85,10 @@ class DataONEMetadata(object):
     def set_related_identifiers(self, manifest, resource_map, eml_pid):
         """
         Modifies a resource map to include cito:cites for any cited Tale entities
+
+        :param manifest: The Tale's manifest
+        :param resource_map: The resource map that will be submitted to DataONE
+        :param eml_pid: The pid of the EML document
         :return: The resource map
         """
         try:
