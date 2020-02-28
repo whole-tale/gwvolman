@@ -98,6 +98,8 @@ class DataONEMetadata(object):
                     related_object = relation["DataCite:relatedIdentifier"]
                     if related_object["DataCite:relationType"] == "DataCite:Cites":
                         resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
+                    elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
+                        resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
         except KeyError:
             pass
 
