@@ -88,7 +88,6 @@ MANIFEST = {
         {"uri": "../workspace/requirements.txt"},
         {"uri": "../workspace/wt_quickstart.ipynb"},
         {"uri": "../workspace/apt.txt"},
-        {"uri": "../workspace/README.md"},
         {
             "bundledAs": {"filename": "usco2005.xls", "folder": "../data/"},
             "schema:isPartOf": "doi:10.5065/D6862DM8",
@@ -99,7 +98,6 @@ MANIFEST = {
             ),
         },
         {"schema:license": "CC-BY-4.0", "uri": "../LICENSE"},
-        {"@type": "schema:HowTo", "uri": "../README.md"},
     ],
     "createdBy": {
         "@id": "willis8@illinois.edu",

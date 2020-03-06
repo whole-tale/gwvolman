@@ -356,6 +356,11 @@ class DataONEMetadata(object):
         self.add_object_record(dataset_elem, ExtraFileNames.fetch_file, description,
                                fetch_size, 'text/plain')
 
+        # Add README.md file
+        description = file_descriptions[ExtraFileNames.readme_file]
+        self.add_object_record(dataset_elem, ExtraFileNames.readme_file, description,
+                               fetch_size, 'text/plain')
+
         """
         Emulate the behavior of ElementTree.tostring in Python 3.6.0
         Write the contents to a stream and then return its content.
