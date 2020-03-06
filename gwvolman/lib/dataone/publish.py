@@ -290,7 +290,7 @@ class DataONEPublishProvider(PublishProvider):
                 res_pid = self._generate_pid(client, scheme="UUID")
                 res_map = metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
                 # Update the resource map with citations
-                res_map = metadata.set_related_identifiers(manifest, res_map, eml_pid)
+                metadata.set_related_identifiers(manifest, res_map, eml_pid)
                 # Turn the resource map into readable bytes
                 res_map = res_map.serialize()
                 res_meta = metadata.generate_system_metadata(

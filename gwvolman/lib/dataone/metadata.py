@@ -91,19 +91,23 @@ class DataONEMetadata(object):
         :param eml_pid: The pid of the EML document
         :return: The resource map
         """
+        eml_element = None
         try:
             eml_element = resource_map.getObjectByPid(eml_pid)
-            if eml_pid:
+        except IndexError:
+            logging.warning("Failed to find the pid {} in the resource map.".format(eml_pid))
+            return
+
+        if eml_element:
+            try:
                 for relation in manifest["DataCite:relatedIdentifiers"]:
                     related_object = relation["DataCite:relatedIdentifier"]
                     if related_object["DataCite:relationType"] == "DataCite:Cites":
                         resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
                     elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
                         resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
-        except KeyError:
-            pass
-
-        return resource_map
+            except KeyError:
+                pass
 
 
     def get_access_policy(self):
