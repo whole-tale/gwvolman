@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+from rdflib.term import Literal
 import re
 import xml.etree.cElementTree as ET
 
@@ -19,7 +20,7 @@ from d1_common.types import dataoneTypes
 from d1_common.types.exceptions import DataONEException
 from d1_common import const as d1_const
 from d1_common.resource_map import \
-    ResourceMap
+    ResourceMap, DCTERMS
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -81,6 +82,34 @@ class DataONEMetadata(object):
             return 'application/octet-stream'
         return mimetype
 
+    def set_related_identifiers(self, manifest, resource_map, eml_pid):
+        """
+        Modifies a resource map to include cito:cites for any cited Tale entities
+
+        :param manifest: The Tale's manifest
+        :param resource_map: The resource map that will be submitted to DataONE
+        :param eml_pid: The pid of the EML document
+        :return: The resource map
+        """
+        eml_element = None
+        try:
+            eml_element = resource_map.getObjectByPid(eml_pid)
+        except IndexError:
+            logging.warning("Failed to find the pid {} in the resource map.".format(eml_pid))
+            return
+
+        if eml_element:
+            try:
+                for relation in manifest["DataCite:relatedIdentifiers"]:
+                    related_object = relation["DataCite:relatedIdentifier"]
+                    if related_object["DataCite:relationType"] == "DataCite:Cites":
+                        resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
+                    elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
+                        resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
+            except KeyError:
+                pass
+
+
     def get_access_policy(self):
         """
         Returns or creates the access policy for the system metadata.
@@ -126,8 +155,7 @@ class DataONEMetadata(object):
         ore.oreInitialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
-
-        return ore.serialize()
+        return ore
 
     def create_entity(self, root, name, description):
         """
@@ -354,6 +382,11 @@ class DataONEMetadata(object):
         # Add the fetch.txt file
         description = file_descriptions[ExtraFileNames.fetch_file]
         self.add_object_record(dataset_elem, ExtraFileNames.fetch_file, description,
+                               fetch_size, 'text/plain')
+
+        # Add README.md file
+        description = file_descriptions[ExtraFileNames.readme_file]
+        self.add_object_record(dataset_elem, ExtraFileNames.readme_file, description,
                                fetch_size, 'text/plain')
 
         """

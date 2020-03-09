@@ -166,6 +166,13 @@ class DataONEPublishProvider(PublishProvider):
                 data = f.read()
                 fetch_md5 = md5(data).hexdigest()
 
+            # Get the README.md
+            readme_path = "{}/README.md".format(self.tale["_id"])
+            readme_size = zip.getinfo(readme_path).file_size
+            with zip.open(readme_path) as f:
+                data = f.read()
+                readme_md5 = md5(data).hexdigest()
+
             self.job_manager.updateProgress(
                 message="Creating EML document from manifest",
                 total=100,
@@ -197,7 +204,6 @@ class DataONEPublishProvider(PublishProvider):
                         # Skip over the files we want to ignore
                         if fname in ignore_files:
                             continue
-
                         self.job_manager.updateProgress(
                             message="Uploading file {}".format(fname),
                             total=100,
@@ -219,6 +225,8 @@ class DataONEPublishProvider(PublishProvider):
                             size, hash = run_local_size, run_local_md5
                         elif fname == "fetch.txt":
                             size, hash = fetch_size, fetch_md5
+                        elif fname == 'README.md':
+                            size, hash = readme_size, readme_md5
                         else:
                             size, hash = self._get_manifest_file_info(manifest, relpath)
 
@@ -281,6 +289,10 @@ class DataONEPublishProvider(PublishProvider):
                 # Create ORE
                 res_pid = self._generate_pid(client, scheme="UUID")
                 res_map = metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
+                # Update the resource map with citations
+                metadata.set_related_identifiers(manifest, res_map, eml_pid)
+                # Turn the resource map into readable bytes
+                res_map = res_map.serialize()
                 res_meta = metadata.generate_system_metadata(
                     pid=res_pid,
                     name=str(),

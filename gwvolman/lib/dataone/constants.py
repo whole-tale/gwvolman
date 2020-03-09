@@ -25,6 +25,7 @@ class ExtraFileNames:
     environment_file = 'environment.json'
     fetch_file = 'fetch.txt'
     run_local_file = 'run-local.sh'
+    readme_file = 'README.md'
 
 
 """
@@ -44,5 +45,7 @@ file_descriptions = {
         'before running the Tale',
     ExtraFileNames.run_local_file:
         'A bash script that downloads the neccessary external data and then runs '
-        'the Tale.'
+        'the Tale.',
+    ExtraFileNames.readme_file:
+        'A readme file that describes how to interact with this Tale.'
 }
