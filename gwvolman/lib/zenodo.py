@@ -358,7 +358,7 @@ class ZenodoPublishProvider(PublishProvider):
             # Rollback is not possible afterwards...
             deposition = self.publish_deposition(deposition)
             doi = deposition["doi"]
-            published_url = deposition["links"]["doi"]
+            published_url = deposition["links"]["record_html"]
 
         self.update_progress(
             message="Your Tale has successfully been published to " + published_url
