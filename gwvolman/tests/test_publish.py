@@ -153,7 +153,10 @@ def mock_create_deposit_ok(url, request):
         status_code=200,
         content={
             "id": 123,
-            "links": {"self": "https://sandbox.zenodo.org/api/records/123"},
+            "links": {
+                "self": "https://sandbox.zenodo.org/api/records/123",
+                "record_html": "https://sandbox.zenodo.org/record/123",
+            },
             "metadata": {},
         },
         headers={},
@@ -178,7 +181,10 @@ def mock_update_deposit_ok(url, request):
         status_code=200,
         content={
             "id": 123,
-            "links": {"self": "https://sandbox.zenodo.org/api/records/123"},
+            "links": {
+                "self": "https://sandbox.zenodo.org/api/records/123",
+                "record_html": "https://sandbox.zenodo.org/record/123",
+            },
             "metadata": req_data["metadata"],
         },
         headers={},
@@ -297,7 +303,10 @@ def mock_publish_deposit_ok(url, request):
         content={
             "id": 123,
             "doi": "10.123/123",
-            "links": {"doi": "http://dx.doi.org/10.123/123"},
+            "links": {
+                "doi": "http://dx.doi.org/10.123/123",
+                "record_html": "https://sandbox.zenodo.org/record/457",
+            },
         },
         headers={},
         reason=None,
@@ -394,7 +403,10 @@ def mock_get_original_deposit_ok(url, request):
         content={
             "id": 456,
             "doi": "10.345/6789",
-            "links": {"doi": "http://dx.doi.org/10.345/6789"},
+            "links": {
+                "doi": "http://dx.doi.org/10.345/6789",
+                "record_html": "https://sandbox.zenodo.org/record/457",
+            },
         },
         headers={},
         reason=None,
@@ -469,6 +481,7 @@ def mock_new_version_ok(url, request):
             "doi": "10.345/6789",
             "links": {
                 "doi": "http://dx.doi.org/10.345/6789",
+                "record_html": "https://sandbox.zenodo.org/record/457",
                 "latest_draft": "https://sandbox.zenodo.org/api/deposit/depositions/457",
             },
         },
@@ -509,7 +522,7 @@ def mock_tale_update(path, json=None):
     assert len(json["publishInfo"]) == 1
     publish_info = json["publishInfo"][0]
     assert publish_info["pid"] == "doi:10.123/123"
-    assert publish_info["uri"] == "http://dx.doi.org/10.123/123"
+    assert publish_info["uri"] == "https://sandbox.zenodo.org/record/457"
     assert publish_info["repository"] == "sandbox.zenodo.org"
     assert publish_info["repository_id"] == "123"
 
