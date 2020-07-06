@@ -12,23 +12,23 @@ httmock = "*"
 codecov = "*"
 
 [packages]
-celery = "==4.2.1"
-kombu = "==4.2.2post1"
+celery = "==4.4.6"
+kombu = "==4.6.11"
 fusepy = "==3.0.1"
 girder-client = "==2.4.0"
 girder-worker = "==0.5.0"
-redis = "==2.10.6"
+redis = "==3.5.3"
 pycurl = "*"
 requests = "*"
 jwt = "==0.5.4"
-girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "v0.9rc2"}
-pyOpenSSL = "==18.0.0"
+girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "master"}
+pyOpenSSL = "*"
 PyYAML = "*"
 markdown = "*"
 lxml = "*"
-"dataone.common" = "==3.2.0"
-"dataone.libclient" = "==3.2.0"
-"dataone.cli" = "==3.2.0"
+"dataone.common" = "==3.4.7"
+"dataone.libclient" = "==3.4.7"
+"dataone.cli" = "==3.4.7"
 
 [requires]
-python_version = "3.6"
+python_version = "3.8"

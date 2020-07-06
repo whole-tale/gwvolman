@@ -1,4 +1,4 @@
-FROM ubuntu:xenial
+FROM ubuntu:focal
 
 RUN apt-get update -qqy && \
   apt-get install -qy software-properties-common python3-software-properties && \
@@ -8,11 +8,13 @@ RUN apt-get update -qqy && \
     git \
     wget \
     python3 \
+    python3-pip \
     fuse \
     davfs2 \
     libffi-dev \
     libssl-dev \
     libjpeg-dev \
+    libcurl4-openssl-dev \
     zlib1g-dev \
     libfuse-dev \
     libpython3-dev && \
@@ -20,14 +22,12 @@ RUN apt-get update -qqy && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py
-
 COPY requirements.txt /gwvolman/requirements.txt
 COPY setup.py /gwvolman/setup.py
 COPY gwvolman /gwvolman/gwvolman
 
 WORKDIR /gwvolman
-RUN LDFLAGS="-Wl,-rpath='/usr/local/lib',--enable-new-dtags $LDFLAGS" pip install --no-cache-dir -r requirements.txt -e . && rm -rf /tmp/*
+RUN LDFLAGS="-Wl,-rpath='/usr/local/lib',--enable-new-dtags $LDFLAGS" pip3 install --no-cache-dir -r requirements.txt -e . && rm -rf /tmp/*
 
 COPY mount.c /tmp/mount.c
 RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -ldl -D_FILE_OFFSET_BITS=64 && \
@@ -48,12 +48,12 @@ ENV LANG=C.UTF-8
 # Temporary fix for kombu
 RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
-  -i /usr/local/lib/python3.5/dist-packages/kombu/serialization.py
+  -i /usr/local/lib/python3.8/dist-packages/kombu/serialization.py
 
 # Temporary fix for girder_utils (chain tasks and kwargs)
 RUN sed \
   -e "/'kwargs':/ s/task_kwargs/json.dumps(&)/" \
-  -i /usr/local/lib/python3.5/dist-packages/girder_worker/context/nongirder_context.py
+  -i /usr/local/lib/python3.8/dist-packages/girder_worker/context/nongirder_context.py
 
 # https://github.com/whole-tale/gwvolman/issues/51
 # https://github.com/whole-tale/wt_home_dirs/issues/18
