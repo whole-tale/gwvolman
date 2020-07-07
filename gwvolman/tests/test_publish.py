@@ -744,7 +744,7 @@ def test_dataone_publish():
         mock_dataone_formats,
         mock_other_request,
     ):
-        with pytest.raises(jwt.exceptions.JWTDecodeError) as error:
+        with pytest.raises(jwt.exceptions.DecodeError) as error:
             publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
             assert error.message.startswith("Not enough segments")
 
