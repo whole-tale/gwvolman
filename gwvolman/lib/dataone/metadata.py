@@ -152,7 +152,7 @@ class DataONEMetadata(object):
         :rtype: d1_common.resource_map.ResourceMap
         """
         ore = ResourceMap(base_url=self.coordinating_node)
-        ore.oreInitialize(pid)
+        ore.initialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
         return ore
