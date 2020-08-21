@@ -238,8 +238,8 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     #                        target=container_config.target_mount)
     # ]
 
-    # FIXME: get mountPoint
-    source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
+    volume = cli.volumes.get(volumeName)
+    source_mount = volume.attrs["Mountpoint"]
     mounts = []
     for path in MOUNTPOINTS:
         source = os.path.join(source_mount, path)
