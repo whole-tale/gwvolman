@@ -18,7 +18,7 @@ except socket.gaierror:
     DEFAULT_GIRDER_API_URL = "https://girder.dev.wholetale.org/api/v1"
 GIRDER_API_URL = os.environ.get("GIRDER_API_URL", DEFAULT_GIRDER_API_URL)
 
-REPO2DOCKER_VERSION = "wholetale/repo2docker_wholetale:latest"
+REPO2DOCKER_VERSION = "wholetale/repo2docker_wholetale:v0.9.1"
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"
     "logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhki"
