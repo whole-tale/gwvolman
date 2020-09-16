@@ -1,5 +1,7 @@
 import datetime
 from hashlib import md5
+from typing import Union
+from pyxb import binding
 import io
 import json
 import jwt
@@ -15,8 +17,11 @@ except ImportError:
     from urllib.parse import urlparse
 
 from d1_client.mnclient_2_0 import MemberNodeClient_2_0
-from d1_common.types.exceptions import DataONEException, InvalidToken
+from d1_common.types.exceptions import DataONEException, InvalidToken,\
+    NotFound, ServiceFailure, InvalidRequest
+from d1_common.types import dataoneTypes
 from d1_common.env import D1_ENV_DICT
+from d1_common.types.generated.dataoneTypes_v2_0 import SystemMetadata
 
 from .metadata import DataONEMetadata
 from gwvolman.lib.publish_provider import PublishProvider
@@ -39,18 +44,19 @@ class DataONEPublishProvider(PublishProvider):
         :type coordinating_node: str
         """
         super().__init__(gc, tale_id, token, draft=draft, job_manager=job_manager)
-        self.dataone_node = dataone_node
-        self.dataone_auth_token = token["access_token"]
-        self.coordinating_node = "https://{}/cn/".format(token["resource_server"])
+        self.dataone_node: str = dataone_node
+        self.dataone_auth_token: str = token["access_token"]
+        self.coordinating_node: str = "https://{}/cn/".format(token["resource_server"])
+        self.client: MemberNodeClient_2_0 = None
 
-    def _connect(self):
+    def _create_client(self):
         """
         Create a client object that is used to interface with a DataONE
         member node.  The auth_token is the jwt token from DataONE.
         Close the connection between uploads otherwise some uploads will fail.
         """
         try:
-            return MemberNodeClient_2_0(
+            self.client = MemberNodeClient_2_0(
                 self.dataone_node,
                 **{
                     "headers": {
@@ -62,10 +68,10 @@ class DataONEPublishProvider(PublishProvider):
             )
         except InvalidToken as e:
             logging.warning(e)
-            raise ValueError("Invalid DataONE JWT token. Please refresh the token.")
+            raise ValueError("Invalid JWT token. Please re-authenticate with DataONE.")
         except DataONEException as e:
             logging.warning(e)
-            raise ValueError("Failed to establish connection with DataONE.")
+            raise ValueError("Failed to establish connection with the DataONE node.")
 
     def publish(self):
         """
@@ -96,12 +102,8 @@ class DataONEPublishProvider(PublishProvider):
         )
         step += 1
 
-        try:
-            client = self._connect()
-        except DataONEException as e:
-            logging.warning(e)
-            # We'll want to exit if we can't create the client
-            raise ValueError("Failed to establish connection with DataONE.")
+        # Let it throw in case the connection fails
+        self._create_client()
 
         user_id, full_orcid_name = self._extract_user_info()
         if not all([user_id, full_orcid_name]):
@@ -181,7 +183,7 @@ class DataONEPublishProvider(PublishProvider):
             step += 1
             metadata = DataONEMetadata(self.coordinating_node)
             # Create an EML document based on the manifest
-            eml_pid = self._generate_pid(client)
+            eml_pid = self._generate_pid()
             eml_doc = metadata.create_eml_doc(
                 eml_pid,
                 manifest,
@@ -211,7 +213,7 @@ class DataONEPublishProvider(PublishProvider):
                         )
                         step += 1
 
-                        file_pid = self._generate_pid(client, scheme="UUID")
+                        file_pid = self._generate_pid(scheme="UUID")
 
                         mimeType = metadata.check_dataone_mimetype(
                             mimetypes.guess_type(fpath)[0]
@@ -235,7 +237,6 @@ class DataONEPublishProvider(PublishProvider):
                         )
 
                         self._upload_file(
-                            client=client,
                             pid=file_pid,
                             file_object=f.read(),
                             system_metadata=file_meta,
@@ -249,29 +250,28 @@ class DataONEPublishProvider(PublishProvider):
                 )
                 step += 1
 
-                # Upload the EML document and system metadata
-                eml_meta = metadata.generate_system_metadata(
-                    pid=eml_pid,
-                    name="metadata.xml",
-                    format_id="eml://ecoinformatics.org/eml-2.1.1",
-                    size=len(eml_doc),
-                    md5=md5(eml_doc).hexdigest(),
-                    rights_holder=user_id,
-                )
+                try:
+                    last_eml_pid = self.tale['publishInfo']['DataONE']['pid']
+                    previous_sysmeta = self.client.getSystemMetadata(last_eml_pid)
+                    # Use the system metadata from the previous EML document
+                    new_sysmeta = self.update_sysmeta(previous_sysmeta, eml_doc, eml_pid)
+                    self._obsolete_object(last_eml_pid, eml_pid, eml_doc, new_sysmeta)
 
-                # This fails with:
-                #   The supplied system metadata is invalid. The obsoletes
-                #   field cannot have a value when creating entries.
-                # if tale['publishInfo']:
-                #    old_pid = tale['publishInfo'][-1]['pid']
-                #    eml_meta.obsoletes = old_pid
 
-                self._upload_file(
-                    client=client,
-                    pid=eml_pid,
-                    file_object=io.BytesIO(eml_doc),
-                    system_metadata=eml_meta,
-                )
+
+                except (IndexError, NotFound, Exception) as e:
+                    # Then this hasn't been published before and could not be updated
+                    eml_meta = metadata.generate_system_metadata(
+                        pid=eml_pid, name='metadata.xml',
+                        format_id='eml://ecoinformatics.org/eml-2.1.1',
+                        size=len(eml_doc),
+                        md5=md5(eml_doc).hexdigest(),
+                        rights_holder=user_id)
+                    self._upload_file(
+                        pid=eml_pid,
+                        file_object=io.BytesIO(eml_doc),
+                        system_metadata=eml_meta,
+                    )
 
                 uploaded_pids.append(eml_pid)
 
@@ -286,31 +286,31 @@ class DataONEPublishProvider(PublishProvider):
                 )
                 step += 1
 
-                # Create ORE
-                res_pid = self._generate_pid(client, scheme="UUID")
-                res_map = metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
-                # Update the resource map with citations
-                metadata.set_related_identifiers(manifest, res_map, eml_pid)
+                # Create the resource map's pid
+                res_pid = self._generate_pid(scheme="UUID")
+                # Generate the resource map
+                metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
+                # Update the resource map with any datacite properties
+                metadata.set_related_identifiers(manifest, eml_pid, self.tale,
+                                                 self.dataone_node, self.gc)
                 # Turn the resource map into readable bytes
-                res_map = res_map.serialize()
+                res_map = metadata.resource_map.serialize()
                 res_meta = metadata.generate_system_metadata(
                     pid=res_pid,
                     name=str(),
                     format_id="http://www.openarchives.org/ore/terms",
                     size=len(res_map),
                     md5=md5(res_map).hexdigest(),
-                    rights_holder=self._get_resource_map_user(user_id),
+                    rights_holder=self._get_http_orcid(user_id),
                 )
 
                 self._upload_file(
-                    client=client,
                     pid=res_pid,
                     file_object=io.BytesIO(res_map),
                     system_metadata=res_meta,
                 )
                 package_url = self._get_dataone_package_url(
-                    self.coordinating_node, res_pid
-                )
+                    self.coordinating_node, res_pid)
 
                 self.job_manager.updateProgress(
                     message="Your Tale has successfully been published to DataONE.",
@@ -331,19 +331,10 @@ class DataONEPublishProvider(PublishProvider):
                     self.gc.put("tale/{}".format(self.tale["_id"]), json=self.tale)
                 except Exception as e:
                     logging.warning("Error updating Tale {}".format(str(e)))
-                    raise ValueError("Error updating Tale {}".format(str(e)))
+                    raise ValueError("There was an errror while updating the Tale's "
+                                     "published location {}".format(str(e)))
 
             except Exception as e:
-                logging.warning("Error. Should rollback... {}".format(str(e)))
-                # Getting permission denied on delete
-                # for pid in uploaded_pids:
-                #    try:
-                #        logging.info("Deleting pid {} if I could...".format(
-                #            pid))
-                #        client.delete(pid)
-                #    except Exception as e:
-                #        logging.warning('Error deleting pid {}: {}'.format(
-                #            pid, str(e)))
                 raise
 
     def _get_manifest_file_info(self, manifest, relpath):
@@ -355,29 +346,24 @@ class DataONEPublishProvider(PublishProvider):
                 return size, md5
         return None, None
 
-    def _upload_file(self, client, pid, file_object, system_metadata):
+    def _upload_file(self, pid: str, file_object: Union[str, io.BytesIO], system_metadata: SystemMetadata):
         """
         Uploads two files to a DataONE member node. The first is an object,
         which is just a data file.  The second is a metadata file describing
         the file object.
 
-        :param client: A client for communicating with a member node
         :param pid: The pid of the data object
         :param file_object: The file object that will be uploaded
         :param system_metadata: The metadata object describing the file object
-        :type client: MemberNodeClient_2_0
-        :type pid: str
-        :type file_object: str
-        :type system_metadata: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
-
         try:
-            client.create(pid, file_object, system_metadata)
+            self.client.create(pid, file_object, system_metadata)
         except DataONEException as e:
             logging.warning("Error uploading file to DataONE {} {}".format(pid, str(e)))
             raise
 
-    def _get_dataone_package_url(self, member_node, pid):
+    @staticmethod
+    def _get_dataone_package_url(member_node, pid):
         """
         Given a repository url and a pid, construct a url that should
          be the package's landing page.
@@ -391,17 +377,18 @@ class DataONEPublishProvider(PublishProvider):
         else:
             return str("https://dev.nceas.ucsb.edu/view/" + pid)
 
-    def _get_resource_map_user(self, user_id):
+    @staticmethod
+    def _get_http_orcid(user_id: str)->str:
         """
-        HTTPS links will break the resource map. Use this function
-        to get a properly constructed username from a user's ID.
-        :param user_id: The user ORCID
-        :type user_id: str
-        :return: An http version of the user
-        :rtype: str
+        HTTPS links will break the resource map. The ORCID IDs are stored
+        as HTTPS, so the https needs to be changed to http. This method is
+        used to perform that conversion.
+
+        :param user_id: The user's ORCID
+        :return: A URI that's HTTP instead of HTTPS
         """
         if bool(user_id.find("orcid.org")):
-            return self._make_url_http(user_id)
+            return urlparse(user_id)._replace(scheme="http").geturl()
         return user_id
 
     def _extract_user_info(self):
@@ -418,49 +405,63 @@ class DataONEPublishProvider(PublishProvider):
         name = jwt_token.get("fullName")
         return user_id, name
 
-    def _is_orcid_id(self, user_id):
+    def _generate_pid(self, scheme="DOI") -> binding.datatypes.string:
         """
-        Checks whether a string is a link to an ORCID account
-        :param user_id: The string that may contain the ORCID account
-        :type user_id: str
-        :return: True/False if it is or isn't
-        :rtype: bool
-        """
-        return bool(user_id.find("orcid.org"))
+        Generates a DataONE identifier. The identifier type is generated from
+        and xml definition, hence the binding.datatypes.string return value
 
-    def _make_url_https(self, url):
-        """
-        Given an http url, return it as https
-
-        :param url: The http url
-        :type url: str
-        :return: The url as https
-        :rtype: str
-        """
-        parsed = urlparse(url)
-        return parsed._replace(scheme="https").geturl()
-
-    def _make_url_http(self, url):
-        """
-        Given an https url, make it http
-        :param url: The http url
-        :type url: str
-        :return: The url as https
-        :rtype: str
-        """
-        parsed = urlparse(url)
-        return parsed._replace(scheme="http").geturl()
-
-    def _generate_pid(self, client, scheme="DOI"):
-        """
-        Generates a DataONE identifier.
-        :return: A valid DataONE identifier
+        :return: A valid. reserved DataONE identifier
         """
         try:
-            return client.generateIdentifier(scheme=scheme).value()
+            return self.client.generateIdentifier(scheme=scheme).value()
         except InvalidToken as e:
             logging.warning(e)
             raise ValueError("Invalid DataONE JWT. Please refresh the token.")
         except DataONEException as e:
             logging.warning(e)
             raise ValueError("Failed to generate identifier.")
+
+    def _obsolete_object(self, old_pid, new_pid, new_object, sysmeta):
+        """
+        Obsoletes an object with a new one. The coordinating node will handle modifying the
+        system metadata with the appropriate obsoletion flags. It's most likely that this should
+        only be called with a new resource map and EML document.
+
+        :param old_pid: The pid of the existing object
+        :param new_pid: The new package resource map pid
+        :param new_object: The new object that is replacing the existing one
+        :param sysmeta: The new object's system metadata document
+        :return: None
+        """
+        try:
+            self.client.update(old_pid, io.BytesIO(new_object), new_pid, sysmeta)
+
+        except (ServiceFailure, InvalidRequest) as e:
+            logging.error('Error obsoleting package {} with {}. {}'.format(old_pid, new_pid, e))
+            raise ValueError('Failed to obsolete the previous version of the Tale')
+
+    def update_sysmeta(self, sysmeta: SystemMetadata, bytes_to_upload: Union[str, bytes], new_pid):
+        """
+        Updates a system metadata document to describe a different object. The idea is that the
+        DataONE server will set various fields on the system metadata (AuthortativeMemberNode, for example)
+        and when obsoleting an object-those fields are desired. Some fields like the checksum and file size will
+        be different and need to be updated, which is what this method is for.
+
+        :param sysmeta: The system metadata document
+        :param bytes_to_upload: The bytes that are being uploaded to DataONE
+        :param new_pid: The pid of the object representing the bytes
+        """
+        if not isinstance(bytes_to_upload, bytes):
+            if isinstance(bytes_to_upload, str):
+                bytes_to_upload = bytes_to_upload.encode("utf-8")
+            else:
+                raise ValueError('Unable to convert the data object with pid {} to bytes'.format(new_pid))
+
+        size = len(bytes_to_upload)
+        checksum = md5(bytes_to_upload).hexdigest()
+        sysmeta.identifier = str(new_pid)
+        sysmeta.size = size
+        sysmeta.checksum = dataoneTypes.checksum(str(checksum))
+        sysmeta.checksum.algorithm = 'MD5'
+        sysmeta.obsoletes = None
+        return sysmeta

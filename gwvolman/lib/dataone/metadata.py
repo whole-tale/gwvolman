@@ -1,7 +1,9 @@
 import io
 import logging
 import os
-from rdflib.term import Literal
+import json
+from rdflib import Namespace
+from rdflib.term import Literal, URIRef
 import re
 import xml.etree.cElementTree as ET
 
@@ -21,7 +23,7 @@ from d1_common.types.exceptions import DataONEException
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
-
+from d1_common.types.generated.dataoneTypes_v2_0 import SystemMetadata
 """
 Methods that are responsible for handling metadata generation and parsing
 belong here. Many of these methods are helper functions for generating the
@@ -33,9 +35,10 @@ class DataONEMetadata(object):
     mimetypes = set()
     access_policy = None
 
-    def __init__(self, coordinating_node):
+    def __init__(self, coordinating_node: str):
         self.coordinating_node = coordinating_node
         self.mimetypes = self.get_dataone_mimetypes()
+        self.resource_map: ResourceMap = None
 
     def get_dataone_mimetypes(self):
         """
@@ -82,33 +85,59 @@ class DataONEMetadata(object):
             return 'application/octet-stream'
         return mimetype
 
-    def set_related_identifiers(self, manifest, resource_map, eml_pid):
+    def set_related_identifiers(self, manifest: dict, eml_pid: str,
+                                tale: dict, member_node: str, gc ):
         """
-        Modifies a resource map to include cito:cites for any cited Tale entities
+        This method adds fields to the DataONE resource map if there are
+        1. Any DataCite:RelatedIdentifiers
+        2. Any DataCiteIsDerivedFrom relations
+        3. Any publishings of the potential parent Tale to the same member node
 
         :param manifest: The Tale's manifest
-        :param resource_map: The resource map that will be submitted to DataONE
         :param eml_pid: The pid of the EML document
-        :return: The resource map
+        :param tale: The Tale being published
+        :param member_node: The member node that the Tale is being published to
+        :param gc: The Gider client
         """
         eml_element = None
         try:
-            eml_element = resource_map.getObjectByPid(eml_pid)
+            eml_element = self.resource_map.getObjectByPid(eml_pid)
         except IndexError:
             logging.warning("Failed to find the pid {} in the resource map.".format(eml_pid))
             return
 
         if eml_element:
+            added_record = False
+            datacite_namespace = Namespace("http://purl.org/spar/datacite/")
             try:
                 for relation in manifest["DataCite:relatedIdentifiers"]:
                     related_object = relation["DataCite:relatedIdentifier"]
                     if related_object["DataCite:relationType"] == "DataCite:Cites":
-                        resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
+                        self.resource_map.add((eml_element, DCTERMS.references, URIRef(related_object["@id"])))
                     elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
-                        resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
+                        self.resource_map.add((eml_element, datacite_namespace.IsDerivedFrom,
+                                               URIRef(related_object["@id"])))
             except KeyError:
                 pass
 
+            if tale['copyOfTale']:
+                # If this Tale is a copy of another Tale, we need to check if its predecessor was published
+                # If it was, then add a DataCite relation to the resource map
+                try:
+                    parent_tale = gc.get("tale/{}".format(tale['copyOfTale']))
+                    old_publish = next(item for item in parent_tale['publishInfo'] if item['repository'] == member_node)
+
+                    if old_publish:
+                        self.resource_map.add((eml_element, datacite_namespace.IsDerivedFrom,
+                                               URIRef(old_publish['pid'])))
+                        added_record = True
+                except (KeyError, TypeError):
+                    # If there was an error, then silently pass
+                    pass
+
+            if added_record:
+                # Then add DataCite to the resource map namespace
+                self.resource_map.namespace_manager.bind('datacite', datacite_namespace)
 
     def get_access_policy(self):
         """
@@ -137,25 +166,22 @@ class DataONEMetadata(object):
 
         return self.access_policy
 
-    def create_resource_map(self, pid, scimeta_pid, sciobj_pid_list):
+    def create_resource_map(self, pid: str, scimeta_pid: str, sciobj_pid_list: list):
         """
         Create a simple resource map with one science metadata document and any
         number of science data objects.
         This method differs from d1_common.resource_map.createSimpleResourceMap
         by allowing you to specify the coordinating node that the objects
         can be found on.
+
         :param scimeta_pid: PID of the metadata document
-        :param sciobj_pid_list: PID of the upload object
-        :type scimeta_pid: str
-        :type sciobj_pid_list: list
-        :return: The ORE object
-        :rtype: d1_common.resource_map.ResourceMap
+        :param sciobj_pid_list: A list holding the pids of objects being uploaded
         """
         ore = ResourceMap(base_url=self.coordinating_node)
         ore.initialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
-        return ore
+        self.resource_map = ore
 
     def create_entity(self, root, name, description):
         """
@@ -405,7 +431,7 @@ class DataONEMetadata(object):
         return stream.getvalue()
 
     def generate_system_metadata(self, pid, name, format_id, size, md5,
-                                 rights_holder):
+                                 rights_holder) -> SystemMetadata:
         """
         Generates a metadata document describing the file_object.
 
@@ -422,10 +448,9 @@ class DataONEMetadata(object):
         :type md5: int
         :type rights_holder: str
         :return: The metadata describing file_object
-        :rtype: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
-        sys_meta = dataoneTypes.systemMetadata()
+        sys_meta: SystemMetadata = dataoneTypes.systemMetadata()
         sys_meta.identifier = pid
         sys_meta.formatId = format_id
         sys_meta.size = size
