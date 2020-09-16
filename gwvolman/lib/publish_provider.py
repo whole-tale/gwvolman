@@ -30,7 +30,8 @@ class PublishProvider(object):
             self.job_manager = NullManager()
 
         self.tale = self.gc.get("/tale/{}".format(tale_id))
-        assert self.tale["description"], "Cannot publish a Tale without a description."
+        assert self.tale["description"], "Tales without a description cannot be published. " \
+                                         "Please add a description to the Tale before publishing."
         self.manifest = self.gc.get("/tale/{}/manifest".format(tale_id))
 
     @property

@@ -337,14 +337,19 @@ class DataONEPublishProvider(PublishProvider):
             except Exception as e:
                 raise
 
-    def _get_manifest_file_info(self, manifest, relpath):
-        for file in manifest["aggregates"]:
-            if file["uri"] == relpath:
-                md5 = file["md5"]
-                # mimeType = file['mimeType']
-                size = file["size"]
-                return size, md5
-        return None, None
+    @staticmethod
+    def _get_manifest_file_info(manifest, relpath):
+            for file in manifest["aggregates"]:
+                try:
+                    if file["uri"] == relpath:
+                        md5 = file["md5"]
+                        size = file["size"]
+                        return size, md5
+                except KeyError:
+                    # It should be okay if there's a key error, continue to return
+                    pass
+            return None, None
+
 
     def _upload_file(self, pid: str, file_object: Union[str, io.BytesIO], system_metadata: SystemMetadata):
         """
@@ -372,7 +377,7 @@ class DataONEPublishProvider(PublishProvider):
         :param pid: The package pid
         :return: The package landing page
         """
-        if member_node in D1_ENV_DICT["prod"]:
+        if member_node in D1_ENV_DICT["prod"]["base_url"]:
             return str("https://search.dataone.org/view/" + pid)
         else:
             return str("https://dev.nceas.ucsb.edu/view/" + pid)
@@ -440,7 +445,8 @@ class DataONEPublishProvider(PublishProvider):
             logging.error('Error obsoleting package {} with {}. {}'.format(old_pid, new_pid, e))
             raise ValueError('Failed to obsolete the previous version of the Tale')
 
-    def update_sysmeta(self, sysmeta: SystemMetadata, bytes_to_upload: Union[str, bytes], new_pid):
+    @staticmethod
+    def update_sysmeta(sysmeta: SystemMetadata, bytes_to_upload: Union[str, bytes], new_pid):
         """
         Updates a system metadata document to describe a different object. The idea is that the
         DataONE server will set various fields on the system metadata (AuthortativeMemberNode, for example)

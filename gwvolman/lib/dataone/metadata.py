@@ -117,27 +117,27 @@ class DataONEMetadata(object):
                     elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
                         self.resource_map.add((eml_element, datacite_namespace.IsDerivedFrom,
                                                URIRef(related_object["@id"])))
+
+                if tale['copyOfTale']:
+                    # If this Tale is a copy of another Tale, we need to check if its predecessor was published
+                    # If it was, then add a DataCite relation to the resource map
+                    try:
+                        parent_tale = gc.get("tale/{}".format(tale['copyOfTale']))
+                        old_publish = next(item for item in parent_tale['publishInfo'] if item['repository'] == member_node)
+
+                        if old_publish:
+                            self.resource_map.add((eml_element, datacite_namespace.IsDerivedFrom,
+                                                   URIRef(old_publish['pid'])))
+                            added_record = True
+                    except (KeyError, TypeError):
+                        # If there was an error, then silently pass
+                        pass
+
+                if added_record:
+                    # Then add DataCite to the resource map namespace
+                    self.resource_map.namespace_manager.bind('datacite', datacite_namespace)
             except KeyError:
                 pass
-
-            if tale['copyOfTale']:
-                # If this Tale is a copy of another Tale, we need to check if its predecessor was published
-                # If it was, then add a DataCite relation to the resource map
-                try:
-                    parent_tale = gc.get("tale/{}".format(tale['copyOfTale']))
-                    old_publish = next(item for item in parent_tale['publishInfo'] if item['repository'] == member_node)
-
-                    if old_publish:
-                        self.resource_map.add((eml_element, datacite_namespace.IsDerivedFrom,
-                                               URIRef(old_publish['pid'])))
-                        added_record = True
-                except (KeyError, TypeError):
-                    # If there was an error, then silently pass
-                    pass
-
-            if added_record:
-                # Then add DataCite to the resource map namespace
-                self.resource_map.namespace_manager.bind('datacite', datacite_namespace)
 
     def get_access_policy(self):
         """
@@ -449,7 +449,6 @@ class DataONEMetadata(object):
         :type rights_holder: str
         :return: The metadata describing file_object
         """
-
         sys_meta: SystemMetadata = dataoneTypes.systemMetadata()
         sys_meta.identifier = pid
         sys_meta.formatId = format_id
@@ -475,7 +474,8 @@ class DataONEMetadata(object):
             return 'https://orcid.org'
         return 'https://cilogon.org'
 
-    def _strip_html_tags(self, html_string):
+    @staticmethod
+    def _strip_html_tags(html_string):
         """
         Removes HTML tags from a string
         :param html_string: The string with HTML
