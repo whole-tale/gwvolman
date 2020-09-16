@@ -10,7 +10,6 @@ requests
 pyyaml
 lxml
 markdown
-jwt==0.5.4
 dataone.common==3.4.7
 dataone.libclient==3.4.7
 dataone.cli==3.4.7
