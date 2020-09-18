@@ -11,180 +11,7 @@ import uuid
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
 from gwvolman.lib.dataone.publish import DataONEPublishProvider
-
-PARENT_TALE = {
-    "_accessLevel": 2,
-    "_id": "123456789",
-    "_modelType": "tale",
-    "authors": [
-        {
-            "firstName": "Kacper",
-            "lastName": "Kowalik",
-            "orcid": "https://orcid.org/0000-0003-1709-3744",
-        },
-        {
-            "firstName": "Craig",
-            "lastName": "Willis",
-            "orcid": "https://orcid.org/0000-0002-6148-7196",
-        },
-    ],
-    "category": "Examples",
-    "config": {},
-    "created": "2020-06-09T19:03:24.116000+00:00",
-    "creatorId": "59fb6165f7e8790001da4e8b",
-    "dataSet": [
-        {
-            "_modelType": "item",
-            "itemId": "598c693e4264d20001cd8494",
-            "mountPath": "usco2005.xls",
-        }
-    ],
-    "dataSetCitation": [
-        (
-            "White, D. and Alessa, L. (2010) “Humans and Hydrology at High Latitudes: "
-            "Water Use Information, Version 1.0.” UCAR/NCAR - Earth Observing Laboratory. "
-            "doi: 10.5065/D6862DM8."
-        )
-    ],
-    "description": (
-        "Demonstration of how to use Whole Tale to develop custom analysis and visualization for "
-        "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
-        "sers_guide/quickstart.html for more information."
-    ),
-    "folderId": "5cfd57fca18691e5d1feeda8",
-    "format": 7,
-    "icon": (
-        "https://raw.githubusercontent.com/whole-tale/jupyter-base/master"
-        "/squarelogo-greytext-orangebody-greymoons.png"
-    ),
-    "illustration": "http://use.yt/upload/dc1da723",
-    "imageId": "5c8bba172744a50001c5e548",
-    "licenseSPDX": "CC-BY-4.0",
-    "public": True,
-    "publishInfo": [],
-    "title": "Example Tale: Mapping Estimated Water Usage",
-    "updated": "2019-10-08T17:44:29.523000+00:00",
-}
-
-TALE = {
-    "_accessLevel": 2,
-    "_id": "5cfd57fca18691e5d1feeda6",
-    "_modelType": "tale",
-    "authors": [
-        {
-            "firstName": "Kacper",
-            "lastName": "Kowalik",
-            "orcid": "https://orcid.org/0000-0003-1709-3744",
-        },
-        {
-            "firstName": "Craig",
-            "lastName": "Willis",
-            "orcid": "https://orcid.org/0000-0002-6148-7196",
-        },
-    ],
-    "category": "Examples",
-    "config": {},
-    "copyOfTale": "123456789",
-    "created": "2019-06-09T19:03:24.116000+00:00",
-    "creatorId": "59fb6165f7e8790001da4e8b",
-    "dataSet": [
-        {
-            "_modelType": "item",
-            "itemId": "598c693e4264d20001cd8494",
-            "mountPath": "usco2005.xls",
-        }
-    ],
-    "dataSetCitation": [
-        (
-            "White, D. and Alessa, L. (2010) “Humans and Hydrology at High Latitudes: "
-            "Water Use Information, Version 1.0.” UCAR/NCAR - Earth Observing Laboratory. "
-            "doi: 10.5065/D6862DM8."
-        )
-    ],
-    "description": (
-        "Demonstration of how to use Whole Tale to develop custom analysis and visualization for "
-        "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
-        "sers_guide/quickstart.html for more information."
-    ),
-    "folderId": "5cfd57fca18691e5d1feeda8",
-    "format": 7,
-    "icon": (
-        "https://raw.githubusercontent.com/whole-tale/jupyter-base/master"
-        "/squarelogo-greytext-orangebody-greymoons.png"
-    ),
-    "illustration": "http://use.yt/upload/dc1da723",
-    "imageId": "5c8bba172744a50001c5e548",
-    "licenseSPDX": "CC-BY-4.0",
-    "public": True,
-    "publishInfo": [],
-    "title": "Example Tale: Mapping Estimated Water Usage",
-    "updated": "2019-10-08T17:44:29.523000+00:00",
-}
-
-MANIFEST = {
-    "@context": [
-        "https://w3id.org/bundle/context",
-        {"schema": "http://schema.org/"},
-        {"Datasets": {"@type": "@id"}},
-    ],
-    "@id": "https://data.wholetale.org/api/v1/tale/5cfd57fca18691e5d1feeda6",
-    "Datasets": [
-        {
-            "@id": "doi:10.5065/D6862DM8",
-            "@type": "Dataset",
-            "identifier": "doi:10.5065/D6862DM8",
-            "name": "Humans and Hydrology at High Latitudes: Water Use Information",
-        }
-    ],
-    "aggregates": [
-        {"uri": "../workspace/postBuild"},
-        {"uri": "../workspace/requirements.txt"},
-        {"uri": "../workspace/wt_quickstart.ipynb"},
-        {"uri": "../workspace/apt.txt"},
-        {
-            "bundledAs": {"filename": "usco2005.xls", "folder": "../data/"},
-            "schema:isPartOf": "doi:10.5065/D6862DM8",
-            "size": 6427136,
-            "uri": (
-                "https://cn.dataone.org/cn/v2/resolve/"
-                "urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08"
-            ),
-        },
-        {"schema:license": "CC-BY-4.0", "uri": "../LICENSE"},
-    ],
-    "createdBy": {
-        "@id": "willis8@illinois.edu",
-        "@type": "schema:Person",
-        "schema:email": "willis8@illinois.edu",
-        "schema:familyName": "Willis",
-        "schema:givenName": "Craig",
-    },
-    "createdOn": "2019-06-09 19:03:24.116000",
-    "schema:author": [
-        {
-            "@id": "https://orcid.org/0000-0003-1709-3744",
-            "@type": "schema:Person",
-            "schema:familyName": "Kowalik",
-            "schema:givenName": "Kacper",
-        },
-        {
-            "@id": "https://orcid.org/0000-0002-6148-7196",
-            "@type": "schema:Person",
-            "schema:familyName": "Willis",
-            "schema:givenName": "Craig",
-        },
-    ],
-    "schema:category": "Examples",
-    "schema:description": (
-        "Demonstration of how to use Whole Tale to develop custom analysis and visualization for "
-        "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
-        "sers_guide/quickstart.html for more information."
-    ),
-    "schema:identifier": "5cfd57fca18691e5d1feeda6",
-    "schema:image": "http://use.yt/upload/dc1da723",
-    "schema:name": "Example Tale: Mapping Estimated Water Usage",
-    "schema:version": 7,
-}
+from gwvolman.tests import DATAONE_TEST_TOKEN,MANIFEST, COPIED_TALE, PARENT_TALE, TALE
 
 
 def mock_gc_get(path):
@@ -210,7 +37,7 @@ def mock_gc_get(path):
 
 def stream_response(chunk_size=65536):
     test_path = os.path.dirname(__file__)
-    with open("{}/../data/{}.zip".format(test_path, TALE["_id"]), "rb") as fp:
+    with open("{}/../../data/{}.zip".format(test_path, TALE["_id"]), "rb") as fp:
         while True:
             data = fp.read(chunk_size)
             if not data:
@@ -398,11 +225,7 @@ def test_dataone_publish():
     publish.job_manager = NullManager()
     girder_worker.task.Task.canceled = mock.PropertyMock(return_value=False)
 
-    token = {
-        "provider": "dataonestage2",
-        "access_token": "jwt_token",
-        "resource_server": "cn-stage-2.test.dataone.org",
-    }
+
 
     with httmock.HTTMock(
         mock_generate_dataone_ok,
@@ -411,10 +234,10 @@ def test_dataone_publish():
         mock_other_request,
     ):
         with pytest.raises(jwt.exceptions.DecodeError) as error:
-            publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
+            publish("123", DATAONE_TEST_TOKEN, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
             assert error.message.startswith("Not enough segments")
 
-        token["access_token"] = (
+            DATAONE_TEST_TOKEN["access_token"] = (
             "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
             "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
             "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
@@ -426,5 +249,3 @@ def test_dataone_publish():
             "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
             "3gJtWNeGCDw"
         )
-
-        publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")

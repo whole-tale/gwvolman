@@ -3,7 +3,7 @@ import logging
 import os
 import json
 from rdflib import Namespace
-from rdflib.term import Literal, URIRef
+from rdflib.term import URIRef
 import re
 import xml.etree.cElementTree as ET
 
@@ -138,6 +138,7 @@ class DataONEMetadata(object):
                     self.resource_map.namespace_manager.bind('datacite', datacite_namespace)
             except KeyError:
                 pass
+
 
     def get_access_policy(self):
         """
@@ -430,8 +431,8 @@ class DataONEMetadata(object):
                                  short_empty_elements=True)
         return stream.getvalue()
 
-    def generate_system_metadata(self, pid, name, format_id, size, md5,
-                                 rights_holder) -> SystemMetadata:
+    def generate_system_metadata(self, pid: str, name: str, format_id: str,
+                                 size: int, md5: str, rights_holder: str) -> SystemMetadata:
         """
         Generates a metadata document describing the file_object.
 
@@ -441,12 +442,6 @@ class DataONEMetadata(object):
         :param size: The size of the file
         :param md5: The md5 of the file
         :param rights_holder: The owner of this object
-        :type pid: str
-        :type name: str
-        :type format_id: str
-        :type size: int
-        :type md5: int
-        :type rights_holder: str
         :return: The metadata describing file_object
         """
         sys_meta: SystemMetadata = dataoneTypes.systemMetadata()
