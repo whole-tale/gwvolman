@@ -7,6 +7,7 @@ import re
 from typing import List
 import xml.etree.cElementTree as ET
 
+
 try:
     from urllib.request import urlopen
 except ImportError:
