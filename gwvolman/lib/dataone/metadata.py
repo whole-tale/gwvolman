@@ -6,7 +6,9 @@ from rdflib import Namespace
 from rdflib.term import URIRef
 from rdflib.term import Literal
 import re
+from typing import List
 import xml.etree.cElementTree as ET
+
 
 try:
     from urllib.request import urlopen
@@ -114,7 +116,6 @@ class DataONEMetadata(object):
             except KeyError:
                 pass
 
-
     def get_access_policy(self):
         """
         Returns or creates the access policy for the system metadata.
@@ -142,17 +143,16 @@ class DataONEMetadata(object):
 
         return self.access_policy
 
-    def create_resource_map(self, pid, scimeta_pid, sciobj_pid_list):
+    def create_resource_map(self, pid: str, scimeta_pid: str, sciobj_pid_list: List):
         """
         Create a simple resource map with one science metadata document and any
         number of science data objects.
         This method differs from d1_common.resource_map.createSimpleResourceMap
         by allowing you to specify the coordinating node that the objects
         can be found on.
+        :param pid: The resource map's pid
         :param scimeta_pid: PID of the metadata document
-        :param sciobj_pid_list: PID of the upload object
-        :type scimeta_pid: str
-        :type sciobj_pid_list: list
+        :param sciobj_pid_list: List of pids of data objects being uploaded
         """
         ore: ResourceMap = ResourceMap(base_url=self.coordinating_node)
         ore.initialize(pid)
@@ -254,6 +254,7 @@ class DataONEMetadata(object):
         :param root: The parent XML element
         :param first_name: The user's first name
         :param last_name: The user's last name
+        :param user_id: The user's ORCID
         :type root: xml.etree.ElementTree.Element
         :type first_name: str
         :type last_name: str
@@ -363,8 +364,8 @@ class DataONEMetadata(object):
             if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
                 size = item['size']
-                mimeType = self.check_dataone_mimetype(item['mimeType'])
-                self.add_object_record(dataset_elem, name, '', size, mimeType)
+                mime_type = self.check_dataone_mimetype(item['mimeType'])
+                self.add_object_record(dataset_elem, name, '', size, mime_type)
 
         # Add the manifest itself
         name = ExtraFileNames.manifest_file

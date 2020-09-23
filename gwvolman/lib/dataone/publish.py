@@ -7,6 +7,7 @@ import logging
 import mimetypes
 import os
 import tempfile
+from typing import Tuple, Union
 import zipfile
 
 try:
@@ -16,6 +17,7 @@ except ImportError:
 
 from d1_client.mnclient_2_0 import MemberNodeClient_2_0
 from d1_common.types.exceptions import DataONEException, InvalidToken
+from d1_common.types.generated.dataoneTypes_v2_0 import SystemMetadata
 from d1_common.env import D1_ENV_DICT
 
 from .metadata import DataONEMetadata
@@ -215,20 +217,20 @@ class DataONEPublishProvider(PublishProvider):
                         )
 
                         if fname == "manifest.json":
-                            size, hash = manifest_size, manifest_md5
+                            size, md5_hash = manifest_size, manifest_md5
                         elif fname == "environment.json":
-                            size, hash = environment_size, environment_md5
+                            size, md5_hash = environment_size, environment_md5
                         elif fname == "run-local.sh":
-                            size, hash = run_local_size, run_local_md5
+                            size, md5_hash = run_local_size, run_local_md5
                         elif fname == "fetch.txt":
-                            size, hash = fetch_size, fetch_md5
+                            size, md5_hash = fetch_size, fetch_md5
                         elif fname == 'README.md':
-                            size, hash = readme_size, readme_md5
+                            size, md5_hash = readme_size, readme_md5
                         else:
-                            size, hash = self._get_manifest_file_info(manifest, relpath)
+                            size, md5_hash = self._get_manifest_file_info(manifest, relpath)
 
                         file_meta = metadata.generate_system_metadata(
-                            file_pid, fname, mimeType, size, hash, user_id
+                            file_pid, fname, mimeType, size, md5_hash, user_id
                         )
 
                         self._upload_file(
@@ -341,16 +343,18 @@ class DataONEPublishProvider(PublishProvider):
                 #            pid, str(e)))
                 raise
 
-    def _get_manifest_file_info(self, manifest, relpath):
+    @staticmethod
+    def _get_manifest_file_info(manifest, relpath):
         for file in manifest["aggregates"]:
             if file["uri"] == relpath:
-                md5 = file["md5"]
+                md5_checksum = file["md5"]
                 # mimeType = file['mimeType']
                 size = file["size"]
-                return size, md5
+                return size, md5_checksum
         return None, None
 
-    def _upload_file(self, pid, file_object, system_metadata):
+    def _upload_file(self, pid: str, file_object: Union[str, io.BytesIO],
+                     system_metadata: SystemMetadata):
         """
         Uploads two files to a DataONE member node. The first is an object,
         which is just a data file.  The second is a metadata file describing
@@ -359,9 +363,6 @@ class DataONEPublishProvider(PublishProvider):
         :param pid: The pid of the data object
         :param file_object: The file object that will be uploaded
         :param system_metadata: The metadata object describing the file object
-        :type pid: str
-        :type file_object: str
-        :type system_metadata: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
         try:
@@ -370,7 +371,8 @@ class DataONEPublishProvider(PublishProvider):
             logging.warning("Error uploading file to DataONE {} {}".format(pid, str(e)))
             raise
 
-    def _get_dataone_package_url(self, member_node, pid):
+    @staticmethod
+    def _get_dataone_package_url(member_node: str, pid: str):
         """
         Given a repository url and a pid, construct a url that should
          be the package's landing page.
@@ -384,67 +386,59 @@ class DataONEPublishProvider(PublishProvider):
         else:
             return str("https://dev.nceas.ucsb.edu/view/" + pid)
 
-    def _get_resource_map_user(self, user_id):
+    def _get_resource_map_user(self, user_id: str) -> str:
         """
         HTTPS links will break the resource map. Use this function
         to get a properly constructed username from a user's ID.
         :param user_id: The user ORCID
-        :type user_id: str
         :return: An http version of the user
-        :rtype: str
         """
         if bool(user_id.find("orcid.org")):
             return self._make_url_http(user_id)
         return user_id
 
-    def _extract_user_info(self):
+    def _extract_user_info(self) -> Tuple[str, str]:
         """
         Takes a JWT and extracts the `userId` and `fullName` fields.
         This is used as the package's owner and contact.
-        :param jwt_token: The decoded JWT
-        :type jwt_token: str
-        :return: The ORCID ID
-        :rtype: str, None if failure
+        :return: The ORCID ID, and the user's full name
         """
         jwt_token = jwt.PyJWT().decode(self.dataone_auth_token, options={"verify_signature": False})
         user_id = jwt_token.get("userId")
         name = jwt_token.get("fullName")
         return user_id, name
 
-    def _is_orcid_id(self, user_id):
+    @staticmethod
+    def _is_orcid_id(user_id: str) -> bool:
         """
         Checks whether a string is a link to an ORCID account
         :param user_id: The string that may contain the ORCID account
-        :type user_id: str
         :return: True/False if it is or isn't
-        :rtype: bool
         """
         return bool(user_id.find("orcid.org"))
 
-    def _make_url_https(self, url):
+    @staticmethod
+    def _make_url_https(url: str) -> str:
         """
         Given an http url, return it as https
 
         :param url: The http url
-        :type url: str
         :return: The url as https
-        :rtype: str
         """
         parsed = urlparse(url)
         return parsed._replace(scheme="https").geturl()
 
-    def _make_url_http(self, url):
+    @staticmethod
+    def _make_url_http(url: str) -> str:
         """
         Given an https url, make it http
         :param url: The http url
-        :type url: str
         :return: The url as https
-        :rtype: str
         """
         parsed = urlparse(url)
         return parsed._replace(scheme="http").geturl()
 
-    def _generate_pid(self, scheme="DOI"):
+    def _generate_pid(self, scheme: str="DOI"):
         """
         Generates a DataONE identifier.
         :return: A valid DataONE identifier
