@@ -237,7 +237,7 @@ def update_container(task, instanceId, digest=None):
     except KeyError:
         previous_image = ''
 
-    if (previous_image == digest):
+    if previous_image == digest:
         task.job_manager.updateProgress(
             message='Image has not changed',
             total=UPDATE_CONTAINER_STEP_TOTAL,

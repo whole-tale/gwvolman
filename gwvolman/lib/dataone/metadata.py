@@ -12,7 +12,6 @@ try:
 except ImportError:
     from urllib2 import urlopen
 
-
 from .constants import \
     ExtraFileNames, \
     file_descriptions
@@ -86,7 +85,7 @@ class DataONEMetadata(object):
         return mimetype
 
     def set_related_identifiers(self, manifest: dict, eml_pid: str,
-                                tale: dict, member_node: str, gc ):
+                                tale: dict, member_node: str, gc):
         """
         This method adds fields to the DataONE resource map if there are
         1. Any DataCite:RelatedIdentifiers
@@ -175,6 +174,7 @@ class DataONEMetadata(object):
         by allowing you to specify the coordinating node that the objects
         can be found on.
 
+        :param pid: The pid for the new resource map
         :param scimeta_pid: PID of the metadata document
         :param sciobj_pid_list: A list holding the pids of objects being uploaded
         """
@@ -272,15 +272,14 @@ class DataONEMetadata(object):
         self.create_format(object_format, physical_section)
         ET.SubElement(entity_section, 'entityType').text = 'dataTable'
 
-    def set_user_name(self, root, first_name, last_name, user_id=None):
+    def set_user_name(self, root: ET.Element,
+                      first_name: str, last_name: str, user_id: str=None):
         """
         Creates a section in the EML that describes a user's name.
         :param root: The parent XML element
         :param first_name: The user's first name
         :param last_name: The user's last name
-        :type root: xml.etree.ElementTree.Element
-        :type first_name: str
-        :type last_name: str
+        :param user_id: The user's ORCID
         :return: None
         """
         individual_name_elem = ET.SubElement(root, 'individualName')
@@ -456,7 +455,8 @@ class DataONEMetadata(object):
         sys_meta.fileName = name
         return sys_meta
 
-    def _get_directory(self, user_id):
+    @staticmethod
+    def _get_directory(user_id):
         """
         Returns the directory that should be used in the EML
 

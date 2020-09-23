@@ -11,7 +11,7 @@ import uuid
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
 from gwvolman.lib.dataone.publish import DataONEPublishProvider
-from gwvolman.tests import DATAONE_TEST_TOKEN,MANIFEST, COPIED_TALE, PARENT_TALE, TALE
+from gwvolman.tests import DATAONE_TEST_TOKEN, MANIFEST, TALE
 
 
 def mock_gc_get(path):
@@ -50,6 +50,7 @@ def mock_tale_update_dataone(path, json=None):
     assert len(json["publishInfo"]) == 1
     # TODO Check something
 
+
 @httmock.all_requests
 def mock_other_request(url, request):
     if request.url.startswith("http+docker://"):
@@ -64,8 +65,10 @@ def mock_other_request(url, request):
     method="GET",
 )
 def mock_dataone_formats(url, request):
-    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
-<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
+    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
+<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1"
+ xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
     <objectFormat>
         <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>
         <formatName>Ecological Metadata Language, version 2.0.0</formatName>
@@ -105,6 +108,7 @@ def mock_dataone_formats(url, request):
         request=request,
         stream=False,
     )
+
 
 @httmock.urlmatch(
     scheme="https",
@@ -160,6 +164,7 @@ def mock_object_dataone_ok(url, request):
         stream=False,
     )
 
+
 def test_get_http_orcid():
     https_orcid = "https://orcid.org/0000-0002-1756-2128"
     http_orcid = DataONEPublishProvider._get_http_orcid(https_orcid)
@@ -213,6 +218,7 @@ def test_get_manifest_file_info():
     assert size is None
     assert md5 is None
 
+
 @pytest.mark.celery(result_backend="rpc")
 def test_dataone_publish():
     mock_gc = mock.MagicMock(spec=GirderClient)
@@ -225,8 +231,6 @@ def test_dataone_publish():
     publish.job_manager = NullManager()
     girder_worker.task.Task.canceled = mock.PropertyMock(return_value=False)
 
-
-
     with httmock.HTTMock(
         mock_generate_dataone_ok,
         mock_object_dataone_ok,
@@ -238,14 +242,14 @@ def test_dataone_publish():
             assert error.message.startswith("Not enough segments")
 
             DATAONE_TEST_TOKEN["access_token"] = (
-            "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
-            "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
-            "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
-            "iOjE1NzI5NTc1ODAsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
-            "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTU3Mjg5Mjc4MH0.oNGDWmdePMYPUzt1Inhu1r1p95w"
-            "0kld6C24nohtgOyRROYtihdnIE0OcoxXd7KXdiVRdXLL34-qmiQTeRMPJEgMDtPNj6JUrP6yXP8Y"
-            "LG77iOGrSnKFRK8vJenc7-d8vJCqzebD8Xu6_pslw0GGiRMxfISa_UdGEYp0xyRgAIQmMr7q3H-T"
-            "K1P2KHb3M4RCWb5Ubv1XsTRJ5gXsLLu0WvBfXFu-EKAka7IO6uTAK1RZLnJqrotvCCT4lL6GyPPY"
-            "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
-            "3gJtWNeGCDw"
-        )
+                "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
+                "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
+                "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
+                "iOjE1NzI5NTc1ODAsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
+                "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTU3Mjg5Mjc4MH0.oNGDWmdePMYPUzt1Inhu1r1p95w"
+                "0kld6C24nohtgOyRROYtihdnIE0OcoxXd7KXdiVRdXLL34-qmiQTeRMPJEgMDtPNj6JUrP6yXP8Y"
+                "LG77iOGrSnKFRK8vJenc7-d8vJCqzebD8Xu6_pslw0GGiRMxfISa_UdGEYp0xyRgAIQmMr7q3H-T"
+                "K1P2KHb3M4RCWb5Ubv1XsTRJ5gXsLLu0WvBfXFu-EKAka7IO6uTAK1RZLnJqrotvCCT4lL6GyPPY"
+                "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
+                "3gJtWNeGCDw"
+            )

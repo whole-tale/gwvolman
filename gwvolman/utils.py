@@ -188,7 +188,7 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
-        digest=tale['imageInfo']['digest']
+        digest = tale['imageInfo']['digest']
 
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
@@ -284,6 +284,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         path=rendered_url_path)
 
     return service, {'url': url}
+
 
 def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     """

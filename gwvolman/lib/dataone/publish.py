@@ -128,50 +128,50 @@ class DataONEPublishProvider(PublishProvider):
             tmp.seek(0)
 
             # Read the zipfile
-            zip = zipfile.ZipFile(tmp, "r")
-            files = zip.namelist()
+            zip_file = zipfile.ZipFile(tmp, "r")
+            files = zip_file.namelist()
 
             # Now we know the number of steps for progress
             steps = len(files) + 5
 
             # Get the manifest
             manifest_path = "{}/metadata/manifest.json".format(self.tale["_id"])
-            manifest_size = zip.getinfo(manifest_path).file_size
-            with zip.open(manifest_path) as f:
+            manifest_size = zip_file.getinfo(manifest_path).file_size
+            with zip_file.open(manifest_path) as f:
                 data = f.read()
                 manifest_md5 = md5(data).hexdigest()
                 manifest = json.loads(data.decode("utf-8"))
 
             # Read the license text
             license_path = "{}/data/LICENSE".format(self.tale["_id"])
-            with zip.open(license_path) as f:
+            with zip_file.open(license_path) as f:
                 license_text = str(f.read().decode("utf-8"))
 
             # Get the environment
             environment_path = "{}/metadata/environment.json".format(self.tale["_id"])
-            environment_size = zip.getinfo(environment_path).file_size
-            with zip.open(environment_path) as f:
+            environment_size = zip_file.getinfo(environment_path).file_size
+            with zip_file.open(environment_path) as f:
                 data = f.read()
                 environment_md5 = md5(data).hexdigest()
 
             # Get the run-local.sh
             run_local_path = "{}/run-local.sh".format(self.tale["_id"])
-            run_local_size = zip.getinfo(run_local_path).file_size
-            with zip.open(run_local_path) as f:
+            run_local_size = zip_file.getinfo(run_local_path).file_size
+            with zip_file.open(run_local_path) as f:
                 data = f.read()
                 run_local_md5 = md5(data).hexdigest()
 
             # Get the fetch.txt
             fetch_path = "{}/fetch.txt".format(self.tale["_id"])
-            fetch_size = zip.getinfo(fetch_path).file_size
-            with zip.open(fetch_path) as f:
+            fetch_size = zip_file.getinfo(fetch_path).file_size
+            with zip_file.open(fetch_path) as f:
                 data = f.read()
                 fetch_md5 = md5(data).hexdigest()
 
             # Get the README.md
             readme_path = "{}/README.md".format(self.tale["_id"])
-            readme_size = zip.getinfo(readme_path).file_size
-            with zip.open(readme_path) as f:
+            readme_size = zip_file.getinfo(readme_path).file_size
+            with zip_file.open(readme_path) as f:
                 data = f.read()
                 readme_md5 = md5(data).hexdigest()
 
@@ -199,7 +199,7 @@ class DataONEPublishProvider(PublishProvider):
             uploaded_pids = []
             try:
                 for fpath in files:
-                    with zip.open(fpath) as f:
+                    with zip_file.open(fpath) as f:
                         relpath = fpath.replace(self.tale["_id"], "..")
                         fname = os.path.basename(fpath)
 
@@ -215,7 +215,7 @@ class DataONEPublishProvider(PublishProvider):
 
                         file_pid = self._generate_pid(scheme="UUID")
 
-                        mimeType = metadata.check_dataone_mimetype(
+                        mime_type = metadata.check_dataone_mimetype(
                             mimetypes.guess_type(fpath)[0]
                         )
 
@@ -233,7 +233,7 @@ class DataONEPublishProvider(PublishProvider):
                             size, hash = self._get_manifest_file_info(manifest, relpath)
 
                         file_meta = metadata.generate_system_metadata(
-                            file_pid, fname, mimeType, size, hash, user_id
+                            file_pid, fname, mime_type, size, hash, user_id
                         )
 
                         self._upload_file(
@@ -256,8 +256,6 @@ class DataONEPublishProvider(PublishProvider):
                     # Use the system metadata from the previous EML document
                     new_sysmeta = self.update_sysmeta(previous_sysmeta, eml_doc, eml_pid)
                     self._obsolete_object(last_eml_pid, eml_pid, eml_doc, new_sysmeta)
-
-
 
                 except (IndexError, NotFound, Exception) as e:
                     # Then this hasn't been published before and could not be updated
@@ -349,7 +347,6 @@ class DataONEPublishProvider(PublishProvider):
                     # It should be okay if there's a key error, continue to return
                     pass
             return None, None
-
 
     def _upload_file(self, pid: str, file_object: Union[str, io.BytesIO], system_metadata: SystemMetadata):
         """

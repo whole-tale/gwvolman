@@ -7,7 +7,6 @@ from gwvolman.lib.publish_provider import PublishProvider, NullManager
 from gwvolman.tests import TALE, PUBLISHED_TALE, ZENODO_TOKEN, MANIFEST, TALE_NO_DESC
 
 
-
 def mock_gc_get(path):
     if path in "/tale/5cfd57fca18691e5d1feeda6":
         return copy.deepcopy(TALE)
@@ -27,9 +26,9 @@ def test_ctor():
     mock_gc.get = mock_gc_get
     mock_gc.sendRestRequest.return_value = mock_req
 
-    provider = PublishProvider(mock_gc, TALE['_id'], ZENODO_TOKEN )
+    provider = PublishProvider(mock_gc, TALE['_id'], ZENODO_TOKEN)
     assert provider.tale == TALE
-    assert type(provider.job_manager) == type(NullManager())
+    assert isinstance(provider.job_manager, NullManager)
     assert provider.manifest == MANIFEST
 
     # Test without a Tale description

@@ -1,6 +1,7 @@
 import httmock
 from gwvolman.lib.dataone.metadata import DataONEMetadata
 
+
 @httmock.urlmatch(
     scheme="https",
     netloc="^cn-stage-2.test.dataone.org$",
@@ -8,8 +9,10 @@ from gwvolman.lib.dataone.metadata import DataONEMetadata
     method="GET",
 )
 def mock_dataone_formats(url, request):
-    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>	
-<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">	
+    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet
+     type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>	
+<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1"
+ xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">	
     <objectFormat>	
         <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>	
         <formatName>Ecological Metadata Language, version 2.0.0</formatName>	
@@ -98,7 +101,7 @@ def test_generate_system_metadata():
         md5 = "50321b197d014a1f3d7a3adf99277919,"
         rights_holder = "http://orcid.org/0000-0002-1756-2128"
         sys_meta = metadata.generate_system_metadata(pid, name, format_id, size, md5,
-                                                    rights_holder)
+                                                     rights_holder)
 
         assert sys_meta.identifier.value() == pid
         assert sys_meta.formatId == format_id

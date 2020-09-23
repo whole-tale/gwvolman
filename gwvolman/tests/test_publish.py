@@ -579,8 +579,10 @@ def stream_response(chunk_size=65536):
     method="GET",
 )
 def mock_dataone_formats(url, request):
-    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
-<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
+    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
+<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1"
+ xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
     <objectFormat>
         <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>
         <formatName>Ecological Metadata Language, version 2.0.0</formatName>
