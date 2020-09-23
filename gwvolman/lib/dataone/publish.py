@@ -288,9 +288,10 @@ class DataONEPublishProvider(PublishProvider):
 
                 # Create ORE
                 res_pid = self._generate_pid(client, scheme="UUID")
-                res_map = metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
+                metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
+                metadata.set_related_identifiers(manifest, eml_pid)
+                res_map = metadata.resource_map.serialize()
                 # Update the resource map with citations
-                metadata.set_related_identifiers(manifest, res_map, eml_pid)
                 # Turn the resource map into readable bytes
                 res_map = res_map.serialize()
                 res_meta = metadata.generate_system_metadata(

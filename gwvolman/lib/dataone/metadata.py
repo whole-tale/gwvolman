@@ -1,6 +1,9 @@
 import io
 import logging
 import os
+import json
+from rdflib import Namespace
+from rdflib.term import URIRef
 from rdflib.term import Literal
 import re
 import xml.etree.cElementTree as ET
@@ -18,9 +21,11 @@ from .constants import \
 from d1_client.cnclient_2_0 import CoordinatingNodeClient_2_0
 from d1_common.types import dataoneTypes
 from d1_common.types.exceptions import DataONEException
+from d1_common.types.generated.dataoneTypes_v2_0 import SystemMetadata
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
+
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -33,9 +38,10 @@ class DataONEMetadata(object):
     mimetypes = set()
     access_policy = None
 
-    def __init__(self, coordinating_node):
+    def __init__(self, coordinating_node: str):
         self.coordinating_node = coordinating_node
         self.mimetypes = self.get_dataone_mimetypes()
+        self.resource_map: ResourceMap = None
 
     def get_dataone_mimetypes(self):
         """
@@ -82,18 +88,17 @@ class DataONEMetadata(object):
             return 'application/octet-stream'
         return mimetype
 
-    def set_related_identifiers(self, manifest, resource_map, eml_pid):
+    def set_related_identifiers(self, manifest, eml_pid):
         """
         Modifies a resource map to include cito:cites for any cited Tale entities
 
         :param manifest: The Tale's manifest
-        :param resource_map: The resource map that will be submitted to DataONE
         :param eml_pid: The pid of the EML document
         :return: The resource map
         """
         eml_element = None
         try:
-            eml_element = resource_map.getObjectByPid(eml_pid)
+            eml_element = self.resource_map.getObjectByPid(eml_pid)
         except IndexError:
             logging.warning("Failed to find the pid {} in the resource map.".format(eml_pid))
             return
@@ -103,9 +108,9 @@ class DataONEMetadata(object):
                 for relation in manifest["DataCite:relatedIdentifiers"]:
                     related_object = relation["DataCite:relatedIdentifier"]
                     if related_object["DataCite:relationType"] == "DataCite:Cites":
-                        resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
+                        self.resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
                     elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
-                        resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
+                        self.resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
             except KeyError:
                 pass
 
@@ -148,14 +153,12 @@ class DataONEMetadata(object):
         :param sciobj_pid_list: PID of the upload object
         :type scimeta_pid: str
         :type sciobj_pid_list: list
-        :return: The ORE object
-        :rtype: d1_common.resource_map.ResourceMap
         """
-        ore = ResourceMap(base_url=self.coordinating_node)
+        ore: ResourceMap = ResourceMap(base_url=self.coordinating_node)
         ore.initialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
-        return ore
+        self.resource_map = ore
 
     def create_entity(self, root, name, description):
         """
