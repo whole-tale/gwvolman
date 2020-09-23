@@ -1,20 +1,16 @@
 import io
 import logging
 import os
-import json
 from rdflib import Namespace
 from rdflib.term import URIRef
-from rdflib.term import Literal
 import re
 from typing import List
 import xml.etree.cElementTree as ET
-
 
 try:
     from urllib.request import urlopen
 except ImportError:
     from urllib2 import urlopen
-
 
 from .constants import \
     ExtraFileNames, \
@@ -24,6 +20,7 @@ from d1_client.cnclient_2_0 import CoordinatingNodeClient_2_0
 from d1_common.types import dataoneTypes
 from d1_common.types.exceptions import DataONEException
 from d1_common.types.generated.dataoneTypes_v2_0 import SystemMetadata
+from d1_common.types.generated.dataoneTypes_v1 import AccessPolicy
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
@@ -37,24 +34,22 @@ EML document.
 
 
 class DataONEMetadata(object):
-    mimetypes = set()
-    access_policy = None
 
     def __init__(self, coordinating_node: str):
-        self.coordinating_node = coordinating_node
-        self.mimetypes = self.get_dataone_mimetypes()
+        self.coordinating_node: str = coordinating_node
+        self.mimetypes: set = self.get_dataone_mimetypes()
         self.resource_map: ResourceMap = None
+        self.access_policy: AccessPolicy = None
 
-    def get_dataone_mimetypes(self):
+    def get_dataone_mimetypes(self) -> set:
         """
         Uses a coordinating node client to retrieve a list of supported
         formats
 
-        :return: A list of mimetypes that DataONE supports
-        :rtype: set
+        :return: A set of mimetypes that DataONE supports
         """
         try:
-            cn_client = CoordinatingNodeClient_2_0(self.coordinating_node)
+            cn_client: CoordinatingNodeClient_2_0 = CoordinatingNodeClient_2_0(self.coordinating_node)
             formats_response = cn_client.listFormats()
         except DataONEException as e:
             logging.error("Failed to connect to the DataONE coordinating node. {}".format(e))
@@ -77,13 +72,12 @@ class DataONEMetadata(object):
                 continue
         return mime_types
 
-    def check_dataone_mimetype(self, mimetype):
+    def check_dataone_mimetype(self, mimetype: str) -> str:
         """
         If a mimeType isn't found in DataONE's supported list,
         default to application/octet-stream.
 
         :param mimetype: The mimetype in question
-        :type mimetype: str
         :return: A mimetype that is supported by DataONE
         """
         if mimetype not in self.mimetypes:
@@ -142,11 +136,10 @@ class DataONEMetadata(object):
                 # Then add DataCite to the resource map namespace
                 self.resource_map.namespace_manager.bind('datacite', datacite_namespace)
 
-    def get_access_policy(self):
+    def get_access_policy(self) -> AccessPolicy:
         """
         Returns or creates the access policy for the system metadata.
         :return: The access policy
-        :rtype: d1_common.types.generated.dataoneTypes_v1.AccessPolicy
         """
 
         if not self.access_policy:
@@ -434,8 +427,8 @@ class DataONEMetadata(object):
                                  short_empty_elements=True)
         return stream.getvalue()
 
-    def generate_system_metadata(self, pid, name, format_id, size, md5,
-                                 rights_holder):
+    def generate_system_metadata(self, pid: str, name: str, format_id: str,
+                                 size: int, md5: str, rights_holder: str) -> SystemMetadata:
         """
         Generates a metadata document describing the file_object.
 
@@ -445,14 +438,7 @@ class DataONEMetadata(object):
         :param size: The size of the file
         :param md5: The md5 of the file
         :param rights_holder: The owner of this object
-        :type pid: str
-        :type name: str
-        :type format_id: str
-        :type size: int
-        :type md5: int
-        :type rights_holder: str
         :return: The metadata describing file_object
-        :rtype: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
         sys_meta = dataoneTypes.systemMetadata()
@@ -467,25 +453,23 @@ class DataONEMetadata(object):
         sys_meta.fileName = name
         return sys_meta
 
-    def _get_directory(self, user_id):
+    @staticmethod
+    def _get_directory(self, user_id: str) -> str:
         """
         Returns the directory that should be used in the EML
 
         :param user_id: The user ID
-        :type user_id: str
         :return: The directory name
-        :rtype: str
         """
         if bool(user_id.find('orcid.org')):
             return 'https://orcid.org'
         return 'https://cilogon.org'
 
-    def _strip_html_tags(self, html_string):
+    @staticmethod
+    def _strip_html_tags(html_string: str) -> str:
         """
         Removes HTML tags from a string
         :param html_string: The string with HTML
-        :type html_string: str
         :return: The string without HTML
-        :rtype: str
         """
         return re.sub('<[^<]+?>', '', html_string)

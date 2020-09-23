@@ -27,24 +27,25 @@ from gwvolman.lib.publish_provider import PublishProvider
 
 class DataONEPublishProvider(PublishProvider):
     def __init__(
-        self, gc, tale_id, token, draft=False, job_manager=None, dataone_node=None
+        self, gc, tale_id: str, token: dict, draft: bool=False,
+            job_manager=None, dataone_node: str=None
     ):
         """
-        Initiliaze DataONE Publish Provider.
+        Initialize a DataONE Publish Provider. This object holds information about the
+        repository that it's publishing to. For example, it holds the DataONE client
+        which is used to interact with DataONE.
 
         :param gc:  Authenticated Girder client
+        :param tale_id: The ID of the Tale being published
+        :param token: The user's JWT token
+        :param draft: Unsupported
         :param job_manager:  Optional job manager
         :param dataone_node: The DataONE member node endpoint
-        :param dataone_auth_token: The user's DataONE JWT
-        :param coordinating_node: URL to the coordinating node
-        :type dataone_node: str
-        :type dataone_auth_token: str
-        :type coordinating_node: str
         """
         super().__init__(gc, tale_id, token, draft=draft, job_manager=job_manager)
-        self.dataone_node = dataone_node
+        self.dataone_node: str = dataone_node
         self.dataone_auth_token = token["access_token"]
-        self.coordinating_node = "https://{}/cn/".format(token["resource_server"])
+        self.coordinating_node:str = "https://{}/cn/".format(token["resource_server"])
         self.client: MemberNodeClient_2_0 = None
 
     def _create_client(self):
@@ -84,7 +85,8 @@ class DataONEPublishProvider(PublishProvider):
         step = 1
         steps = 100
 
-        # Files to ignore when uploading
+        # Files to ignore when uploading. These come from the bagged Tale that's used
+        # to upload the files.
         ignore_files = [
             "tagmanifest-sha256.txt",
             "tagmanifest-md5.txt",
@@ -100,9 +102,10 @@ class DataONEPublishProvider(PublishProvider):
         )
         step += 1
 
-        # Throw a ValueError if a connection can't be made
+        # Throw a ValueError if a client can't be created
         self._create_client()
 
+        # Make sure that the JWT is in good form and has the right fields
         user_id, full_orcid_name = self._extract_user_info()
         if not all([user_id, full_orcid_name]):
             raise ValueError(
@@ -193,7 +196,7 @@ class DataONEPublishProvider(PublishProvider):
                 license_text,
             )
 
-            # Keep track of uploaded objects in case we need to rollback
+            # Keep track of uploaded objects because the resource needs them
             uploaded_pids = []
             try:
                 for fpath in files:
