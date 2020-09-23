@@ -42,8 +42,9 @@ class DataONEPublishProvider(PublishProvider):
         self.dataone_node = dataone_node
         self.dataone_auth_token = token["access_token"]
         self.coordinating_node = "https://{}/cn/".format(token["resource_server"])
+        self.client: MemberNodeClient_2_0 = None
 
-    def _connect(self):
+    def _create_client(self):
         """
         Create a client object that is used to interface with a DataONE
         member node.  The auth_token is the jwt token from DataONE.
@@ -62,10 +63,10 @@ class DataONEPublishProvider(PublishProvider):
             )
         except InvalidToken as e:
             logging.warning(e)
-            raise ValueError("Invalid DataONE JWT token. Please refresh the token.")
+            raise ValueError("Invalid DataONE JWT token. Please re-authenticate with DataONE.")
         except DataONEException as e:
             logging.warning(e)
-            raise ValueError("Failed to establish connection with DataONE.")
+            raise ValueError("Failed to establish a connection with the DataONE node.")
 
     def publish(self):
         """
@@ -96,12 +97,8 @@ class DataONEPublishProvider(PublishProvider):
         )
         step += 1
 
-        try:
-            client = self._connect()
-        except DataONEException as e:
-            logging.warning(e)
-            # We'll want to exit if we can't create the client
-            raise ValueError("Failed to establish connection with DataONE.")
+        # Throw a ValueError if a connection can't be made
+        self._create_client()
 
         user_id, full_orcid_name = self._extract_user_info()
         if not all([user_id, full_orcid_name]):
@@ -181,7 +178,7 @@ class DataONEPublishProvider(PublishProvider):
             step += 1
             metadata = DataONEMetadata(self.coordinating_node)
             # Create an EML document based on the manifest
-            eml_pid = self._generate_pid(client)
+            eml_pid = self._generate_pid()
             eml_doc = metadata.create_eml_doc(
                 eml_pid,
                 manifest,
@@ -211,7 +208,7 @@ class DataONEPublishProvider(PublishProvider):
                         )
                         step += 1
 
-                        file_pid = self._generate_pid(client, scheme="UUID")
+                        file_pid = self._generate_pid(scheme="UUID")
 
                         mimeType = metadata.check_dataone_mimetype(
                             mimetypes.guess_type(fpath)[0]
@@ -235,7 +232,6 @@ class DataONEPublishProvider(PublishProvider):
                         )
 
                         self._upload_file(
-                            client=client,
                             pid=file_pid,
                             file_object=f.read(),
                             system_metadata=file_meta,
@@ -267,7 +263,6 @@ class DataONEPublishProvider(PublishProvider):
                 #    eml_meta.obsoletes = old_pid
 
                 self._upload_file(
-                    client=client,
                     pid=eml_pid,
                     file_object=io.BytesIO(eml_doc),
                     system_metadata=eml_meta,
@@ -287,7 +282,7 @@ class DataONEPublishProvider(PublishProvider):
                 step += 1
 
                 # Create ORE
-                res_pid = self._generate_pid(client, scheme="UUID")
+                res_pid = self._generate_pid(scheme="UUID")
                 metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
                 metadata.set_related_identifiers(manifest, eml_pid)
                 res_map = metadata.resource_map.serialize()
@@ -304,7 +299,6 @@ class DataONEPublishProvider(PublishProvider):
                 )
 
                 self._upload_file(
-                    client=client,
                     pid=res_pid,
                     file_object=io.BytesIO(res_map),
                     system_metadata=res_meta,
@@ -356,24 +350,22 @@ class DataONEPublishProvider(PublishProvider):
                 return size, md5
         return None, None
 
-    def _upload_file(self, client, pid, file_object, system_metadata):
+    def _upload_file(self, pid, file_object, system_metadata):
         """
         Uploads two files to a DataONE member node. The first is an object,
         which is just a data file.  The second is a metadata file describing
         the file object.
 
-        :param client: A client for communicating with a member node
         :param pid: The pid of the data object
         :param file_object: The file object that will be uploaded
         :param system_metadata: The metadata object describing the file object
-        :type client: MemberNodeClient_2_0
         :type pid: str
         :type file_object: str
         :type system_metadata: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
         try:
-            client.create(pid, file_object, system_metadata)
+            self.client.create(pid, file_object, system_metadata)
         except DataONEException as e:
             logging.warning("Error uploading file to DataONE {} {}".format(pid, str(e)))
             raise
@@ -452,13 +444,13 @@ class DataONEPublishProvider(PublishProvider):
         parsed = urlparse(url)
         return parsed._replace(scheme="http").geturl()
 
-    def _generate_pid(self, client, scheme="DOI"):
+    def _generate_pid(self, scheme="DOI"):
         """
         Generates a DataONE identifier.
         :return: A valid DataONE identifier
         """
         try:
-            return client.generateIdentifier(scheme=scheme).value()
+            return self.client.generateIdentifier(scheme=scheme).value()
         except InvalidToken as e:
             logging.warning(e)
             raise ValueError("Invalid DataONE JWT. Please refresh the token.")
