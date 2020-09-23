@@ -454,7 +454,7 @@ class DataONEMetadata(object):
         return sys_meta
 
     @staticmethod
-    def _get_directory(self, user_id: str) -> str:
+    def _get_directory(user_id: str) -> str:
         """
         Returns the directory that should be used in the EML
 
