@@ -1,12 +1,15 @@
 import copy
 import girder_worker
 from girder_client import GirderClient
+from hashlib import md5
 import httmock
+from io import BytesIO
 import mock
 import os
 import jwt
 import pytest
 import uuid
+from d1_common.system_metadata import generate_system_metadata_pyxb
 
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
@@ -217,6 +220,23 @@ def test_get_manifest_file_info():
     size, md5 = DataONEPublishProvider._get_manifest_file_info(bad_manifest, relpath)
     assert size is None
     assert md5 is None
+
+
+def test_update_sysmeta():
+    original_sysmeta = generate_system_metadata_pyxb("pid",
+                                                     "format_id",
+                                                     BytesIO(b"body"),
+                                                     "submitter",
+                                                     "rights_holder",
+                                                     "urn:mn:urn",)
+    new_data = "98765"
+    new_pid = "1234"
+    new_checksum = md5(new_data.encode("utf-8")).hexdigest()
+    new_sysmeta = DataONEPublishProvider.update_sysmeta(original_sysmeta, new_data, new_pid)
+    assert new_sysmeta.size == len(new_data)
+    assert new_sysmeta.identifier.value() == new_pid
+    assert new_sysmeta.obsoletes is None
+    assert new_sysmeta.checksum.value() == new_checksum
 
 
 @pytest.mark.celery(result_backend="rpc")
