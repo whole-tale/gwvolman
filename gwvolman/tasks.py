@@ -417,6 +417,14 @@ def build_tale_image(task, tale_id, force=False):
         pass
 
     cli = docker.from_env(version='1.28')
+    container_config = _get_container_config(task.girder_client, tale)
+    # Ensure that we have proper version of r2d
+    try:
+        cli.images.pull(container_config.repo2docker_version)
+    except docker.errors.NotFound:
+        raise ValueError(
+            f"Requested r2d image '{container_config.repo2docker_version}' not found."
+        )
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
 
@@ -434,7 +442,9 @@ def build_tale_image(task, tale_id, force=False):
         json.dump(image, fp)
 
     # Build the image from the workspace
-    ret = _build_image(cli, tale_id, image, tag, temp_dir, REPO2DOCKER_VERSION)
+    ret = _build_image(
+        cli, tale_id, image, tag, temp_dir, container_config.repo2docker_version
+    )
 
     # Remove the temporary directory whether the build succeeded or not
     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -469,7 +479,7 @@ def build_tale_image(task, tale_id, force=False):
     # Image digest used by updateBuildStatus handler
     return {
         'image_digest': digest,
-        'repo2docker_version': REPO2DOCKER_VERSION,
+        'repo2docker_version': container_config.repo2docker_version,
         'last_build': build_time
     }
 

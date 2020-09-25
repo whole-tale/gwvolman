@@ -13,7 +13,7 @@ import uuid
 import logging
 import docker
 
-from .constants import MOUNTPOINTS
+from .constants import MOUNTPOINTS, REPO2DOCKER_VERSION
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
@@ -28,6 +28,7 @@ container_name_pattern = re.compile('tmp\.([^.]+)\.(.+)\Z')
 
 PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
+    'buildpack', 'repo2docker_version',
     'image', 'command', 'mem_limit', 'cpu_shares',
     'container_port', 'container_user', 'target_mount',
     'url_path', 'environment'
@@ -188,13 +189,16 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
-        digest=tale['imageInfo']['digest']
+        digest = tale['imageInfo'].get('digest')
+        repo2docker_version = tale_config.get("repo2docker_version", REPO2DOCKER_VERSION)
 
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
         except (ValueError, TypeError):
             mem_limit = 2 * 1024 ** 3
         container_config = ContainerConfig(
+            buildpack=tale_config.get("buildpack"),
+            repo2docker_version=repo2docker_version,
             command=tale_config.get('command'),
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
