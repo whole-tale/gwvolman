@@ -243,103 +243,112 @@ class DataONEPublishProvider(PublishProvider):
                             system_metadata=file_meta,
                         )
                         uploaded_pids.append(file_pid)
+            except Exception as e:
+                logging.error(f'There was an error while uploading {fname}\n{e}')
+                raise ValueError('There was a fatal error while uploading {fname}. Please '\
+                                 'contact the support team.')
 
-                self.job_manager.updateProgress(
-                    message="Uploading EML metadata record",
-                    total=100,
-                    current=int(step / steps * 100),
-                )
-                step += 1
+            self.job_manager.updateProgress(
+                message="Uploading EML metadata record",
+                total=100,
+                current=int(step / steps * 100),
+            )
+            step += 1
 
+            if self.published:
+                last_eml_pid = self.tale["publishInfo"][self._published_info_index]['pid']
                 try:
-                    last_eml_pid = self.tale['publishInfo']['DataONE']['pid']
                     previous_sysmeta = self.client.getSystemMetadata(last_eml_pid)
                     # Use the system metadata from the previous EML document
                     new_sysmeta = self.update_sysmeta(previous_sysmeta, eml_doc, eml_pid)
                     self._obsolete_object(last_eml_pid, eml_pid, eml_doc, new_sysmeta)
 
                 except (IndexError, NotFound, Exception) as e:
-                    # Then this hasn't been published before and could not be updated
                     # The blanket Exception is to catch any sort of potential crashing from
                     # a failed dataone request
                     # Publish an initial version
-                    eml_meta = metadata.generate_system_metadata(
-                        pid=eml_pid, name='metadata.xml',
-                        format_id='eml://ecoinformatics.org/eml-2.1.1',
-                        size=len(eml_doc),
-                        md5=md5(eml_doc).hexdigest(),
-                        rights_holder=user_id)
+                    raise ValueError(f'Failed to update the previous version of the Tale {e}')
+            else:
+                eml_meta = metadata.generate_system_metadata(
+                    pid=eml_pid, name='metadata.xml',
+                    format_id='eml://ecoinformatics.org/eml-2.1.1',
+                    size=len(eml_doc),
+                    md5=md5(eml_doc).hexdigest(),
+                    rights_holder=user_id)
+                try:
                     self._upload_file(
                         pid=eml_pid,
                         file_object=io.BytesIO(eml_doc),
                         system_metadata=eml_meta,
                     )
+                except Exception as e:
+                    logging.error(f'Failed to upload the EML document {e}')
+                    raise ValueError(f'Failed to upload the EML document. Please ensure '
+                                     f'the files in the Tale are valid.')
+            uploaded_pids.append(eml_pid)
 
+            self.job_manager.updateProgress(
+                message="Uploading resource map",
+                total=100,
+                current=int(step / steps * 100),
+            )
+            step += 1
 
-                uploaded_pids.append(eml_pid)
+            # Create ORE
+            res_pid = self._generate_pid(scheme="UUID")
+            metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
+            metadata.set_related_identifiers(manifest, eml_pid, self.tale,
+                                                self.dataone_node,  self.gc)
+            res_map = metadata.resource_map.serialize()
+            # Update the resource map with citations
+            # Turn the resource map into readable bytes
+            res_meta = metadata.generate_system_metadata(
+                pid=res_pid,
+                name=str(),
+                format_id="http://www.openarchives.org/ore/terms",
+                size=len(res_map),
+                md5=md5(res_map).hexdigest(),
+                rights_holder=self._get_resource_map_user(user_id),
+            )
 
-                # Update the tale now that it has been published
-                if "publishInfo" not in self.tale:
-                    self.tale["publishInfo"] = []
-
-                self.job_manager.updateProgress(
-                    message="Uploading resource map",
-                    total=100,
-                    current=int(step / steps * 100),
-                )
-                step += 1
-
-                # Create ORE
-                res_pid = self._generate_pid(scheme="UUID")
-                metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
-                metadata.set_related_identifiers(manifest, eml_pid, self.tale,
-                                                 self.dataone_node,  self.gc)
-                res_map = metadata.resource_map.serialize()
-                # Update the resource map with citations
-                # Turn the resource map into readable bytes
-                res_meta = metadata.generate_system_metadata(
-                    pid=res_pid,
-                    name=str(),
-                    format_id="http://www.openarchives.org/ore/terms",
-                    size=len(res_map),
-                    md5=md5(res_map).hexdigest(),
-                    rights_holder=self._get_resource_map_user(user_id),
-                )
-
+            try:
                 self._upload_file(
                     pid=res_pid,
                     file_object=io.BytesIO(res_map),
                     system_metadata=res_meta,
                 )
-                package_url = self._get_dataone_package_url(
-                    self.coordinating_node, res_pid
-                )
-
-                self.job_manager.updateProgress(
-                    message="Your Tale has successfully been published to DataONE.",
-                    total=100,
-                    current=100,
-                )
-
-                self.tale["publishInfo"].append(
-                    {
-                        "pid": eml_pid,
-                        "repository": self.dataone_node,
-                        "repository_id": res_pid,
-                        "uri": package_url,
-                        "date": datetime.datetime.utcnow().isoformat(),
-                    }
-                )
-                try:
-                    self.gc.put("tale/{}".format(self.tale["_id"]), json=self.tale)
-                except Exception as e:
-                    logging.warning("Error updating Tale {}".format(str(e)))
-                    raise ValueError("There was an error while updating the Tale.\n{}".format(e))
-
             except Exception as e:
-                logging.warning("Error while publishing Tale{}".format(e))
-                raise ValueError("There was a fatal error while publishing the Tale. Please "
-                                 "contact the support team.\n{}".format(e))
+                logging.error(f'Failed to upload the resource map {e}')
+                raise ValueError(f'Failed to upload the resource map.')
+
+            package_url = self._get_dataone_package_url(
+                self.coordinating_node, res_pid
+            )
+
+            self.job_manager.updateProgress(
+                message="Your Tale has successfully been published to DataONE.",
+                total=100,
+                current=100,
+            )
+
+            publish_info = {
+                "pid": eml_pid,
+                "repository": self.resource_server,
+                "repository_id": res_pid,
+                "uri": package_url,
+                "date": datetime.datetime.utcnow().isoformat(),
+            }
+
+            if self.published:
+                self.tale["publishInfo"][self._published_info_index].update(publish_info)
+            else:
+                self.tale["publishInfo"].append(publish_info)
+
+            try:
+                self.gc.put("tale/{}".format(self.tale["_id"]), json=self.tale)
+            except Exception as e:
+                logging.error('Error updating Tale {e}')
+                raise ValueError("There was an error while updating the Tale.")
 
     @staticmethod
     def _get_manifest_file_info(manifest, relpath):
