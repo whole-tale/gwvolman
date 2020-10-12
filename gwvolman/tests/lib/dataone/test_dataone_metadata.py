@@ -9,40 +9,39 @@ from gwvolman.lib.dataone.metadata import DataONEMetadata
     method="GET",
 )
 def mock_dataone_formats(url, request):
-    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet
-     type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>	
-<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1"
- xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">	
-    <objectFormat>	
-        <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>	
-        <formatName>Ecological Metadata Language, version 2.0.0</formatName>	
-        <formatType>METADATA</formatType>	
-        <mediaType name="text/xml"/>	
-        <extension>xml</extension>	
-    </objectFormat>	
-    <objectFormat>	
-        <formatId>text/plain</formatId>	
-        <formatName>Plain Text</formatName>	
-        <formatType>DATA</formatType>	
-        <mediaType name="text/plain"/>	
-        <extension>txt</extension>	
-    </objectFormat>	
-    <objectFormat>	
-        <formatId>image/png</formatId>	
-        <formatName>Portable Network Graphics</formatName>	
-        <formatType>DATA</formatType>	
-        <mediaType name="image/png"/>	
-        <extension>png</extension>	
-    </objectFormat>	
-    <objectFormat>	
-        <formatId>application/octet-stream</formatId>	
-        <formatName>Octet Stream</formatName>	
-        <formatType>DATA</formatType>	
-        <mediaType name="application/octet-stream"/>	
-        <extension>data</extension>	
-    </objectFormat>	
-</ns3:objectFormatList>	
+    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
+<ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
+    <objectFormat>
+        <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>
+        <formatName>Ecological Metadata Language, version 2.0.0</formatName>
+        <formatType>METADATA</formatType>
+        <mediaType name="text/xml"/>
+        <extension>xml</extension>
+    </objectFormat>
+    <objectFormat>
+        <formatId>text/plain</formatId>
+        <formatName>Plain Text</formatName>
+        <formatType>DATA</formatType>
+        <mediaType name="text/plain"/>
+        <extension>txt</extension>
+    </objectFormat>
+    <objectFormat>
+        <formatId>image/png</formatId>
+        <formatName>Portable Network Graphics</formatName>
+        <formatType>DATA</formatType>
+        <mediaType name="image/png"/>
+        <extension>png</extension>
+    </objectFormat>
+    <objectFormat>
+        <formatId>application/octet-stream</formatId>
+        <formatName>Octet Stream</formatName>
+        <formatType>DATA</formatType>
+        <mediaType name="application/octet-stream"/>
+        <extension>data</extension>
+    </objectFormat>
+</ns3:objectFormatList>
 """
+
     return httmock.response(
         status_code=200,
         content=response,
