@@ -308,7 +308,7 @@ class DataONEPublishProvider(PublishProvider):
                 format_id="http://www.openarchives.org/ore/terms",
                 size=len(res_map),
                 md5=md5(res_map).hexdigest(),
-                rights_holder=self._get_resource_map_user(user_id),
+                rights_holder=self._get_http_orcid(user_id),
             )
 
             try:
@@ -388,20 +388,22 @@ class DataONEPublishProvider(PublishProvider):
         :param pid: The package pid
         :return: The package landing page
         """
-        if member_node in D1_ENV_DICT["prod"]:
+        if member_node in D1_ENV_DICT["prod"]["base_url"]:
             return str("https://search.dataone.org/view/" + pid)
         else:
             return str("https://dev.nceas.ucsb.edu/view/" + pid)
 
-    def _get_resource_map_user(self, user_id: str) -> str:
+    @staticmethod
+    def _get_http_orcid(user_id: str)->str:
         """
-        HTTPS links will break the resource map. Use this function
-        to get a properly constructed username from a user's ID.
-        :param user_id: The user ORCID
-        :return: An http version of the user
+        HTTPS links will break the resource map. The ORCID IDs are stored
+        as HTTPS, so the https needs to be changed to http. This method is
+        used to perform that conversion.
+        :param user_id: The user's ORCID
+        :return: A URI that's HTTP instead of HTTPS
         """
         if bool(user_id.find("orcid.org")):
-            return self._make_url_http(user_id)
+            return urlparse(user_id)._replace(scheme="http").geturl()
         return user_id
 
     def _extract_user_info(self) -> Tuple[str, str]:
@@ -423,27 +425,6 @@ class DataONEPublishProvider(PublishProvider):
         :return: True/False if it is or isn't
         """
         return bool(user_id.find("orcid.org"))
-
-    @staticmethod
-    def _make_url_https(url: str) -> str:
-        """
-        Given an http url, return it as https
-
-        :param url: The http url
-        :return: The url as https
-        """
-        parsed = urlparse(url)
-        return parsed._replace(scheme="https").geturl()
-
-    @staticmethod
-    def _make_url_http(url: str) -> str:
-        """
-        Given an https url, make it http
-        :param url: The http url
-        :return: The url as https
-        """
-        parsed = urlparse(url)
-        return parsed._replace(scheme="http").geturl()
 
     def _generate_pid(self, scheme: str="DOI"):
         """
