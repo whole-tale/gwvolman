@@ -189,7 +189,8 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
-        digest = tale['imageInfo'].get('digest')
+        image_info = tale.get("imageInfo", {})
+        digest = image_info.get("digest")
         repo2docker_version = tale_config.get("repo2docker_version", REPO2DOCKER_VERSION)
 
         try:
