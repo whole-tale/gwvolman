@@ -12,6 +12,7 @@ import string
 import uuid
 import logging
 import docker
+from datetime import datetime
 
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
 
@@ -234,10 +235,20 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         )
     host = 'tmp-{}'.format(new_user(12).lower())
 
-    # Add licences mount for STATA and Matlab support
-    mounts.append(
-            docker.types.Mount(type="bind", source=LICENSE_PATH, target="/licenses")
-    )
+    if container_config.buildpack:
+        # Mount the MATLAB and Stata runtime licenses
+        if container_config.buildpack == "MatlabBuildPack":
+            mounts.append(
+                docker.types.Mount(type='bind',
+                    source=MATLAB_LICENSE_PATH,
+                    target=MATLAB_LICENSE_PATH)
+            )
+        elif container_config.buildpack == "StataBuildPack":
+            mounts.append(
+                    docker.types.Mount(type='bind',
+                        source="/licenses/stata/stata{}.lic".format(datetime.now().month),
+                        target="/usr/local/stata/stata.lic")
+            )
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
