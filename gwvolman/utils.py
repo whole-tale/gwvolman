@@ -305,7 +305,7 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     # Extra arguments for r2d
     extra_args = ''
     if image['config']['buildpack'] == "MatlabBuildPack":
-        extra_args = ' --build-arg FILE_INSTALLATION_KEY:{} '.format(
+        extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
                 os.environ.get("MATLAB_FILE_INSTALLATION_KEY"))
 
     r2d_cmd = ('jupyter-repo2docker '
