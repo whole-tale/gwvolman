@@ -59,6 +59,7 @@ RUN sed \
 # https://github.com/whole-tale/wt_home_dirs/issues/18
 RUN echo "use_locks 0" >> /etc/davfs2/davfs2.conf && \
   echo "backup_dir .lost+found" >> /etc/davfs2/davfs2.conf && \
+  echo "delay_upload 1" >> /etc/davfs2/davfs2.conf && \
   echo "gui_optimize 1" >> /etc/davfs2/davfs2.conf
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
