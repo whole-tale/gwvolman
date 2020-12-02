@@ -22,6 +22,7 @@ pycurl = "*"
 requests = "*"
 girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "master"}
 pyOpenSSL = "*"
+python-dateutil = "*"
 PyYAML = "*"
 markdown = "*"
 lxml = "*"
