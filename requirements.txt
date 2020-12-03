@@ -14,3 +14,4 @@ dataone.common==3.4.7
 dataone.libclient==3.4.7
 dataone.cli==3.4.7
 git+https://github.com/whole-tale/girderfs@master#egg=girderfs
+python-dateutil

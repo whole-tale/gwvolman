@@ -10,6 +10,7 @@ import docker
 import subprocess
 from docker.errors import DockerException
 import girder_client
+from dateutil.parser import parse
 
 import logging
 try:
@@ -382,11 +383,8 @@ def build_tale_image(task, tale_id, force=False):
     # Only rebuild if files have changed since last build
     if last_build_time > 0:
 
-        workspace_mtime = -1
-        try:
-            workspace_mtime = tale['workspaceModified']
-        except KeyError:
-            pass
+        workspace_folder = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
+        workspace_mtime = int(parse(workspace_folder['updated']).strftime('%s'))
 
         if not force and last_build_time > 0 and workspace_mtime < last_build_time:
             print('Workspace not modified since last build. Skipping.')
