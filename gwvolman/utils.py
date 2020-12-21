@@ -254,6 +254,11 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         )
     host = 'tmp-{}'.format(new_user(12).lower())
 
+    # Add licences mount for STATA and Matlab support
+    mounts.append(
+            docker.types.Mount(type='bind', source="/licenses/", target="/licenses")
+    )
+
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
 
@@ -290,19 +295,28 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
 
     return service, {'url': url}
 
+
 def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     """
     Run repo2docker on the workspace using a shared temp directory. Note that
     this uses the "local" provider.  Use the same default user-id and
     user-name as BinderHub
     """
+
+    # Extra arguments for r2d
+    extra_args = ''
+    if image['config']['buildpack'] == "MatlabBuildPack":
+        extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
+                os.environ.get("MATLAB_FILE_INSTALLATION_KEY"))
+
     r2d_cmd = ('jupyter-repo2docker '
                '--config="/wholetale/repo2docker_config.py" '
                '--target-repo-dir="/home/jovyan/work/workspace" '
                '--user-id=1000 --user-name={} '
-               '--no-clean --no-run --debug '
+               '--no-clean --no-run --debug {} '
                '--image-name {} {}'.format(
                                            image['config']['user'],
+                                           extra_args,
                                            tag, temp_dir))
 
     logging.info('Calling %s (%s)', r2d_cmd, tale_id)
