@@ -90,17 +90,14 @@ def create_volume(self, instance_id):
     homeDir = self.girder_client.loadOrCreateFolder(
         'Home', user['_id'], 'user')
     data_dir = os.path.join(mountpoint, 'data')
-    _safe_mkdir(HOSTDIR + data_dir)
-    home_dir = os.path.join(mountpoint, 'home')
-    _safe_mkdir(HOSTDIR + home_dir)
+    versions_dir = os.path.join(mountpoint, 'versions')
     if ENABLE_WORKSPACES:
         work_dir = os.path.join(mountpoint, 'workspace')
-        _safe_mkdir(HOSTDIR + work_dir)
-        if not os.path.isdir(work_dir):
-            os.makedirs(work_dir)
 
     # FUSE is silly and needs to have mirror inside container
-    for directory in (data_dir, home_dir):
+    for suffix in MOUNTPOINTS:
+        directory = os.path.join(mountpoint, suffix)
+        _safe_mkdir(HOSTDIR + directory)
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
@@ -123,21 +120,32 @@ def create_volume(self, instance_id):
         session = {'_id': None}
 
     if session['_id'] is not None:
-        cmd = "girderfs --hostns -c wt_dms --api-url {} --api-key {} {} {}"
-        cmd = cmd.format(GIRDER_API_URL, api_key, data_dir, session['_id'])
+        cmd = (
+            f"girderfs --hostns -c wt_dms --api-url {GIRDER_API_URL} --api-key {api_key}"
+            f" {os.path.join(mountpoint, 'data')} {session['_id']}"
+        )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
     #  webdav relies on mount.c module, don't use hostns for now
-    cmd = 'girderfs -c wt_home --api-url '
-    cmd += '{} --api-key {} {} {}'.format(
-        GIRDER_API_URL, api_key, home_dir, homeDir['_id'])
+    cmd = (
+        f"girderfs -c wt_home --api-url {GIRDER_API_URL} --api-key {api_key}"
+        f" {os.path.join(mountpoint, 'home')} {homeDir['_id']}"
+    )
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
 
     if ENABLE_WORKSPACES:
-        cmd = 'girderfs -c wt_work --api-url '
-        cmd += '{} --api-key {} {} {}'.format(
-            GIRDER_API_URL, api_key, work_dir, tale['_id'])
+        cmd = (
+            f"girderfs -c wt_work --api-url {GIRDER_API_URL} --api-key {api_key}"
+            f" {os.path.join(mountpoint, 'workspace')} {tale['_id']}"
+        )
+        logging.info("Calling: %s", cmd)
+        subprocess.call(cmd, shell=True)
+
+        cmd = (
+            f"girderfs --hostns -c wt_versions --api-url {GIRDER_API_URL} --api-key {api_key}"
+            f" {os.path.join(mountpoint, 'versions')} {tale['_id']}"
+        )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
 

@@ -11,6 +11,8 @@ ENABLE_WORKSPACES = True
 MOUNTPOINTS = ["data", "home"]
 if ENABLE_WORKSPACES:
     MOUNTPOINTS.append("workspace")
+    MOUNTPOINTS.append("versions")
+
 
 try:
     DEFAULT_GIRDER_API_URL = "http://" + socket.gethostbyname("girder") + ":8080/api/v1"
