@@ -31,7 +31,7 @@ ContainerConfig = namedtuple('ContainerConfig', [
     'buildpack', 'repo2docker_version',
     'image', 'command', 'mem_limit', 'cpu_shares',
     'container_port', 'container_user', 'target_mount',
-    'url_path', 'environment'
+    'url_path', 'environment', 'csp'
 ])
 
 SIZE_NOTATION_RE = re.compile("^(\d+)([kmg]?b?)$", re.IGNORECASE)
@@ -158,27 +158,6 @@ def _get_user_and_instance(girder_client, instanceId):
     return user, instance
 
 
-def get_env_with_csp(config):
-    '''Ensure that environment in container config has CSP_HOSTS setting.
-
-    This method handles 3 cases:
-        * No 'environment' in config -> return ['CSP_HOSTS=...']
-        * 'environment' in config, but no 'CSP_HOSTS=...' -> append
-        * 'environment' in config and has 'CSP_HOSTS=...' -> replace
-
-    '''
-    csp = "CSP_HOSTS='self' {}".format(DEPLOYMENT.dashboard_url)
-    try:
-        env = config['environment']
-        original_csp = next((_ for _ in env if _.startswith('CSP_HOSTS')), None)
-        if original_csp:
-            env[env.index(original_csp)] = csp  # replace
-        else:
-            env.append(csp)
-    except KeyError:
-        env = [csp]
-    return env
-
 
 def _get_container_config(gc, tale):
     if tale is None:
@@ -204,11 +183,12 @@ def _get_container_config(gc, tale):
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
-            environment=get_env_with_csp(tale_config),
+            environment=tale_config.get('environment'),
             image=digest,
             mem_limit=mem_limit,
             target_mount=tale_config.get('targetMount'),
-            url_path=tale_config.get('urlPath')
+            url_path=tale_config.get('urlPath'),
+            csp=tale_config.get('csp')
         )
     return container_config
 
@@ -262,6 +242,13 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
 
+    # Use the specified CSP for iframes or default to deployed host
+    csp = ''
+    if container_config.csp:
+        csp = container_config.csp
+    else:
+        csp = "frame-ancestors ='self' {}".format(DEPLOYMENT.dashboard_url)
+
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
@@ -269,6 +256,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
             'traefik.port': str(container_config.container_port),
             'traefik.enable': 'true',
             'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
+            'traefik.frontend.headers.contentSecurityPolicy': csp,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
             'traefik.frontend.passHostHeader': 'true',
             'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT,
