@@ -13,7 +13,7 @@ import uuid
 import logging
 import docker
 
-from .constants import MOUNTPOINTS, REPO2DOCKER_VERSION
+from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
@@ -256,7 +256,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
 
     # Add licences mount for STATA and Matlab support
     mounts.append(
-            docker.types.Mount(type='bind', source="/licenses/", target="/licenses")
+            docker.types.Mount(type="bind", source=LICENSE_PATH, target="/licenses")
     )
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
