@@ -338,6 +338,9 @@ def remove_volume(self, instanceId):
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
 
+    logging.info("Unmounting licenses")
+    subprocess.call("umount /licenses", shell=True)
+
     try:
         self.girder_client.delete('/dm/session/{sessionId}'.format(**instance))
     except Exception as e:

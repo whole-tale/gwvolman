@@ -12,6 +12,8 @@ import string
 import uuid
 import logging
 import docker
+import datetime
+import dateutil.relativedelta as rel
 
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
 
@@ -234,10 +236,27 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         )
     host = 'tmp-{}'.format(new_user(12).lower())
 
-    # Add licences mount for STATA and Matlab support
-    mounts.append(
-            docker.types.Mount(type="bind", source=LICENSE_PATH, target="/licenses")
-    )
+    if container_config.buildpack:
+        # Mount the MATLAB and Stata runtime licenses
+        if container_config.buildpack == "MatlabBuildPack":
+            mounts.append(
+                docker.types.Mount(type='bind',
+                    source=LICENSE_PATH,
+                    target="/licenses")
+            )
+        elif container_config.buildpack == "StataBuildPack":
+            # Weekly license expires each Sunday and is provided 
+            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
+            # license expiration date.
+            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
+            source_path = os.path.join(
+                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
+            )
+            mounts.append(
+                docker.types.Mount(
+                    type='bind', source=source_path, target="/usr/local/stata/stata.lic"
+                )
+            )
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
