@@ -541,10 +541,12 @@ def mock_tale_update_draft(path, json=None):
     assert publish_info["uri"] == "https://sandbox.zenodo.org/api/records/123"
 
 
-def mock_gc_get(path):
+def mock_gc_get(path, parameters=None):
     if path in ("/tale/123", "tale/5cfd57fca18691e5d1feeda6"):
         return copy.deepcopy(TALE)
     elif path.startswith("/tale") and path.endswith("/manifest"):
+        assert "expandFolders" in parameters
+        assert parameters["expandFolders"] == True
         return copy.deepcopy(MANIFEST)
     elif path == "/tale/already_published":
         tale = copy.deepcopy(TALE)
