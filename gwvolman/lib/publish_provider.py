@@ -31,7 +31,9 @@ class PublishProvider(object):
 
         self.tale = self.gc.get("/tale/{}".format(tale_id))
         assert self.tale["description"], "Cannot publish a Tale without a description."
-        self.manifest = self.gc.get("/tale/{}/manifest".format(tale_id))
+        self.manifest = self.gc.get(
+            "/tale/{}/manifest".format(tale_id), parameters={"expandFolders": True}
+        )
 
     @property
     def published(self):
