@@ -266,7 +266,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     if container_config.csp:
         csp = container_config.csp
     else:
-        csp = "frame-ancestors ='self' {}".format(DEPLOYMENT.dashboard_url)
+        csp = "frame-ancestors 'self' {}".format(DEPLOYMENT.dashboard_url)
 
     service = cli.services.create(
         container_config.image,
