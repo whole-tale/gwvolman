@@ -62,16 +62,6 @@ def create_volume(self, instance_id):
     mountpoint = volume.attrs['Mountpoint']
     logging.info("Mountpoint: %s", mountpoint)
 
-    try:
-        self.girder_client.downloadFolderRecursive(
-            tale['narrativeId'], HOSTDIR + mountpoint)
-    except KeyError:
-        pass  # no narrativeId
-    except girder_client.HttpError:
-        logging.warn("Narrative folder not found for tale: %s",
-                     str(tale['_id']))
-        pass
-
     os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
     for root, dirs, files in os.walk(HOSTDIR + mountpoint):
         for obj in dirs + files:
@@ -105,17 +95,6 @@ def create_volume(self, instance_id):
     if tale.get('dataSet') is not None:
         session = self.girder_client.post(
             '/dm/session', parameters={'taleId': tale['_id']})
-    elif tale.get('folderId'):  # old format, keep it for now
-        data_set = [
-            {'itemId': folder['_id'], 'mountPath': '/' + folder['name']}
-            for folder in self.girder_client.listFolder(tale['folderId'])
-        ]
-        data_set += [
-            {'itemId': item['_id'], 'mountPath': '/' + item['name']}
-            for item in self.girder_client.listItem(tale['folderId'])
-        ]
-        session = self.girder_client.post(
-            '/dm/session', parameters={'dataSet': json.dumps(data_set)})
     else:
         session = {'_id': None}
 
