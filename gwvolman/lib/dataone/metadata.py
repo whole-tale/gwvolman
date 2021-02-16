@@ -1,19 +1,10 @@
 import io
+import json
 import logging
 import os
 from rdflib.term import Literal
 import re
 import xml.etree.cElementTree as ET
-
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
-
-
-from .constants import \
-    ExtraFileNames, \
-    file_descriptions
 
 from d1_client.cnclient_2_0 import CoordinatingNodeClient_2_0
 from d1_common.types import dataoneTypes
@@ -21,6 +12,10 @@ from d1_common.types.exceptions import DataONEException
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
+
+from .constants import \
+    ExtraFileNames, \
+    file_descriptions
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -100,15 +95,18 @@ class DataONEMetadata(object):
 
         if eml_element:
             try:
-                for relation in manifest["DataCite:relatedIdentifiers"]:
-                    related_object = relation["DataCite:relatedIdentifier"]
-                    if related_object["DataCite:relationType"] == "DataCite:Cites":
-                        resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
-                    elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
-                        resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
+                for relation in manifest["dc:relatedIdentifiers"]:
+                    related_object = relation["dc:relatedIdentifier"]
+                    if related_object["dc:relationType"] == "dc:Cites":
+                        resource_map.add(
+                            (eml_element, DCTERMS.references, Literal(related_object["@id"]))
+                        )
+                    elif related_object["dc:relationType"] == "dc:IsDerivedFrom":
+                        resource_map.add(
+                            (eml_element, DCTERMS.source, Literal(related_object["@id"]))
+                        )
             except KeyError:
                 pass
-
 
     def get_access_policy(self):
         """
@@ -359,8 +357,8 @@ class DataONEMetadata(object):
         for item in manifest['aggregates']:
             if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
-                size = item['size']
-                mimeType = self.check_dataone_mimetype(item['mimeType'])
+                size = item['wt:size']
+                mimeType = self.check_dataone_mimetype(item['wt:mimeType'])
                 self.add_object_record(dataset_elem, name, '', size, mimeType)
 
         # Add the manifest itself

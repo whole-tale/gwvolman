@@ -1,0 +1,93 @@
+{
+  "@context": [
+    "https://w3id.org/bundle/context",
+    {
+      "schema": "http://schema.org/"
+    },
+    {
+      "dc": "http://datacite.org/schema/kernel-4"
+    },
+    {
+      "wt": "https://vocabularies.wholetale.org/wt/1.0/wt#"
+    },
+    {
+      "@base": "arcp://uid,5cfd57fca18691e5d1feeda6/data/"
+    }
+  ],
+  "@id": "https://data.wholetale.org/api/v1/tale/5cfd57fca18691e5d1feeda6",
+  "@type": "wt:Tale",
+  "aggregates": [
+    {
+      "uri": "./workspace/postBuild",
+      "wt:mimeType": "text/plain",
+      "wt:size": 236
+    },
+    {
+      "uri": "./workspace/requirements.txt",
+      "wt:mimeType": "text/plain",
+      "wt:size": 124
+    },
+    {
+      "uri": "./workspace/wt_quickstart.ipynb",
+      "wt:mimeType": "text/x-python",
+      "wt:size": 6819
+    },
+    {
+      "uri": "./workspace/apt.txt",
+      "wt:mimeType": "text/plain",
+      "wt:size": 254
+    },
+    {
+      "bundledAs": {
+        "filename": "usco2005.xls",
+        "folder": "./data/"
+      },
+      "schema:isPartOf": "doi:10.5065/D6862DM8",
+      "uri": "https://cn.dataone.org/cn/v2/resolve/urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08",
+      "wt:size": 6427136
+    },
+    {
+      "schema:license": "CC-BY-4.0",
+      "uri": "../LICENSE",
+      "wt:mimeType": "text/plain",
+      "wt:size": 170
+    }
+  ],
+  "createdBy": {
+    "@id": "mailto:willis8@illinois.edu",
+    "@type": "schema:Person",
+    "schema:email": "willis8@illinois.edu",
+    "schema:familyName": "Willis",
+    "schema:givenName": "Craig"
+  },
+  "createdOn": "2019-06-09 19:03:24.116000",
+  "dc:relatedIdentifiers": [],
+  "schema:author": [
+    {
+      "@id": "https://orcid.org/0000-0003-1709-3744",
+      "@type": "schema:Person",
+      "schema:familyName": "Kowalik",
+      "schema:givenName": "Kacper"
+    },
+    {
+      "@id": "https://orcid.org/0000-0002-6148-7196",
+      "@type": "schema:Person",
+      "schema:familyName": "Willis",
+      "schema:givenName": "Craig"
+    }
+  ],
+  "schema:description": "Demonstration of how to use Whole Tale to develop custom analysis and visualization for data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/users_guide/quickstart.html for more information.",
+  "schema:image": "http://use.yt/upload/dc1da723",
+  "schema:keywords": "Examples",
+  "schema:name": "Example Tale: Mapping Estimated Water Usage",
+  "schema:schemaVersion": 7,
+  "wt:internalIdentifier": "5cfd57fca18691e5d1feeda6",
+  "wt:usesDataset": [
+    {
+      "@id": "doi:10.5065/D6862DM8",
+      "@type": "schema:Dataset",
+      "schema:identifier": "doi:10.5065/D6862DM8",
+      "schema:name": "Humans and Hydrology at High Latitudes: Water Use Information"
+    }
+  ]
+}

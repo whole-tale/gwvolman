@@ -14,6 +14,7 @@ from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
 
 
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 TALE = {
     "_accessLevel": 2,
     "_id": "5cfd57fca18691e5d1feeda6",
@@ -67,71 +68,7 @@ TALE = {
     "title": "Example Tale: Mapping Estimated Water Usage",
     "updated": "2019-10-08T17:44:29.523000+00:00",
 }
-
-MANIFEST = {
-    "@context": [
-        "https://w3id.org/bundle/context",
-        {"schema": "http://schema.org/"},
-        {"Datasets": {"@type": "@id"}},
-    ],
-    "@id": "https://data.wholetale.org/api/v1/tale/5cfd57fca18691e5d1feeda6",
-    "Datasets": [
-        {
-            "@id": "doi:10.5065/D6862DM8",
-            "@type": "Dataset",
-            "identifier": "doi:10.5065/D6862DM8",
-            "name": "Humans and Hydrology at High Latitudes: Water Use Information",
-        }
-    ],
-    "aggregates": [
-        {"uri": "../workspace/postBuild"},
-        {"uri": "../workspace/requirements.txt"},
-        {"uri": "../workspace/wt_quickstart.ipynb"},
-        {"uri": "../workspace/apt.txt"},
-        {
-            "bundledAs": {"filename": "usco2005.xls", "folder": "../data/"},
-            "schema:isPartOf": "doi:10.5065/D6862DM8",
-            "size": 6427136,
-            "uri": (
-                "https://cn.dataone.org/cn/v2/resolve/"
-                "urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08"
-            ),
-        },
-        {"schema:license": "CC-BY-4.0", "uri": "../LICENSE"},
-    ],
-    "createdBy": {
-        "@id": "willis8@illinois.edu",
-        "@type": "schema:Person",
-        "schema:email": "willis8@illinois.edu",
-        "schema:familyName": "Willis",
-        "schema:givenName": "Craig",
-    },
-    "createdOn": "2019-06-09 19:03:24.116000",
-    "schema:author": [
-        {
-            "@id": "https://orcid.org/0000-0003-1709-3744",
-            "@type": "schema:Person",
-            "schema:familyName": "Kowalik",
-            "schema:givenName": "Kacper",
-        },
-        {
-            "@id": "https://orcid.org/0000-0002-6148-7196",
-            "@type": "schema:Person",
-            "schema:familyName": "Willis",
-            "schema:givenName": "Craig",
-        },
-    ],
-    "schema:category": "Examples",
-    "schema:description": (
-        "Demonstration of how to use Whole Tale to develop custom analysis and visualization for "
-        "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
-        "sers_guide/quickstart.html for more information."
-    ),
-    "schema:identifier": "5cfd57fca18691e5d1feeda6",
-    "schema:image": "http://use.yt/upload/dc1da723",
-    "schema:name": "Example Tale: Mapping Estimated Water Usage",
-    "schema:version": 7,
-}
+MANIFEST = json.load(open(os.path.join(DATA_DIR, "manifest.json"), "r"))
 
 
 @httmock.all_requests
@@ -752,15 +689,15 @@ def test_dataone_publish():
 
         token["access_token"] = (
             "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
-            "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
-            "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
-            "iOjE1NzI5NTc1ODAsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
-            "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTU3Mjg5Mjc4MH0.oNGDWmdePMYPUzt1Inhu1r1p95w"
-            "0kld6C24nohtgOyRROYtihdnIE0OcoxXd7KXdiVRdXLL34-qmiQTeRMPJEgMDtPNj6JUrP6yXP8Y"
-            "LG77iOGrSnKFRK8vJenc7-d8vJCqzebD8Xu6_pslw0GGiRMxfISa_UdGEYp0xyRgAIQmMr7q3H-T"
-            "K1P2KHb3M4RCWb5Ubv1XsTRJ5gXsLLu0WvBfXFu-EKAka7IO6uTAK1RZLnJqrotvCCT4lL6GyPPY"
-            "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
-            "3gJtWNeGCDw"
+            "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDIxLTAyLTE"
+            "2VDE0OjA0OjExLjY3MyswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
+            "iOjE2MTM1NDkwNTEsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
+            "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTYxMzQ4NDI1MX0.qklwHlbA0DDHnT84aXL5qX0Ingi"
+            "LggPBZnZu7O8tGjxyws4u27_XtTMBXTsER26OFYmKwmPD0xi_QECkoxn4t8hzb7zaT4Xw4b9N0j1"
+            "9_NlaNWgOpRDVkK63C6z46PPS5lQKoA-EF2m20nn1i3-sOuMrpFww9u-dPk-q1fiQIRxdPzTV7uA"
+            "H0HSIe-WCTG4_3tengCciQP-9OMMn8QjziQ6HLmuvcINbCKsLruvkI6PN1TN_zrX2FzmZdW0gBkv"
+            "7577x3CUwCvmzFifgbBltmU34z06qZI7poIZtL1n1CWQuqdRf-vXu89SrC_jNaI__0n3ZpwfjhEl"
+            "Dqe0IwVYIdA"
         )
 
         publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")

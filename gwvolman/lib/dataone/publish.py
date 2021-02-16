@@ -6,6 +6,7 @@ import jwt
 import logging
 import mimetypes
 import os
+from pathlib import Path
 import tempfile
 import zipfile
 
@@ -127,7 +128,7 @@ class DataONEPublishProvider(PublishProvider):
 
             # Read the zipfile
             zip = zipfile.ZipFile(tmp, "r")
-            files = zip.namelist()
+            files = [fname for fname in zip.namelist() if not fname.endswith("/")]
 
             # Now we know the number of steps for progress
             steps = len(files) + 5
@@ -198,7 +199,7 @@ class DataONEPublishProvider(PublishProvider):
             try:
                 for fpath in files:
                     with zip.open(fpath) as f:
-                        relpath = fpath.replace(self.tale["_id"], "..")
+                        relpath = f"./{os.sep.join(Path(fpath).parts[2:])}"
                         fname = os.path.basename(fpath)
 
                         # Skip over the files we want to ignore
@@ -349,9 +350,9 @@ class DataONEPublishProvider(PublishProvider):
     def _get_manifest_file_info(self, manifest, relpath):
         for file in manifest["aggregates"]:
             if file["uri"] == relpath:
-                md5 = file["md5"]
+                md5 = file["wt:md5"]
                 # mimeType = file['mimeType']
-                size = file["size"]
+                size = file["wt:size"]
                 return size, md5
         return None, None
 
