@@ -95,13 +95,13 @@ class DataONEMetadata(object):
 
         if eml_element:
             try:
-                for relation in manifest["dc:relatedIdentifiers"]:
-                    related_object = relation["dc:relatedIdentifier"]
-                    if related_object["dc:relationType"] == "dc:Cites":
+                for relation in manifest["datacite:relatedIdentifiers"]:
+                    related_object = relation["datacite:relatedIdentifier"]
+                    if related_object["datacite:relationType"] == "datacite:Cites":
                         resource_map.add(
                             (eml_element, DCTERMS.references, Literal(related_object["@id"]))
                         )
-                    elif related_object["dc:relationType"] == "dc:IsDerivedFrom":
+                    elif related_object["datacite:relationType"] == "datacite:IsDerivedFrom":
                         resource_map.add(
                             (eml_element, DCTERMS.source, Literal(related_object["@id"]))
                         )
