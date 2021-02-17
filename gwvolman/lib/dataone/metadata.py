@@ -83,8 +83,8 @@ class DataONEMetadata(object):
                                 tale: dict, member_node: str, gc):
         """
         This method adds fields to the DataONE resource map if there are
-        1. Any dc:RelatedIdentifiers
-        2. Any DataCiteIsDerivedFrom relations
+        1. Any datacite:RelatedIdentifiers
+        2. Any datacite:IsDerivedFrom relations
         3. Any publishings of a potential parent Tale to the same member node
 
         :param manifest: The Tale's manifest
@@ -104,12 +104,12 @@ class DataONEMetadata(object):
             added_record = False
             datacite_namespace = Namespace("http://purl.org/spar/datacite/")
             try:
-                for relation in manifest["dc:relatedIdentifiers"]:
-                    related_object = relation["dc:relatedIdentifier"]
-                    if related_object["dc:relationType"] == "dc:Cites":
+                for relation in manifest["datacite:relatedIdentifiers"]:
+                    related_object = relation["datacite:relatedIdentifier"]
+                    if related_object["datacite:relationType"] == "datacite:Cites":
                         self.resource_map.add((eml_element, DCTERMS.references, URIRef(related_object["@id"])))
                         added_record = True
-                    elif related_object["dc:relationType"] == "dc:IsDerivedFrom":
+                    elif related_object["datacite:relationType"] == "datacite:IsDerivedFrom":
                         added_record = True
                         self.resource_map.add((eml_element,
                                                datacite_namespace.IsDerivedFrom, URIRef(related_object["@id"])))

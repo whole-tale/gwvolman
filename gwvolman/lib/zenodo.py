@@ -139,9 +139,9 @@ class ZenodoPublishProvider(PublishProvider):
             return s[:1].lower() + s[1:] if s else ""
 
         related_identifiers = []
-        for related_id in self.tale.get("dc:relatedIdentifiers", []):
-            relation = related_id["dc:relatedIdentifier"]
-            relation_type = first_letter_lower(relation["dc:relationType"][3:])
+        for related_id in self.tale.get("datacite:relatedIdentifiers", []):
+            relation = related_id["datacite:relatedIdentifier"]
+            relation_type = first_letter_lower(relation["datacite:relationType"][3:])
             if relation_type not in _ZENODO_ACCEPTED_RELATIONS:
                 continue
             related_identifiers.append(

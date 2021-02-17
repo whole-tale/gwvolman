@@ -5,7 +5,7 @@
       "schema": "http://schema.org/"
     },
     {
-      "dc": "http://datacite.org/schema/kernel-4"
+      "datacite": "http://datacite.org/schema/kernel-4"
     },
     {
       "wt": "https://vocabularies.wholetale.org/wt/1.0/wt#"
@@ -61,7 +61,7 @@
     "schema:givenName": "Craig"
   },
   "createdOn": "2019-06-09 19:03:24.116000",
-  "dc:relatedIdentifiers": [],
+  "datacite:relatedIdentifiers": [],
   "schema:author": [
     {
       "@id": "https://orcid.org/0000-0003-1709-3744",
