@@ -7,6 +7,7 @@ import re
 from typing import List
 import xml.etree.cElementTree as ET
 
+
 try:
     from urllib.request import urlopen
 except ImportError:
@@ -271,16 +272,14 @@ class DataONEMetadata(object):
         self.create_format(object_format, physical_section)
         ET.SubElement(entity_section, 'entityType').text = 'dataTable'
 
-    def set_user_name(self, root, first_name, last_name, user_id=None):
+    def set_user_name(self, root: ET.Element,
+                      first_name: str, last_name: str, user_id: str = None):
         """
         Creates a section in the EML that describes a user's name.
         :param root: The parent XML element
         :param first_name: The user's first name
         :param last_name: The user's last name
         :param user_id: The user's ORCID
-        :type root: xml.etree.ElementTree.Element
-        :type first_name: str
-        :type last_name: str
         :return: None
         """
         individual_name_elem = ET.SubElement(root, 'individualName')
