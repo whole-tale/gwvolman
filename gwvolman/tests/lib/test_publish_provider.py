@@ -1,23 +1,9 @@
-import copy
 import mock
 import pytest
 from girder_client import GirderClient
 
 from gwvolman.lib.publish_provider import PublishProvider, NullManager
-from gwvolman.tests import TALE, PUBLISHED_TALE, ZENODO_TOKEN, MANIFEST, TALE_NO_DESC
-
-
-def mock_gc_get(path):
-    if path in "/tale/5cfd57fca18691e5d1feeda6":
-        return copy.deepcopy(TALE)
-    elif path in "/tale/4cfd57fca18691e5d1feeda6":
-        return copy.deepcopy(TALE_NO_DESC)
-    elif path.startswith("/tale") and path.endswith("/manifest"):
-        return copy.deepcopy(MANIFEST)
-    elif path in "/tale/1cfd57fca18691e5d1feeda6":
-        return copy.deepcopy(PUBLISHED_TALE)
-    else:
-        raise RuntimeError
+from gwvolman.tests import TALE, PUBLISHED_TALE, ZENODO_TOKEN, MANIFEST, TALE_NO_DESC, mock_gc_get
 
 
 def test_ctor():

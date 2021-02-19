@@ -1,4 +1,3 @@
-import copy
 from girder_client import GirderClient
 import girder_worker
 import httmock
@@ -9,7 +8,7 @@ import pytest
 
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
-from gwvolman.tests import TALE, ZENODO_TOKEN, MANIFEST
+from gwvolman.tests import TALE, ZENODO_TOKEN, mock_gc_get
 
 
 @httmock.all_requests
@@ -356,27 +355,6 @@ def mock_tale_update_draft(path, json=None):
     publish_info = json["publishInfo"][0]
     assert publish_info["pid"] is None
     assert publish_info["uri"] == "https://sandbox.zenodo.org/api/records/123"
-
-
-def mock_gc_get(path):
-    if path in ("/tale/123", "tale/5cfd57fca18691e5d1feeda6"):
-        return copy.deepcopy(TALE)
-    elif path.startswith("/tale") and path.endswith("/manifest"):
-        return copy.deepcopy(MANIFEST)
-    elif path == "/tale/already_published":
-        tale = copy.deepcopy(TALE)
-        tale["_id"] = "already_published"
-        tale["publishInfo"] = [
-            {
-                "pid": "10.345/6789",
-                "uri": "http://dx.doi.org/10.345/6789",
-                "repository": "sandbox.zenodo.org",
-                "repository_id": "456",
-            }
-        ]
-        return tale
-    else:
-        raise RuntimeError
 
 
 def stream_response(chunk_size=65536):

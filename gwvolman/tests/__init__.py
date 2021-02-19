@@ -1,4 +1,6 @@
 # A number of common/shared structures for testing
+import copy
+
 
 TALE = {
     "_accessLevel": 2,
@@ -327,3 +329,30 @@ DATAONE_TEST_TOKEN = {
     "access_token": "jwt_token",
     "resource_server": "cn-stage-2.test.dataone.org",
 }
+
+
+def mock_gc_get(path, parameters=None):
+    if path in ("/tale/123", "/tale/5cfd57fca18691e5d1feeda6"):
+        return copy.deepcopy(TALE)
+    elif path in "/tale/4cfd57fca18691e5d1feeda6":
+        return copy.deepcopy(TALE_NO_DESC)
+    elif path.startswith("/tale") and path.endswith("/manifest"):
+        assert "expandFolders" in parameters
+        assert parameters["expandFolders"] == True
+        return copy.deepcopy(MANIFEST)
+    elif path in "/tale/1cfd57fca18691e5d1feeda6":
+        return copy.deepcopy(PUBLISHED_TALE)
+    elif path == "/tale/already_published":
+        tale = copy.deepcopy(TALE)
+        tale["_id"] = "already_published"
+        tale["publishInfo"] = [
+            {
+                "pid": "10.345/6789",
+                "uri": "http://dx.doi.org/10.345/6789",
+                "repository": "sandbox.zenodo.org",
+                "repository_id": "456",
+            }
+        ]
+        return tale
+    else:
+        raise RuntimeError

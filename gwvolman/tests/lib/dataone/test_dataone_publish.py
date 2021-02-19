@@ -1,4 +1,3 @@
-import copy
 import girder_worker
 from girder_client import GirderClient
 from hashlib import md5
@@ -14,28 +13,7 @@ from d1_common.system_metadata import generate_system_metadata_pyxb
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
 from gwvolman.lib.dataone.publish import DataONEPublishProvider
-from gwvolman.tests import DATAONE_TEST_TOKEN, MANIFEST, TALE
-
-
-def mock_gc_get(path):
-    if path in ("/tale/123", "tale/5cfd57fca18691e5d1feeda6"):
-        return copy.deepcopy(TALE)
-    elif path.startswith("/tale") and path.endswith("/manifest"):
-        return copy.deepcopy(MANIFEST)
-    elif path == "/tale/already_published":
-        tale = copy.deepcopy(TALE)
-        tale["_id"] = "already_published"
-        tale["publishInfo"] = [
-            {
-                "pid": "10.345/6789",
-                "uri": "http://dx.doi.org/10.345/6789",
-                "repository": "sandbox.zenodo.org",
-                "repository_id": "456",
-            }
-        ]
-        return tale
-    else:
-        raise RuntimeError
+from gwvolman.tests import DATAONE_TEST_TOKEN, TALE, mock_gc_get
 
 
 def stream_response(chunk_size=65536):
