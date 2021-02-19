@@ -6,6 +6,7 @@ import jwt
 import logging
 import mimetypes
 import os
+import sys
 import tempfile
 from typing import Tuple, Union
 import zipfile
@@ -23,6 +24,9 @@ from d1_common.env import D1_ENV_DICT
 
 from .metadata import DataONEMetadata
 from gwvolman.lib.publish_provider import PublishProvider
+
+
+_JWT_OPTS = {"verify_signature": False, "verify_exp": not hasattr(sys, '_called_from_test')}
 
 
 class DataONEPublishProvider(PublishProvider):
@@ -412,7 +416,7 @@ class DataONEPublishProvider(PublishProvider):
         This is used as the package's owner and contact.
         :return: The ORCID ID, and the user's full name
         """
-        jwt_token = jwt.PyJWT().decode(self.dataone_auth_token, options={"verify_signature": False})
+        jwt_token = jwt.PyJWT().decode(self.dataone_auth_token, options=_JWT_OPTS)
         user_id = jwt_token.get("userId")
         name = jwt_token.get("fullName")
         return user_id, name

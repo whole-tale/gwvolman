@@ -13,7 +13,7 @@ from d1_common.system_metadata import generate_system_metadata_pyxb
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
 from gwvolman.lib.dataone.publish import DataONEPublishProvider
-from gwvolman.tests import DATAONE_TEST_TOKEN, TALE, mock_gc_get, mock_dataone_formats
+from gwvolman.tests import TALE, mock_gc_get, mock_dataone_formats
 
 
 def stream_response(chunk_size=65536):
@@ -188,19 +188,25 @@ def test_dataone_publish():
         mock_dataone_formats,
         mock_other_request,
     ):
+        token = {
+            "provider": "dataonestage2",
+            "access_token": "jwt_token",
+            "resource_server": "cn-stage-2.test.dataone.org",
+        }
         with pytest.raises(jwt.exceptions.DecodeError) as error:
-            publish("123", DATAONE_TEST_TOKEN, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
+            publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
             assert error.message.startswith("Not enough segments")
 
-            DATAONE_TEST_TOKEN["access_token"] = (
-                "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
-                "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
-                "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
-                "iOjE1NzI5NTc1ODAsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
-                "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTU3Mjg5Mjc4MH0.oNGDWmdePMYPUzt1Inhu1r1p95w"
-                "0kld6C24nohtgOyRROYtihdnIE0OcoxXd7KXdiVRdXLL34-qmiQTeRMPJEgMDtPNj6JUrP6yXP8Y"
-                "LG77iOGrSnKFRK8vJenc7-d8vJCqzebD8Xu6_pslw0GGiRMxfISa_UdGEYp0xyRgAIQmMr7q3H-T"
-                "K1P2KHb3M4RCWb5Ubv1XsTRJ5gXsLLu0WvBfXFu-EKAka7IO6uTAK1RZLnJqrotvCCT4lL6GyPPY"
-                "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
-                "3gJtWNeGCDw"
-            )
+        token["access_token"] = (
+            "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJodHRwOlwvXC9vcmNpZC5vcmdcLzAwMDAtMDAwMy0xNzA"
+            "5LTM3NDQiLCJmdWxsTmFtZSI6IkthY3BlciBLb3dhbGlrIiwiaXNzdWVkQXQiOiIyMDE5LTExLTA"
+            "0VDE4OjM5OjQwLjQxNCswMDowMCIsImNvbnN1bWVyS2V5IjoidGhlY29uc3VtZXJrZXkiLCJleHA"
+            "iOjE1NzI5NTc1ODAsInVzZXJJZCI6Imh0dHA6XC9cL29yY2lkLm9yZ1wvMDAwMC0wMDAzLTE3MDk"
+            "tMzc0NCIsInR0bCI6NjQ4MDAsImlhdCI6MTU3Mjg5Mjc4MH0.oNGDWmdePMYPUzt1Inhu1r1p95w"
+            "0kld6C24nohtgOyRROYtihdnIE0OcoxXd7KXdiVRdXLL34-qmiQTeRMPJEgMDtPNj6JUrP6yXP8Y"
+            "LG77iOGrSnKFRK8vJenc7-d8vJCqzebD8Xu6_pslw0GGiRMxfISa_UdGEYp0xyRgAIQmMr7q3H-T"
+            "K1P2KHb3M4RCWb5Ubv1XsTRJ5gXsLLu0WvBfXFu-EKAka7IO6uTAK1RZLnJqrotvCCT4lL6GyPPY"
+            "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
+            "3gJtWNeGCDw"
+        )
+        publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")

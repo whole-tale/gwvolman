@@ -326,12 +326,6 @@ ZENODO_TOKEN = {
     "resource_server": "sandbox.zenodo.org",
 }
 
-DATAONE_TEST_TOKEN = {
-    "provider": "dataonestage2",
-    "access_token": "jwt_token",
-    "resource_server": "cn-stage-2.test.dataone.org",
-}
-
 
 def mock_gc_get(path, parameters=None):
     if path in ("/tale/123", "/tale/5cfd57fca18691e5d1feeda6"):
