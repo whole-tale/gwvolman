@@ -117,10 +117,10 @@ def test_get_manifest_file_info():
     good_manifest = {
         "aggregates": [
             {
-                "bundledAs": {"filename": "usco2005.xls", "folder": "../data/"},
+                "bundledAs": {"filename": "usco2005.xls", "folder": "./data/"},
                 "schema:isPartOf": "doi:10.5065/D6862DM8",
-                "size": 6427136,
-                "md5": "4071ccff46472c9c87af5827d46f4837",
+                "wt:size": 6427136,
+                "wt:md5": "4071ccff46472c9c87af5827d46f4837",
                 "uri": (
                     "https://cn.dataone.org/cn/v2/resolve/"
                     "urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08"
@@ -138,9 +138,9 @@ def test_get_manifest_file_info():
     bad_manifest = {
         "aggregates": [
             {
-                "bundledAs": {"filename": "usco2005.xls", "folder": "../data/"},
+                "bundledAs": {"filename": "usco2005.xls", "folder": "./data/"},
                 "schema:isPartOf": "doi:10.5065/D6862DM8",
-                "size": 6427136,
+                "wt:size": 6427136,
                 "uri": (
                     "https://cn.dataone.org/cn/v2/resolve/"
                     "urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08"

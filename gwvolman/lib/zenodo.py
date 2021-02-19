@@ -132,23 +132,29 @@ class ZenodoPublishProvider(PublishProvider):
         """Convert the Tale metadata to a Zenodo metadata."""
 
         keywords = {"Tale"}
-        if self.manifest.get("schema:category"):
-            keywords.add(self.manifest["schema:category"].title())
+        if self.manifest.get("schema:keywords"):
+            keywords.add(self.manifest["schema:keywords"].title())
 
         def first_letter_lower(s):
             return s[:1].lower() + s[1:] if s else ""
 
         related_identifiers = []
-        for related_id in self.tale.get("relatedIdentifiers", []):
-            relation = first_letter_lower(related_id["relation"])
-            if relation not in _ZENODO_ACCEPTED_RELATIONS:
+        for related_id in self.tale.get("datacite:relatedIdentifiers", []):
+            relation = related_id["datacite:relatedIdentifier"]
+            relation_type = first_letter_lower(relation["datacite:relationType"][3:])
+            if relation_type not in _ZENODO_ACCEPTED_RELATIONS:
                 continue
             related_identifiers.append(
-                {"relation": relation, "identifier": related_id["identifier"]}
+                {"relation": relation_type, "identifier": relation["@id"]}
             )
         related_identifiers += [
-            {"relation": "cites", "identifier": ds["identifier"]}
-            for ds in self.manifest.get("Datasets", [])
+            {"relation": "cites", "identifier": ds["schema:identifier"]}
+            for ds in self.manifest.get("wt:usesDataset", [])
+        ]
+        # Remove duplicates
+        related_identifiers = [
+            json.loads(rel_id)
+            for rel_id in {json.dumps(_, sort_keys=True) for _ in related_identifiers}
         ]
 
         return {

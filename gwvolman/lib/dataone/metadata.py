@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import os
 from rdflib import Namespace
@@ -6,16 +7,6 @@ from rdflib.term import URIRef
 import re
 from typing import List
 import xml.etree.cElementTree as ET
-
-
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
-
-from .constants import \
-    ExtraFileNames, \
-    file_descriptions
 
 from d1_client.cnclient_2_0 import CoordinatingNodeClient_2_0
 from d1_common.types import dataoneTypes
@@ -26,6 +17,9 @@ from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
 
+from .constants import \
+    ExtraFileNames, \
+    file_descriptions
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -89,8 +83,8 @@ class DataONEMetadata(object):
                                 tale: dict, member_node: str, gc):
         """
         This method adds fields to the DataONE resource map if there are
-        1. Any DataCite:RelatedIdentifiers
-        2. Any DataCiteIsDerivedFrom relations
+        1. Any datacite:RelatedIdentifiers
+        2. Any datacite:IsDerivedFrom relations
         3. Any publishings of a potential parent Tale to the same member node
 
         :param manifest: The Tale's manifest
@@ -110,12 +104,12 @@ class DataONEMetadata(object):
             added_record = False
             datacite_namespace = Namespace("http://purl.org/spar/datacite/")
             try:
-                for relation in manifest["DataCite:relatedIdentifiers"]:
-                    related_object = relation["DataCite:relatedIdentifier"]
-                    if related_object["DataCite:relationType"] == "DataCite:Cites":
+                for relation in manifest["datacite:relatedIdentifiers"]:
+                    related_object = relation["datacite:relatedIdentifier"]
+                    if related_object["datacite:relationType"] == "datacite:Cites":
                         self.resource_map.add((eml_element, DCTERMS.references, URIRef(related_object["@id"])))
                         added_record = True
-                    elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
+                    elif related_object["datacite:relationType"] == "datacite:IsDerivedFrom":
                         added_record = True
                         self.resource_map.add((eml_element,
                                                datacite_namespace.IsDerivedFrom, URIRef(related_object["@id"])))
@@ -385,8 +379,8 @@ class DataONEMetadata(object):
         for item in manifest['aggregates']:
             if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
-                size = item['size']
-                mime_type = self.check_dataone_mimetype(item['mimeType'])
+                size = item['wt:size']
+                mime_type = self.check_dataone_mimetype(item['wt:mimeType'])
                 self.add_object_record(dataset_elem, name, '', size, mime_type)
 
         # Add the manifest itself
