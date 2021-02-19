@@ -13,7 +13,7 @@ from d1_common.system_metadata import generate_system_metadata_pyxb
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
 from gwvolman.lib.dataone.publish import DataONEPublishProvider
-from gwvolman.tests import DATAONE_TEST_TOKEN, TALE, mock_gc_get
+from gwvolman.tests import DATAONE_TEST_TOKEN, TALE, mock_gc_get, mock_dataone_formats
 
 
 def stream_response(chunk_size=65536):
@@ -37,56 +37,6 @@ def mock_other_request(url, request):
     if request.url.startswith("http+docker://"):
         return httmock.response(status_code=403)
     raise Exception("Unexpected url %s" % str(request.url))
-
-
-@httmock.urlmatch(
-    scheme="https",
-    netloc="^cn-stage-2.test.dataone.org$",
-    path="^/cn/v2/formats$",
-    method="GET",
-)
-def mock_dataone_formats(url, request):
-    response = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?xml-stylesheet type="text/xsl" href="/cn/xslt/dataone.types.v2.xsl" ?>
-    <ns3:objectFormatList xmlns:ns2="http://ns.dataone.org/service/types/v1" xmlns:ns3="http://ns.dataone.org/service/types/v2.0" count="134" start="0" total="134">
-        <objectFormat>
-            <formatId>eml://ecoinformatics.org/eml-2.0.0</formatId>
-            <formatName>Ecological Metadata Language, version 2.0.0</formatName>
-            <formatType>METADATA</formatType>
-            <mediaType name="text/xml"/>
-            <extension>xml</extension>
-        </objectFormat>
-        <objectFormat>
-            <formatId>text/plain</formatId>
-            <formatName>Plain Text</formatName>
-            <formatType>DATA</formatType>
-            <mediaType name="text/plain"/>
-            <extension>txt</extension>
-        </objectFormat>
-        <objectFormat>
-            <formatId>image/png</formatId>
-            <formatName>Portable Network Graphics</formatName>
-            <formatType>DATA</formatType>
-            <mediaType name="image/png"/>
-            <extension>png</extension>
-        </objectFormat>
-        <objectFormat>
-            <formatId>application/octet-stream</formatId>
-            <formatName>Octet Stream</formatName>
-            <formatType>DATA</formatType>
-            <mediaType name="application/octet-stream"/>
-            <extension>data</extension>
-        </objectFormat>
-    </ns3:objectFormatList>
-    """
-    return httmock.response(
-        status_code=200,
-        content=response,
-        headers={"Connection": "Close", "Content-Type": "text/xml"},
-        reason=None,
-        elapsed=5,
-        request=request,
-        stream=False,
-    )
 
 
 @httmock.urlmatch(
@@ -171,7 +121,10 @@ def test_get_manifest_file_info():
                 "schema:isPartOf": "doi:10.5065/D6862DM8",
                 "size": 6427136,
                 "md5": "4071ccff46472c9c87af5827d46f4837",
-                "uri": 'https://cn.dataone.org/cn/v2/resolve/urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08',
+                "uri": (
+                    "https://cn.dataone.org/cn/v2/resolve/"
+                    "urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08"
+                ),
             },
         ]
     }
@@ -188,7 +141,10 @@ def test_get_manifest_file_info():
                 "bundledAs": {"filename": "usco2005.xls", "folder": "../data/"},
                 "schema:isPartOf": "doi:10.5065/D6862DM8",
                 "size": 6427136,
-                "uri": 'https://cn.dataone.org/cn/v2/resolve/urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08',
+                "uri": (
+                    "https://cn.dataone.org/cn/v2/resolve/"
+                    "urn:uuid:01a53103-8db1-46b3-967c-b42acf69ae08"
+                ),
             },
         ]
     }
