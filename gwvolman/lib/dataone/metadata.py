@@ -113,7 +113,9 @@ class DataONEMetadata(object):
                     related_object = relation["DataCite:relatedIdentifier"]
                     if related_object["DataCite:relationType"] == "DataCite:Cites":
                         self.resource_map.add((eml_element, DCTERMS.references, URIRef(related_object["@id"])))
+                        added_record = True
                     elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
+                        added_record = True
                         self.resource_map.add((eml_element,
                                                datacite_namespace.IsDerivedFrom, URIRef(related_object["@id"])))
                 if tale['copyOfTale']:
