@@ -122,7 +122,9 @@ class DataONEMetadata(object):
                     try:
                         parent_tale = gc.get("tale/{}".format(tale['copyOfTale']))
                         old_publish = next(
-                            item for item in parent_tale['publishInfo'] if item['repository'] == member_node)
+                            (item for item in parent_tale['publishInfo'] if item['repository'] == member_node),
+                            None
+                        )
                         if old_publish:
                             self.resource_map.add((eml_element,
                                                    datacite_namespace.IsDerivedFrom, URIRef(old_publish['pid'])))
