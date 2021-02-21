@@ -93,7 +93,7 @@ class ZenodoPublishProvider(PublishProvider):
         stream = self.gc.sendRestRequest(
             "get",
             "tale/{}/export".format(self.tale["_id"]),
-            parameters={"taleFormat": "bagit"},
+            parameters={"taleFormat": "bagit", "versionId": self.version_id},
             stream=True,
             jsonResp=False,
         )

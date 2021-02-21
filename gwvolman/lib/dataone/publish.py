@@ -32,7 +32,7 @@ _JWT_OPTS = {"verify_signature": False, "verify_exp": not hasattr(sys, '_called_
 
 class DataONEPublishProvider(PublishProvider):
     def __init__(
-        self, gc, tale_id: str, token: dict, draft: bool=False,
+        self, gc, tale_id: str, token: dict, version_id,
             job_manager=None, dataone_node: str=None
     ):
         """
@@ -43,11 +43,11 @@ class DataONEPublishProvider(PublishProvider):
         :param gc:  Authenticated Girder client
         :param tale_id: The ID of the Tale being published
         :param token: The user's JWT token
-        :param draft: Unsupported
+        :param version_id: The Tale version being published
         :param job_manager:  Optional job manager
         :param dataone_node: The DataONE member node endpoint
         """
-        super().__init__(gc, tale_id, token, draft=draft, job_manager=job_manager)
+        super().__init__(gc, tale_id, token, version_id, job_manager=job_manager)
         self.dataone_node: str = dataone_node
         self.dataone_auth_token = token["access_token"]
         self.coordinating_node:str = "https://{}/cn/".format(token["resource_server"])
@@ -124,8 +124,13 @@ class DataONEPublishProvider(PublishProvider):
         step += 1
 
         # Export the tale to a temp directory
-        url = "tale/{}/export?taleFormat=bagit".format(self.tale["_id"])
-        stream = self.gc.sendRestRequest("get", url, stream=True, jsonResp=False)
+        stream = self.gc.sendRestRequest(
+            "get",
+            "tale/{}/export".format(self.tale["_id"]),
+            parameters={"taleFormat": "bagit", "versionId": self.version_id},
+            stream=True,
+            jsonResp=False,
+        )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
 
             # Write the zip file
@@ -140,8 +145,9 @@ class DataONEPublishProvider(PublishProvider):
             # Now we know the number of steps for progress
             steps = len(files) + 5
 
+            version_path = str(self.version_id)
             # Get the manifest
-            manifest_path = "{}/metadata/manifest.json".format(self.tale["_id"])
+            manifest_path = f"{version_path}/metadata/manifest.json"
             manifest_size = zip_file.getinfo(manifest_path).file_size
             with zip_file.open(manifest_path) as f:
                 data = f.read()
@@ -149,33 +155,33 @@ class DataONEPublishProvider(PublishProvider):
                 manifest = json.loads(data.decode("utf-8"))
 
             # Read the license text
-            license_path = "{}/data/LICENSE".format(self.tale["_id"])
+            license_path = f"{version_path}/data/LICENSE"
             with zip_file.open(license_path) as f:
                 license_text = str(f.read().decode("utf-8"))
 
             # Get the environment
-            environment_path = "{}/metadata/environment.json".format(self.tale["_id"])
+            environment_path = f"{version_path}/metadata/environment.json"
             environment_size = zip_file.getinfo(environment_path).file_size
             with zip_file.open(environment_path) as f:
                 data = f.read()
                 environment_md5 = md5(data).hexdigest()
 
             # Get the run-local.sh
-            run_local_path = "{}/run-local.sh".format(self.tale["_id"])
+            run_local_path = f"{version_path}/run-local.sh"
             run_local_size = zip_file.getinfo(run_local_path).file_size
             with zip_file.open(run_local_path) as f:
                 data = f.read()
                 run_local_md5 = md5(data).hexdigest()
 
             # Get the fetch.txt
-            fetch_path = "{}/fetch.txt".format(self.tale["_id"])
+            fetch_path = f"{version_path}/fetch.txt"
             fetch_size = zip_file.getinfo(fetch_path).file_size
             with zip_file.open(fetch_path) as f:
                 data = f.read()
                 fetch_md5 = md5(data).hexdigest()
 
             # Get the README.md
-            readme_path = "{}/README.md".format(self.tale["_id"])
+            readme_path = f"{version_path}/README.md"
             readme_size = zip_file.getinfo(readme_path).file_size
             with zip_file.open(readme_path) as f:
                 data = f.read()

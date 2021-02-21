@@ -57,6 +57,19 @@ TALE = {
     "publishInfo": [],
     "title": "Example Tale: Mapping Estimated Water Usage",
     "updated": "2019-10-08T17:44:29.523000+00:00",
+    "dct:hasVersion": {
+        "@id": "https://data.wholetale.org/api/v1/folder/603152b34ac3a96578dda45d",
+        "@type": "wt:TaleVersion",
+        "schema:creator": {
+            "@id": "mailto:thelen@nceas.ucsb.edu",
+            "@type": "schema:Person",
+            "schema:email": "thelen@nceas.ucsb.edu",
+            "schema:familyName": "T",
+            "schema:givenName": "Thomas"
+        },
+        "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
+        "schema:name": "empty"
+    },
 }
 
 TALE_NO_DESC = {
@@ -82,6 +95,19 @@ TALE_NO_DESC = {
         )
     ],
     "description": '',
+    "dct:hasVersion": {
+        "@id": "https://data.wholetale.org/api/v1/folder/603152b34ac3a96578dda45d",
+        "@type": "wt:TaleVersion",
+        "schema:creator": {
+            "@id": "mailto:thelen@nceas.ucsb.edu",
+            "@type": "schema:Person",
+            "schema:email": "thelen@nceas.ucsb.edu",
+            "schema:familyName": "T",
+            "schema:givenName": "Thomas"
+        },
+        "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
+        "schema:name": "empty"
+    },
 }
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -126,6 +152,19 @@ PUBLISHED_TALE = {
         "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
         "sers_guide/quickstart.html for more information."
     ),
+    "dct:hasVersion": {
+        "@id": "https://data.wholetale.org/api/v1/folder/603152b34ac3a96578dda45d",
+        "@type": "wt:TaleVersion",
+        "schema:creator": {
+            "@id": "mailto:thelen@nceas.ucsb.edu",
+            "@type": "schema:Person",
+            "schema:email": "thelen@nceas.ucsb.edu",
+            "schema:familyName": "T",
+            "schema:givenName": "Thomas"
+        },
+        "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
+        "schema:name": "empty"
+    },
     "folderId": "5cfd57fca18691e5d1feeda8",
     "format": 7,
     "icon": (
@@ -188,6 +227,19 @@ PARENT_TALE = {
         "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
         "sers_guide/quickstart.html for more information."
     ),
+    "dct:hasVersion": {
+        "@id": "https://data.wholetale.org/api/v1/folder/603152b34ac3a96578dda45d",
+        "@type": "wt:TaleVersion",
+        "schema:creator": {
+            "@id": "mailto:thelen@nceas.ucsb.edu",
+            "@type": "schema:Person",
+            "schema:email": "thelen@nceas.ucsb.edu",
+            "schema:familyName": "T",
+            "schema:givenName": "Thomas"
+        },
+        "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
+        "schema:name": "empty"
+    },
     "folderId": "5cfd57fca18691e5d1feeda8",
     "format": 7,
     "icon": (
@@ -243,6 +295,19 @@ COPIED_TALE = {
         "data published externally via DataONE.  See https://wholetale.readthedocs.io/en/stable/u"
         "sers_guide/quickstart.html for more information."
     ),
+    "dct:hasVersion": {
+        "@id": "https://data.wholetale.org/api/v1/folder/603152b34ac3a96578dda45d",
+        "@type": "wt:TaleVersion",
+        "schema:creator": {
+            "@id": "mailto:thelen@nceas.ucsb.edu",
+            "@type": "schema:Person",
+            "schema:email": "thelen@nceas.ucsb.edu",
+            "schema:familyName": "T",
+            "schema:givenName": "Thomas"
+        },
+        "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
+        "schema:name": "empty"
+    },
     "folderId": "5cfd57fca18691e5d1feeda8",
     "format": 7,
     "icon": (

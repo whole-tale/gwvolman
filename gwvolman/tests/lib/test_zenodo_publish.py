@@ -359,7 +359,8 @@ def mock_tale_update_draft(path, json=None):
 
 def stream_response(chunk_size=65536):
     test_path = os.path.dirname(__file__)
-    with open("{}/../data/{}.zip".format(test_path, TALE["_id"]), "rb") as fp:
+    version_id = TALE['dct:hasVersion']['@id'].rsplit('/', 1)[-1]
+    with open("{}/../data/{}.zip".format(test_path, version_id), "rb") as fp:
         while True:
             data = fp.read(chunk_size)
             if not data:
@@ -386,8 +387,9 @@ def test_zenodo_publish():
         mock_delete_deposition,
         mock_other_request,
     ):
+        version_id = TALE['dct:hasVersion']['@id'].rsplit('/', 1)[-1]
         with pytest.raises(ValueError) as error:
-            publish("123", ZENODO_TOKEN, repository="sandbox.zenodo.org")
+            publish("123", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org")
 
         assert error.match("Failed to create a deposition.")
 
@@ -398,7 +400,7 @@ def test_zenodo_publish():
         mock_other_request,
     ):
         with pytest.raises(ValueError) as error:
-            publish("123", ZENODO_TOKEN, repository="sandbox.zenodo.org")
+            publish("123", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org")
         assert error.match("Failed to update the deposition")
 
     with httmock.HTTMock(
@@ -410,7 +412,7 @@ def test_zenodo_publish():
         mock_other_request,
     ):
         with pytest.raises(ValueError) as error:
-            publish("123", ZENODO_TOKEN, repository="sandbox.zenodo.org")
+            publish("123", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org")
         assert error.match("Failed to upload to a deposition")
 
     with httmock.HTTMock(
@@ -420,7 +422,7 @@ def test_zenodo_publish():
         mock_publish_deposit_ok,
         mock_other_request,
     ):
-        publish("123", ZENODO_TOKEN, repository="sandbox.zenodo.org")
+        publish("123", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org")
 
     mock_gc.put = mock_tale_update_draft
     with httmock.HTTMock(
@@ -430,7 +432,7 @@ def test_zenodo_publish():
         mock_publish_deposit_ok,
         mock_other_request,
     ):
-        publish("123", ZENODO_TOKEN, repository="sandbox.zenodo.org", draft=True)
+        publish("123", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org", draft=True)
 
     mock_gc.put = lambda: (_ for _ in ()).throw(Exception("Girder Died"))
     with httmock.HTTMock(
@@ -441,7 +443,7 @@ def test_zenodo_publish():
         mock_other_request,
     ):
         with pytest.raises(ValueError) as error:
-            publish("123", ZENODO_TOKEN, repository="sandbox.zenodo.org")
+            publish("123", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org")
         assert error.match("Error updating Tale")
 
     mock_gc.put = mock_tale_update
@@ -456,4 +458,4 @@ def test_zenodo_publish():
         with mock.patch(
             "gwvolman.tasks.ZenodoPublishProvider.publish_version", lambda x, y: None
         ):
-            publish("already_published", ZENODO_TOKEN, repository="sandbox.zenodo.org")
+            publish("already_published", ZENODO_TOKEN, version_id, repository="sandbox.zenodo.org")

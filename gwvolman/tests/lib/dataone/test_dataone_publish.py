@@ -18,7 +18,8 @@ from gwvolman.tests import TALE, mock_gc_get, mock_dataone_formats
 
 def stream_response(chunk_size=65536):
     test_path = os.path.dirname(__file__)
-    with open("{}/../../data/{}.zip".format(test_path, TALE["_id"]), "rb") as fp:
+    version_id = TALE['dct:hasVersion']['@id'].rsplit('/', 1)[-1]
+    with open("{}/../../data/{}.zip".format(test_path, version_id), "rb") as fp:
         while True:
             data = fp.read(chunk_size)
             if not data:
@@ -193,8 +194,10 @@ def test_dataone_publish():
             "access_token": "jwt_token",
             "resource_server": "cn-stage-2.test.dataone.org",
         }
+
         with pytest.raises(jwt.exceptions.DecodeError) as error:
-            publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
+            version_id = TALE['dct:hasVersion']['@id'].rsplit('/', 1)[-1]
+            publish("123", token, version_id, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
             assert error.message.startswith("Not enough segments")
 
         token["access_token"] = (
@@ -209,4 +212,4 @@ def test_dataone_publish():
             "YOCJ7pEWDqYsNcu6UC3NiY8u-2qAe-xbBMCP8XtX-u9FOX9QjsxRy4WClPIK9I8bxUj_ehI3m0jG"
             "3gJtWNeGCDw"
         )
-        publish("123", token, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
+        publish("123", token, version_id, repository="https://dev.nceas.ucsb.edu/knb/d1/mn")
