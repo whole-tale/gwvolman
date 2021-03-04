@@ -130,12 +130,13 @@ def mock_create_deposit_fail(url, request):
 )
 def mock_deposit_files_ok(url, request):
     assert request.headers["Authorization"] == "Bearer zenodo_api_key"
-    assert request.original.data == {"name": "{}.zip".format(TALE["_id"])}
+    version_id = TALE['dct:hasVersion']['@id'].rsplit('/', 1)[-1]
+    assert request.original.data == {"name": f"{version_id}.zip"}
     return httmock.response(
         status_code=201,
         content={
             "id": 1,
-            "name": "{}.zip".format(TALE["_id"]),
+            "name": f"{version_id}.zip",
             "filesize": 300,
             "checksum": "abcd",
         },
@@ -155,7 +156,8 @@ def mock_deposit_files_ok(url, request):
 )
 def mock_deposit_files_fail(url, request):
     assert request.headers["Authorization"] == "Bearer zenodo_api_key"
-    assert request.original.data == {"name": "{}.zip".format(TALE["_id"])}
+    version_id = TALE['dct:hasVersion']['@id'].rsplit('/', 1)[-1]
+    assert request.original.data == {"name": f"{version_id}.zip"}
     return httmock.response(
         status_code=404,
         content={"message": "Deposition not found", "status": 404},

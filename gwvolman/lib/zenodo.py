@@ -107,7 +107,7 @@ class ZenodoPublishProvider(PublishProvider):
             r = self.request(
                 "/api/deposit/depositions/{}/files".format(deposition["id"]),
                 method="POST",
-                data={"name": "{}.zip".format(self.tale["_id"])},
+                data={"name": "{}.zip".format(self.version_id)},
                 files={"file": tmp},
             )
 
