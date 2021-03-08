@@ -477,6 +477,7 @@ def build_tale_image(task, tale_id, force=False):
 def publish(self,
             tale_id,
             token,
+            version_id,
             repository=None,
             draft=False):
     """
@@ -484,6 +485,7 @@ def publish(self,
 
     :param tale_id: The tale id
     :param token: An access token for a given repository.
+    :param version_id: The version of the Tale being published
     :param repository: Target repository.
     :param draft: If True, don't mint DOI.
     :type tale_id: str
@@ -498,7 +500,7 @@ def publish(self,
             self.girder_client,
             tale_id,
             token,
-            draft=False,
+            version_id,
             job_manager=self.job_manager,
             dataone_node=repository,
         )
@@ -507,6 +509,7 @@ def publish(self,
             self.girder_client,
             tale_id,
             token,
+            version_id,
             draft=draft,
             job_manager=self.job_manager
         )

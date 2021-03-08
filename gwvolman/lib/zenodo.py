@@ -93,7 +93,7 @@ class ZenodoPublishProvider(PublishProvider):
         stream = self.gc.sendRestRequest(
             "get",
             "tale/{}/export".format(self.tale["_id"]),
-            parameters={"taleFormat": "bagit"},
+            parameters={"taleFormat": "bagit", "versionId": self.version_id},
             stream=True,
             jsonResp=False,
         )
@@ -107,7 +107,7 @@ class ZenodoPublishProvider(PublishProvider):
             r = self.request(
                 "/api/deposit/depositions/{}/files".format(deposition["id"]),
                 method="POST",
-                data={"name": "{}.zip".format(self.tale["_id"])},
+                data={"name": "{}.zip".format(self.version_id)},
                 files={"file": tmp},
             )
 
