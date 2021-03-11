@@ -116,7 +116,7 @@ class Deployment(object):
             host =  re.search(r'Host\(`(.+)`\)', rule).group(1)
             return 'https://' + host
         except docker.errors.APIError:
-            return '{}://{}.{}'.format(TRAEFIK_ENTRYPOINT, service_name[3:], DOMAIN)
+            return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
 
 
 DEPLOYMENT = Deployment()
@@ -279,9 +279,11 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
             'traefik.enable': 'true',
             'traefik.http.routers.%s.rule' % host: 'Host(`{}.{}`)'.format(host, DOMAIN),
             'traefik.http.routers.%s.entrypoints' % host: TRAEFIK_ENTRYPOINT,
-            'traefik.http.middlewares.%s.headers.contentSecurityPolicy' % host: csp,
+            'traefik.http.routers.%s.tls' % host: 'true',
+            'traefik.http.middlewares.%s-csp.headers.customresponseheaders.Content-Security-Policy' % host: csp,
             'traefik.http.services.%s.loadbalancer.passhostheader' % host: 'true',
             'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
             'wholetale.instanceId': instance_id,
             'wholetale.taleId': tale_id,
@@ -301,7 +303,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
     url = '{proto}://{host}.{domain}/{path}'.format(
-        proto=TRAEFIK_ENTRYPOINT, host=host, domain=DOMAIN,
+        proto='https', host=host, domain=DOMAIN,
         path=rendered_url_path)
 
     return service, {'url': url}
