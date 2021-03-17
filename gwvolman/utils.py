@@ -21,7 +21,7 @@ DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
-TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
+TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "websecure")
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 MOUNTS = {}
@@ -110,10 +110,13 @@ class Deployment(object):
         """
         try:
             service = self.docker_client.services.get(service_name)
-            rule = service.attrs['Spec']['Labels']['traefik.frontend.rule']
-            return 'https://' + rule.split(':')[-1].split(',')[0].strip()
+            ns = service.attrs['Spec']['Labels']['com.docker.stack.namespace']
+            router = service_name.replace('%s_' % ns,  '')
+            rule = service.attrs['Spec']['Labels']['traefik.http.routers.%s.rule' % router]
+            host =  re.search(r'Host\(`(.+)`\)', rule).group(1)
+            return 'https://' + host
         except docker.errors.APIError:
-            return '{}://{}.{}'.format(TRAEFIK_ENTRYPOINT, service_name[3:], DOMAIN)
+            return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
 
 
 DEPLOYMENT = Deployment()
@@ -272,13 +275,16 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         container_config.image,
         command=rendered_command,
         labels={
-            'traefik.port': str(container_config.container_port),
+            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
             'traefik.enable': 'true',
-            'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
-            'traefik.frontend.headers.contentSecurityPolicy': csp,
+            'traefik.http.routers.%s.rule' % host: 'Host(`{}.{}`)'.format(host, DOMAIN),
+            'traefik.http.routers.%s.entrypoints' % host: TRAEFIK_ENTRYPOINT,
+            'traefik.http.routers.%s.tls' % host: 'true',
+            'traefik.http.middlewares.%s-csp.headers.customresponseheaders.Content-Security-Policy' % host: csp,
+            'traefik.http.services.%s.loadbalancer.passhostheader' % host: 'true',
+            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
-            'traefik.frontend.passHostHeader': 'true',
-            'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT,
             'wholetale.instanceId': instance_id,
             'wholetale.taleId': tale_id,
         },
@@ -297,7 +303,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
     url = '{proto}://{host}.{domain}/{path}'.format(
-        proto=TRAEFIK_ENTRYPOINT, host=host, domain=DOMAIN,
+        proto='https', host=host, domain=DOMAIN,
         path=rendered_url_path)
 
     return service, {'url': url}
