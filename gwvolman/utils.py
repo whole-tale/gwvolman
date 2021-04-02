@@ -12,14 +12,16 @@ import string
 import uuid
 import logging
 import docker
+import datetime
+import dateutil.relativedelta as rel
 
-from .constants import MOUNTPOINTS, REPO2DOCKER_VERSION
+from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
-TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
+TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "websecure")
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 MOUNTS = {}
@@ -31,7 +33,7 @@ ContainerConfig = namedtuple('ContainerConfig', [
     'buildpack', 'repo2docker_version',
     'image', 'command', 'mem_limit', 'cpu_shares',
     'container_port', 'container_user', 'target_mount',
-    'url_path', 'environment'
+    'url_path', 'environment', 'csp'
 ])
 
 SIZE_NOTATION_RE = re.compile("^(\d+)([kmg]?b?)$", re.IGNORECASE)
@@ -108,10 +110,13 @@ class Deployment(object):
         """
         try:
             service = self.docker_client.services.get(service_name)
-            rule = service.attrs['Spec']['Labels']['traefik.frontend.rule']
-            return 'https://' + rule.split(':')[-1].split(',')[0].strip()
+            ns = service.attrs['Spec']['Labels']['com.docker.stack.namespace']
+            router = service_name.replace('%s_' % ns,  '')
+            rule = service.attrs['Spec']['Labels']['traefik.http.routers.%s.rule' % router]
+            host =  re.search(r'Host\(`(.+)`\)', rule).group(1)
+            return 'https://' + host
         except docker.errors.APIError:
-            return '{}://{}.{}'.format(TRAEFIK_ENTRYPOINT, service_name[3:], DOMAIN)
+            return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
 
 
 DEPLOYMENT = Deployment()
@@ -158,27 +163,6 @@ def _get_user_and_instance(girder_client, instanceId):
     return user, instance
 
 
-def get_env_with_csp(config):
-    '''Ensure that environment in container config has CSP_HOSTS setting.
-
-    This method handles 3 cases:
-        * No 'environment' in config -> return ['CSP_HOSTS=...']
-        * 'environment' in config, but no 'CSP_HOSTS=...' -> append
-        * 'environment' in config and has 'CSP_HOSTS=...' -> replace
-
-    '''
-    csp = "CSP_HOSTS='self' {}".format(DEPLOYMENT.dashboard_url)
-    try:
-        env = config['environment']
-        original_csp = next((_ for _ in env if _.startswith('CSP_HOSTS')), None)
-        if original_csp:
-            env[env.index(original_csp)] = csp  # replace
-        else:
-            env.append(csp)
-    except KeyError:
-        env = [csp]
-    return env
-
 
 def _get_container_config(gc, tale):
     if tale is None:
@@ -204,11 +188,12 @@ def _get_container_config(gc, tale):
             container_port=tale_config.get('port'),
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
-            environment=get_env_with_csp(tale_config),
+            environment=tale_config.get('environment'),
             image=digest,
             mem_limit=mem_limit,
             target_mount=tale_config.get('targetMount'),
-            url_path=tale_config.get('urlPath')
+            url_path=tale_config.get('urlPath'),
+            csp=tale_config.get('csp')
         )
     return container_config
 
@@ -254,19 +239,52 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         )
     host = 'tmp-{}'.format(new_user(12).lower())
 
+    if container_config.buildpack:
+        # Mount the MATLAB and Stata runtime licenses
+        if container_config.buildpack == "MatlabBuildPack":
+            mounts.append(
+                docker.types.Mount(type='bind',
+                    source=LICENSE_PATH,
+                    target="/licenses")
+            )
+        elif container_config.buildpack == "StataBuildPack":
+            # Weekly license expires each Sunday and is provided 
+            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
+            # license expiration date.
+            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
+            source_path = os.path.join(
+                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
+            )
+            mounts.append(
+                docker.types.Mount(
+                    type='bind', source=source_path, target="/usr/local/stata/stata.lic"
+                )
+            )
+
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
+
+    # Use the specified CSP for iframes or default to deployed host
+    csp = ''
+    if container_config.csp:
+        csp = container_config.csp
+    else:
+        csp = "frame-ancestors 'self' {}".format(DEPLOYMENT.dashboard_url)
 
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
         labels={
-            'traefik.port': str(container_config.container_port),
+            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
             'traefik.enable': 'true',
-            'traefik.frontend.rule': 'Host:{}.{}'.format(host, DOMAIN),
+            'traefik.http.routers.%s.rule' % host: 'Host(`{}.{}`)'.format(host, DOMAIN),
+            'traefik.http.routers.%s.entrypoints' % host: TRAEFIK_ENTRYPOINT,
+            'traefik.http.routers.%s.tls' % host: 'true',
+            'traefik.http.middlewares.%s-csp.headers.customresponseheaders.Content-Security-Policy' % host: csp,
+            'traefik.http.services.%s.loadbalancer.passhostheader' % host: 'true',
+            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
-            'traefik.frontend.passHostHeader': 'true',
-            'traefik.frontend.entryPoints': TRAEFIK_ENTRYPOINT,
             'wholetale.instanceId': instance_id,
             'wholetale.taleId': tale_id,
         },
@@ -285,10 +303,11 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
     url = '{proto}://{host}.{domain}/{path}'.format(
-        proto=TRAEFIK_ENTRYPOINT, host=host, domain=DOMAIN,
+        proto='https', host=host, domain=DOMAIN,
         path=rendered_url_path)
 
     return service, {'url': url}
+
 
 def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     """
@@ -296,13 +315,21 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     this uses the "local" provider.  Use the same default user-id and
     user-name as BinderHub
     """
+
+    # Extra arguments for r2d
+    extra_args = ''
+    if image['config']['buildpack'] == "MatlabBuildPack":
+        extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
+                os.environ.get("MATLAB_FILE_INSTALLATION_KEY"))
+
     r2d_cmd = ('jupyter-repo2docker '
                '--config="/wholetale/repo2docker_config.py" '
                '--target-repo-dir="/home/jovyan/work/workspace" '
                '--user-id=1000 --user-name={} '
-               '--no-clean --no-run --debug '
+               '--no-clean --no-run --debug {} '
                '--image-name {} {}'.format(
                                            image['config']['user'],
+                                           extra_args,
                                            tag, temp_dir))
 
     logging.info('Calling %s (%s)', r2d_cmd, tale_id)

@@ -11,14 +11,17 @@ ENABLE_WORKSPACES = True
 MOUNTPOINTS = ["data", "home"]
 if ENABLE_WORKSPACES:
     MOUNTPOINTS.append("workspace")
+    MOUNTPOINTS.append("versions")
+
 
 try:
     DEFAULT_GIRDER_API_URL = "http://" + socket.gethostbyname("girder") + ":8080/api/v1"
 except socket.gaierror:
     DEFAULT_GIRDER_API_URL = "https://girder.dev.wholetale.org/api/v1"
 GIRDER_API_URL = os.environ.get("GIRDER_API_URL", DEFAULT_GIRDER_API_URL)
+LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
-REPO2DOCKER_VERSION = "wholetale/repo2docker_wholetale:v0.9.2"
+REPO2DOCKER_VERSION = "wholetale/repo2docker_wholetale:latest"
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"
     "logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhki"

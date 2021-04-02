@@ -10,6 +10,7 @@ import docker
 import subprocess
 from docker.errors import DockerException
 import girder_client
+from dateutil.parser import parse
 
 import logging
 try:
@@ -61,16 +62,6 @@ def create_volume(self, instance_id):
     mountpoint = volume.attrs['Mountpoint']
     logging.info("Mountpoint: %s", mountpoint)
 
-    try:
-        self.girder_client.downloadFolderRecursive(
-            tale['narrativeId'], HOSTDIR + mountpoint)
-    except KeyError:
-        pass  # no narrativeId
-    except girder_client.HttpError:
-        logging.warn("Narrative folder not found for tale: %s",
-                     str(tale['_id']))
-        pass
-
     os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
     for root, dirs, files in os.walk(HOSTDIR + mountpoint):
         for obj in dirs + files:
@@ -89,17 +80,14 @@ def create_volume(self, instance_id):
     homeDir = self.girder_client.loadOrCreateFolder(
         'Home', user['_id'], 'user')
     data_dir = os.path.join(mountpoint, 'data')
-    _safe_mkdir(HOSTDIR + data_dir)
-    home_dir = os.path.join(mountpoint, 'home')
-    _safe_mkdir(HOSTDIR + home_dir)
+    versions_dir = os.path.join(mountpoint, 'versions')
     if ENABLE_WORKSPACES:
         work_dir = os.path.join(mountpoint, 'workspace')
-        _safe_mkdir(HOSTDIR + work_dir)
-        if not os.path.isdir(work_dir):
-            os.makedirs(work_dir)
 
     # FUSE is silly and needs to have mirror inside container
-    for directory in (data_dir, home_dir):
+    for suffix in MOUNTPOINTS:
+        directory = os.path.join(mountpoint, suffix)
+        _safe_mkdir(HOSTDIR + directory)
         if not os.path.isdir(directory):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
@@ -107,36 +95,36 @@ def create_volume(self, instance_id):
     if tale.get('dataSet') is not None:
         session = self.girder_client.post(
             '/dm/session', parameters={'taleId': tale['_id']})
-    elif tale.get('folderId'):  # old format, keep it for now
-        data_set = [
-            {'itemId': folder['_id'], 'mountPath': '/' + folder['name']}
-            for folder in self.girder_client.listFolder(tale['folderId'])
-        ]
-        data_set += [
-            {'itemId': item['_id'], 'mountPath': '/' + item['name']}
-            for item in self.girder_client.listItem(tale['folderId'])
-        ]
-        session = self.girder_client.post(
-            '/dm/session', parameters={'dataSet': json.dumps(data_set)})
     else:
         session = {'_id': None}
 
     if session['_id'] is not None:
-        cmd = "girderfs --hostns -c wt_dms --api-url {} --api-key {} {} {}"
-        cmd = cmd.format(GIRDER_API_URL, api_key, data_dir, session['_id'])
+        cmd = (
+            f"girderfs --hostns -c wt_dms --api-url {GIRDER_API_URL} --api-key {api_key}"
+            f" {os.path.join(mountpoint, 'data')} {session['_id']}"
+        )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
     #  webdav relies on mount.c module, don't use hostns for now
-    cmd = 'girderfs -c wt_home --api-url '
-    cmd += '{} --api-key {} {} {}'.format(
-        GIRDER_API_URL, api_key, home_dir, homeDir['_id'])
+    cmd = (
+        f"girderfs -c wt_home --api-url {GIRDER_API_URL} --api-key {api_key}"
+        f" {os.path.join(mountpoint, 'home')} {homeDir['_id']}"
+    )
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
 
     if ENABLE_WORKSPACES:
-        cmd = 'girderfs -c wt_work --api-url '
-        cmd += '{} --api-key {} {} {}'.format(
-            GIRDER_API_URL, api_key, work_dir, tale['_id'])
+        cmd = (
+            f"girderfs -c wt_work --api-url {GIRDER_API_URL} --api-key {api_key}"
+            f" {os.path.join(mountpoint, 'workspace')} {tale['_id']}"
+        )
+        logging.info("Calling: %s", cmd)
+        subprocess.call(cmd, shell=True)
+
+        cmd = (
+            f"girderfs --hostns -c wt_versions --api-url {GIRDER_API_URL} --api-key {api_key}"
+            f" {os.path.join(mountpoint, 'versions')} {tale['_id']}"
+        )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
 
@@ -329,6 +317,9 @@ def remove_volume(self, instanceId):
         logging.info("Unmounting %s", dest)
         subprocess.call("umount %s" % dest, shell=True)
 
+    logging.info("Unmounting licenses")
+    subprocess.call("umount /licenses", shell=True)
+
     try:
         self.girder_client.delete('/dm/session/{sessionId}'.format(**instance))
     except Exception as e:
@@ -382,11 +373,8 @@ def build_tale_image(task, tale_id, force=False):
     # Only rebuild if files have changed since last build
     if last_build_time > 0:
 
-        workspace_mtime = -1
-        try:
-            workspace_mtime = tale['workspaceModified']
-        except KeyError:
-            pass
+        workspace_folder = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
+        workspace_mtime = int(parse(workspace_folder['updated']).strftime('%s'))
 
         if not force and last_build_time > 0 and workspace_mtime < last_build_time:
             print('Workspace not modified since last build. Skipping.')
@@ -489,6 +477,7 @@ def build_tale_image(task, tale_id, force=False):
 def publish(self,
             tale_id,
             token,
+            version_id,
             repository=None,
             draft=False):
     """
@@ -496,6 +485,7 @@ def publish(self,
 
     :param tale_id: The tale id
     :param token: An access token for a given repository.
+    :param version_id: The version of the Tale being published
     :param repository: Target repository.
     :param draft: If True, don't mint DOI.
     :type tale_id: str
@@ -510,7 +500,7 @@ def publish(self,
             self.girder_client,
             tale_id,
             token,
-            draft=False,
+            version_id,
             job_manager=self.job_manager,
             dataone_node=repository,
         )
@@ -519,6 +509,7 @@ def publish(self,
             self.girder_client,
             tale_id,
             token,
+            version_id,
             draft=draft,
             job_manager=self.job_manager
         )

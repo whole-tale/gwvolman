@@ -12,18 +12,20 @@ class PublishProvider(object):
     _published = None
     _published_info_index = None
 
-    def __init__(self, gc, tale_id, token, draft=False, job_manager=None):
+    def __init__(self, gc, tale_id, token, version_id, draft=False, job_manager=None):
         """
         Initialize PublishProvider
 
         :param gc:  Authenticated Girder client
         :param tale_id:  Tale identifier
-        :param job_manager:  Optional job manager
         :param token: External Account Token
+        :param version_id: The Tale's version that's being published
+        :param job_manager:  Optional job manager
         """
         self.gc = gc
         self.draft = draft
         self.token = token
+        self.version_id = version_id
         if job_manager is not None:
             self.job_manager = job_manager
         else:
@@ -31,7 +33,10 @@ class PublishProvider(object):
 
         self.tale = self.gc.get("/tale/{}".format(tale_id))
         assert self.tale["description"], "Cannot publish a Tale without a description."
-        self.manifest = self.gc.get("/tale/{}/manifest".format(tale_id))
+        self.manifest = self.gc.get(
+            "/tale/{}/manifest".format(tale_id),
+            parameters={"expandFolders": True, "versionId": version_id}
+        )
 
     @property
     def published(self):

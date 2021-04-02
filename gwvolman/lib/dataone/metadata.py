@@ -1,26 +1,25 @@
 import io
+import json
 import logging
 import os
-from rdflib.term import Literal
+from rdflib import Namespace
+from rdflib.term import URIRef
 import re
+from typing import List
 import xml.etree.cElementTree as ET
-
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
-
-
-from .constants import \
-    ExtraFileNames, \
-    file_descriptions
 
 from d1_client.cnclient_2_0 import CoordinatingNodeClient_2_0
 from d1_common.types import dataoneTypes
 from d1_common.types.exceptions import DataONEException
+from d1_common.types.generated.dataoneTypes_v2_0 import SystemMetadata
+from d1_common.types.generated.dataoneTypes_v1 import AccessPolicy
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
+
+from .constants import \
+    ExtraFileNames, \
+    file_descriptions
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -30,23 +29,22 @@ EML document.
 
 
 class DataONEMetadata(object):
-    mimetypes = set()
-    access_policy = None
 
-    def __init__(self, coordinating_node):
-        self.coordinating_node = coordinating_node
-        self.mimetypes = self.get_dataone_mimetypes()
+    def __init__(self, coordinating_node: str):
+        self.coordinating_node: str = coordinating_node
+        self.mimetypes: set = self.get_dataone_mimetypes()
+        self.resource_map: ResourceMap = None
+        self.access_policy: AccessPolicy = None
 
-    def get_dataone_mimetypes(self):
+    def get_dataone_mimetypes(self) -> set:
         """
         Uses a coordinating node client to retrieve a list of supported
         formats
 
-        :return: A list of mimetypes that DataONE supports
-        :rtype: set
+        :return: A set of mimetypes that DataONE supports
         """
         try:
-            cn_client = CoordinatingNodeClient_2_0(self.coordinating_node)
+            cn_client: CoordinatingNodeClient_2_0 = CoordinatingNodeClient_2_0(self.coordinating_node)
             formats_response = cn_client.listFormats()
         except DataONEException as e:
             logging.error("Failed to connect to the DataONE coordinating node. {}".format(e))
@@ -69,52 +67,78 @@ class DataONEMetadata(object):
                 continue
         return mime_types
 
-    def check_dataone_mimetype(self, mimetype):
+    def check_dataone_mimetype(self, mimetype: str) -> str:
         """
         If a mimeType isn't found in DataONE's supported list,
         default to application/octet-stream.
 
         :param mimetype: The mimetype in question
-        :type mimetype: str
         :return: A mimetype that is supported by DataONE
         """
         if mimetype not in self.mimetypes:
             return 'application/octet-stream'
         return mimetype
 
-    def set_related_identifiers(self, manifest, resource_map, eml_pid):
+    def set_related_identifiers(self, manifest: dict, eml_pid: str,
+                                tale: dict, member_node: str, gc):
         """
-        Modifies a resource map to include cito:cites for any cited Tale entities
+        This method adds fields to the DataONE resource map if there are
+        1. Any datacite:RelatedIdentifiers
+        2. Any datacite:IsDerivedFrom relations
+        3. Any publishings of a potential parent Tale to the same member node
 
         :param manifest: The Tale's manifest
-        :param resource_map: The resource map that will be submitted to DataONE
         :param eml_pid: The pid of the EML document
-        :return: The resource map
+        :param tale: The Tale being published
+        :param member_node: The member node that the Tale is being published to
+        :param gc: The Gider client
         """
         eml_element = None
         try:
-            eml_element = resource_map.getObjectByPid(eml_pid)
+            eml_element = self.resource_map.getObjectByPid(eml_pid)
         except IndexError:
             logging.warning("Failed to find the pid {} in the resource map.".format(eml_pid))
             return
 
         if eml_element:
+            added_record = False
+            datacite_namespace = Namespace("http://purl.org/spar/datacite/")
             try:
-                for relation in manifest["DataCite:relatedIdentifiers"]:
-                    related_object = relation["DataCite:relatedIdentifier"]
-                    if related_object["DataCite:relationType"] == "DataCite:Cites":
-                        resource_map.add((eml_element, DCTERMS.references, Literal(related_object["@id"])))
-                    elif related_object["DataCite:relationType"] == "DataCite:IsDerivedFrom":
-                        resource_map.add((eml_element, DCTERMS.source, Literal(related_object["@id"])))
+                for relation in manifest["datacite:relatedIdentifiers"]:
+                    related_object = relation["datacite:relatedIdentifier"]
+                    if related_object["datacite:relationType"] == "datacite:Cites":
+                        self.resource_map.add((eml_element, DCTERMS.references, URIRef(related_object["@id"])))
+                        added_record = True
+                    elif related_object["datacite:relationType"] == "datacite:IsDerivedFrom":
+                        added_record = True
+                        self.resource_map.add((eml_element,
+                                               datacite_namespace.IsDerivedFrom, URIRef(related_object["@id"])))
+                if tale['copyOfTale']:
+                    # If this Tale is a copy of another Tale, we need to check if its predecessor was published
+                    # If it was, then add a DataCite relation to the resource map
+                    try:
+                        parent_tale = gc.get("tale/{}".format(tale['copyOfTale']))
+                        old_publish = next(
+                            (item for item in parent_tale['publishInfo'] if item['repository'] == member_node),
+                            None
+                        )
+                        if old_publish:
+                            self.resource_map.add((eml_element,
+                                                   datacite_namespace.IsDerivedFrom, URIRef(old_publish['pid'])))
+                            added_record = True
+                    except (KeyError, TypeError):
+                        # If there was an error, then silently pass
+                        pass
             except KeyError:
                 pass
+            if added_record:
+                # Then add DataCite to the resource map namespace
+                self.resource_map.namespace_manager.bind('datacite', datacite_namespace)
 
-
-    def get_access_policy(self):
+    def get_access_policy(self) -> AccessPolicy:
         """
         Returns or creates the access policy for the system metadata.
         :return: The access policy
-        :rtype: d1_common.types.generated.dataoneTypes_v1.AccessPolicy
         """
 
         if not self.access_policy:
@@ -137,25 +161,22 @@ class DataONEMetadata(object):
 
         return self.access_policy
 
-    def create_resource_map(self, pid, scimeta_pid, sciobj_pid_list):
+    def create_resource_map(self, pid: str, scimeta_pid: str, sciobj_pid_list: List):
         """
         Create a simple resource map with one science metadata document and any
         number of science data objects.
         This method differs from d1_common.resource_map.createSimpleResourceMap
         by allowing you to specify the coordinating node that the objects
         can be found on.
+        :param pid: The resource map's pid
         :param scimeta_pid: PID of the metadata document
-        :param sciobj_pid_list: PID of the upload object
-        :type scimeta_pid: str
-        :type sciobj_pid_list: list
-        :return: The ORE object
-        :rtype: d1_common.resource_map.ResourceMap
+        :param sciobj_pid_list: List of pids of data objects being uploaded
         """
-        ore = ResourceMap(base_url=self.coordinating_node)
+        ore: ResourceMap = ResourceMap(base_url=self.coordinating_node)
         ore.initialize(pid)
         ore.addMetadataDocument(scimeta_pid)
         ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
-        return ore
+        self.resource_map = ore
 
     def create_entity(self, root, name, description):
         """
@@ -245,15 +266,14 @@ class DataONEMetadata(object):
         self.create_format(object_format, physical_section)
         ET.SubElement(entity_section, 'entityType').text = 'dataTable'
 
-    def set_user_name(self, root, first_name, last_name, user_id=None):
+    def set_user_name(self, root: ET.Element,
+                      first_name: str, last_name: str, user_id: str = None):
         """
         Creates a section in the EML that describes a user's name.
         :param root: The parent XML element
         :param first_name: The user's first name
         :param last_name: The user's last name
-        :type root: xml.etree.ElementTree.Element
-        :type first_name: str
-        :type last_name: str
+        :param user_id: The user's ORCID
         :return: None
         """
         individual_name_elem = ET.SubElement(root, 'individualName')
@@ -359,9 +379,9 @@ class DataONEMetadata(object):
         for item in manifest['aggregates']:
             if 'bundledAs' not in item:
                 name = os.path.basename(item['uri'])
-                size = item['size']
-                mimeType = self.check_dataone_mimetype(item['mimeType'])
-                self.add_object_record(dataset_elem, name, '', size, mimeType)
+                size = item['wt:size']
+                mime_type = self.check_dataone_mimetype(item['wt:mimeType'])
+                self.add_object_record(dataset_elem, name, '', size, mime_type)
 
         # Add the manifest itself
         name = ExtraFileNames.manifest_file
@@ -404,8 +424,8 @@ class DataONEMetadata(object):
                                  short_empty_elements=True)
         return stream.getvalue()
 
-    def generate_system_metadata(self, pid, name, format_id, size, md5,
-                                 rights_holder):
+    def generate_system_metadata(self, pid: str, name: str, format_id: str,
+                                 size: int, md5: str, rights_holder: str) -> SystemMetadata:
         """
         Generates a metadata document describing the file_object.
 
@@ -415,14 +435,7 @@ class DataONEMetadata(object):
         :param size: The size of the file
         :param md5: The md5 of the file
         :param rights_holder: The owner of this object
-        :type pid: str
-        :type name: str
-        :type format_id: str
-        :type size: int
-        :type md5: int
-        :type rights_holder: str
         :return: The metadata describing file_object
-        :rtype: d1_common.types.generated.dataoneTypes_v2_0.SystemMetadata
         """
 
         sys_meta = dataoneTypes.systemMetadata()
@@ -437,25 +450,23 @@ class DataONEMetadata(object):
         sys_meta.fileName = name
         return sys_meta
 
-    def _get_directory(self, user_id):
+    @staticmethod
+    def _get_directory(user_id: str) -> str:
         """
         Returns the directory that should be used in the EML
 
         :param user_id: The user ID
-        :type user_id: str
         :return: The directory name
-        :rtype: str
         """
         if bool(user_id.find('orcid.org')):
             return 'https://orcid.org'
         return 'https://cilogon.org'
 
-    def _strip_html_tags(self, html_string):
+    @staticmethod
+    def _strip_html_tags(html_string: str) -> str:
         """
         Removes HTML tags from a string
         :param html_string: The string with HTML
-        :type html_string: str
         :return: The string without HTML
-        :rtype: str
         """
         return re.sub('<[^<]+?>', '', html_string)

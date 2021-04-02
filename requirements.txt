@@ -1,3 +1,4 @@
+jsonpickle==1.5.2
 celery==4.4.6
 kombu==4.6.11
 fusepy==3.0.1
@@ -13,4 +14,5 @@ markdown
 dataone.common==3.4.7
 dataone.libclient==3.4.7
 dataone.cli==3.4.7
-git+https://github.com/whole-tale/girderfs@v0.9.1#egg=girderfs
+git+https://github.com/whole-tale/girderfs@v1.0rc1#egg=girderfs
+python-dateutil
