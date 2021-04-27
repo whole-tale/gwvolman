@@ -92,7 +92,7 @@ def create_volume(self, instance_id):
             os.makedirs(directory)
     api_key = _get_api_key(self.girder_client)
 
-    if tale.get('dataSet') is not None:
+    if tale.get("dataSet", []):
         session = self.girder_client.post(
             '/dm/session', parameters={'taleId': tale['_id']})
     else:
