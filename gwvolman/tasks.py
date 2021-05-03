@@ -381,10 +381,14 @@ def build_tale_image(task, tale_id, force=False):
 
     logging.info('Last build time {}'.format(last_build_time))
 
-    # TODO: Move this check to the model?
-    # Only rebuild if files have changed since last build
-    if last_build_time > 0:
+    image_changed = tale["imageId"] != tale["imageInfo"].get("imageId")
+    if image_changed:
+        logging.info("Base image has changed. Forcing rebuild.")
+        force = True
 
+    # TODO: Move this check to the model?
+    # Only rebuild if files have changed since last build or base image was changed
+    if last_build_time > 0:
         workspace_folder = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
         workspace_mtime = int(parse(workspace_folder['updated']).strftime('%s'))
 
