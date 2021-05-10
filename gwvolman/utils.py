@@ -295,7 +295,8 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         mounts=mounts,
         endpoint_spec=endpoint_spec,
         constraints=['node.id == {}'.format(nodeId)],
-        resources=docker.types.Resources(mem_limit=container_config.mem_limit)
+        resources=docker.types.Resources(mem_limit=container_config.mem_limit),
+        restart_policy=docker.types.RestartPolicy(condition="none")
     )
 
     # Wait for the server to launch within the container before adding it
