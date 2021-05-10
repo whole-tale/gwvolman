@@ -188,18 +188,27 @@ def launch_container(self, payload):
     )
 
     tic = time.time()
-    timeout = 30.0
+    timeout = 300.0
 
     # wait until task is started
     print("Waiting for the environment to be accessible...")
     while time.time() - tic < timeout:
         try:
-            started = service.tasks()[0]['Status']['State'] == 'running'
+            status = service.tasks()[0]['Status']
+            error = status['State'] in {"failed", "rejected"}
+
+            if error:
+                raise ValueError("Failed to start environment: %s" % status['Err'])
+            elif status['State'] == "running":
+                break
+
         except IndexError:
             started = False
-        if started:
-            break
+
         time.sleep(0.2)
+
+    if not started:
+        raise ValueError("Tale did not start before timeout exceeded")
 
     print("Environment is up and running.")
     self.job_manager.updateProgress(
