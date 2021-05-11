@@ -56,11 +56,12 @@ def create_volume(self, instance_id):
     try:
         volume = cli.volumes.create(name=vol_name, driver='local')
     except DockerException as dex:
-        logging.error('Error pulling Docker image blah')
+        logging.error(f"Error creating volume {vol_name} using local driver")
         logging.exception(dex)
-    logging.info("Volume: %s created", volume.name)
+    logging.info(f"Volume: {volume.name} created")
     mountpoint = volume.attrs['Mountpoint']
-    logging.info("Mountpoint: %s", mountpoint)
+    logging.info("Mountpoint: {mountpoint}")
+    print("Created a root for WT Filesystem")
 
     os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
     for root, dirs, files in os.walk(HOSTDIR + mountpoint):
@@ -105,6 +106,7 @@ def create_volume(self, instance_id):
         )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
+        print("Mounted data/")
     #  webdav relies on mount.c module, don't use hostns for now
     cmd = (
         f"girderfs -c wt_home --api-url {GIRDER_API_URL} --api-key {api_key}"
@@ -112,6 +114,7 @@ def create_volume(self, instance_id):
     )
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
+    print("Mounted home/")
 
     if ENABLE_WORKSPACES:
         cmd = (
@@ -120,6 +123,7 @@ def create_volume(self, instance_id):
         )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
+        print("Mounted workspace/")
 
         cmd = (
             f"girderfs --hostns -c wt_versions --api-url {GIRDER_API_URL} --api-key {api_key}"
@@ -127,10 +131,12 @@ def create_volume(self, instance_id):
         )
         logging.info("Calling: %s", cmd)
         subprocess.call(cmd, shell=True)
+        print("Mounted versions/")
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
         current=CREATE_VOLUME_STEP_TOTAL, forceFlush=True)
+    print("WT Filesystem created successfully.")
 
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
@@ -153,21 +159,21 @@ def launch_container(self, payload):
         message='Starting container', total=LAUNCH_CONTAINER_STEP_TOTAL,
         current=1, forceFlush=True)
 
+    print("Launching container for a Tale...")
     if 'imageInfo' not in tale:
 
         # Wait for image to be built
         tic = time.time()
         timeout = 180.0
+        time_interval = 5
 
         while time.time() - tic < timeout:
-
-            logging.info("Waiting for image build to complete.")
-
             tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
-
             if 'imageInfo' in tale and 'digest' in tale['imageInfo']:
                 break
-
+            msg = f"Waiting for image build to complete. ({time_interval}s)"
+            logging.info(msg)
+            print(msg)
             time.sleep(5)
 
     # _pull_image() #FIXME
@@ -176,11 +182,16 @@ def launch_container(self, payload):
         payload['volumeName'], payload['nodeId'],
         container_config,
         tale_id=tale['_id'], instance_id=payload['instanceId'])
+    print(
+        f"Started a container using volume: {payload['volumeName']} "
+        f"on node: {payload['nodeId']}"
+    )
 
     tic = time.time()
     timeout = 30.0
 
     # wait until task is started
+    print("Waiting for the environment to be accessible...")
     while time.time() - tic < timeout:
         try:
             started = service.tasks()[0]['Status']['State'] == 'running'
@@ -190,6 +201,7 @@ def launch_container(self, payload):
             break
         time.sleep(0.2)
 
+    print("Environment is up and running.")
     self.job_manager.updateProgress(
         message='Container started', total=LAUNCH_CONTAINER_STEP_TOTAL,
         current=LAUNCH_CONTAINER_STEP_TOTAL, forceFlush=True)
@@ -369,10 +381,14 @@ def build_tale_image(task, tale_id, force=False):
 
     logging.info('Last build time {}'.format(last_build_time))
 
-    # TODO: Move this check to the model?
-    # Only rebuild if files have changed since last build
-    if last_build_time > 0:
+    image_changed = tale["imageId"] != tale["imageInfo"].get("imageId")
+    if image_changed:
+        logging.info("Base image has changed. Forcing rebuild.")
+        force = True
 
+    # TODO: Move this check to the model?
+    # Only rebuild if files have changed since last build or base image was changed
+    if last_build_time > 0:
         workspace_folder = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
         workspace_mtime = int(parse(workspace_folder['updated']).strftime('%s'))
 
