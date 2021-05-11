@@ -187,19 +187,20 @@ def launch_container(self, payload):
         f"on node: {payload['nodeId']}"
     )
 
+    # wait until task is started
     tic = time.time()
     timeout = 300.0
+    started = False
 
-    # wait until task is started
     print("Waiting for the environment to be accessible...")
     while time.time() - tic < timeout:
         try:
             status = service.tasks()[0]['Status']
-            error = status['State'] in {"failed", "rejected"}
 
-            if error:
+            if status['State'] in {"failed", "rejected"}:
                 raise ValueError("Failed to start environment: %s" % status['Err'])
             elif status['State'] == "running":
+                started = True
                 break
 
         except IndexError:
