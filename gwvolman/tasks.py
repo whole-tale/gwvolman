@@ -7,6 +7,7 @@ import json
 import time
 import tempfile
 import docker
+import requests
 import subprocess
 from docker.errors import DockerException
 import girder_client
@@ -668,3 +669,39 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
         message='Tale is ready!', total=total, current=total)
     # TODO: maybe filter results?
     return {'tale': tale, 'instance': instance}
+
+
+@app.task
+@app.task(bind=True)
+def rebuild_image_cache(self):
+    print("Rebuilding image cache")
+
+    # Get the list of images
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    r = requests.get(GIRDER_API_URL + "/image", headers=headers)
+    r.raise_for_status()
+    images = r.json()
+    #images = self.girder_client.get('/image')
+
+    cli = docker.from_env(version='1.28')
+
+    version = REPO2DOCKER_VERSION.split(":")[1]
+
+    # Build each base image 
+    for image in images:
+        temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
+        tag = 'cache/{}:{}'.format(image["_id"], version)
+
+        print(f'Building {image["name"]} {tag} in {temp_dir} with {REPO2DOCKER_VERSION}')
+
+        with open(os.path.join(temp_dir, 'environment.json'), 'w') as fp:
+            json.dump(image, fp)
+
+        start = time.time()
+        ret = _build_image(
+            cli, image["_id"], image, tag, temp_dir, REPO2DOCKER_VERSION
+        )
+        elapsed = int(time.time() - start)
+        print(f'Build time: {elapsed} seconds')
+
+        shutil.rmtree(temp_dir, ignore_errors=True)

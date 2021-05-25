@@ -63,5 +63,7 @@ RUN echo "use_locks 0" >> /etc/davfs2/davfs2.conf && \
   echo "gui_optimize 1" >> /etc/davfs2/davfs2.conf
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY scheduler-entrypoint.sh /scheduler-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x /scheduler-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
