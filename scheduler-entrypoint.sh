@@ -1,3 +1,3 @@
 #!/bin/bash
 
-celery beat -l DEBUG -A gwvolman.scheduler -b redis://redis:6379/  --result-backend redis://redis:6379/
+celery beat --max-interval 300 -l INFO -A gwvolman.scheduler -b redis://redis:6379/  --result-backend redis://redis:6379/
