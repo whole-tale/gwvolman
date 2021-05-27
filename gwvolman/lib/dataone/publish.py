@@ -255,8 +255,8 @@ class DataONEPublishProvider(PublishProvider):
                         )
                         uploaded_pids.append(file_pid)
             except Exception as e:
-                logging.error(f'There was an error while uploading {fname}\n{e}')
-                raise ValueError('There was a fatal error while uploading {fname}. Please '\
+                logging.error("There was an error while uploading %s\n%s", fname, str(e))
+                raise ValueError(f'There was a fatal error while uploading {fname}. Please '\
                                  'contact the support team.')
 
             self.job_manager.updateProgress(
