@@ -328,10 +328,10 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
                '--target-repo-dir="/home/jovyan/work/workspace" '
                '--user-id=1000 --user-name={} '
                '--no-clean --no-run --debug {} '
-               '--image-name {} {}'.format(
+               '--image-name {} --cache-from cache/{} {}'.format(
                                            image['config']['user'],
                                            extra_args,
-                                           tag, temp_dir))
+                                           tag, image['_id'], temp_dir))
 
     logging.info('Calling %s (%s)', r2d_cmd, tale_id)
 
