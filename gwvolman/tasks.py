@@ -67,11 +67,7 @@ def create_volume(self, instance_id):
 
     api_key = _get_api_key(self.girder_client)
 
-    if tale.get('dataSet') is not None:
-        session = self.girder_client.post(
-            '/dm/session', parameters={'taleId': tale['_id']})
-    else:
-        session = {'_id': None}
+    session = _get_session(self.girder_client, tale=tale)
 
     if session['_id'] is not None:
         _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key)
@@ -705,3 +701,19 @@ def _create_docker_volume(cli, vol_name):
         subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
                         shell=True)
     return mountpoint
+
+def _get_session(gc, tale=None, version_id=None):
+    """Returns the session for a tale or version"""
+    session = {'_id': None}
+
+    if tale is not None and tale.get('dataSet') is not None:
+        session = gc.post(
+            '/dm/session', parameters={'taleId': tale['_id']})
+    elif version_id is not None:
+        # Get the dataset for the version
+        dataset = gc.get('/version/{}/dataSet'.format(version_id))
+        if dataset is not None:
+            session = gc.post(
+                '/dm/session', parameters={'dataSet': json.dumps(dataset)})
+
+    return session
