@@ -86,12 +86,8 @@ def create_volume(self, instance_id):
     if ENABLE_WORKSPACES:
         work_dir = os.path.join(mountpoint, 'workspace')
 
-    # FUSE is silly and needs to have mirror inside container
-    for suffix in MOUNTPOINTS:
-        directory = os.path.join(mountpoint, suffix)
-        _safe_mkdir(HOSTDIR + directory)
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
+    _make_fuse_dirs(mountpoint, MOUNTPOINTS)
+
     api_key = _get_api_key(self.girder_client)
 
     if tale.get('dataSet') is not None:
@@ -693,3 +689,13 @@ def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key):
     logging.info("Calling: %s", cmd)
     subprocess.call(cmd, shell=True)
     print(f"Mounted {fs_type} {directory}")
+
+def _make_fuse_dirs(mountpoint, directories):
+    """Create fuse directories""" 
+
+    # FUSE is silly and needs to have mirror inside container
+    for suffix in directories:
+        directory = os.path.join(mountpoint, suffix)
+        _safe_mkdir(HOSTDIR + directory)
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
