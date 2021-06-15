@@ -54,30 +54,7 @@ def create_volume(self, instance_id):
         message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
         current=1, forceFlush=True)
 
-    try:
-        volume = cli.volumes.create(name=vol_name, driver='local')
-    except DockerException as dex:
-        logging.error(f"Error creating volume {vol_name} using local driver")
-        logging.exception(dex)
-    logging.info(f"Volume: {volume.name} created")
-    mountpoint = volume.attrs['Mountpoint']
-    logging.info(f"Mountpoint: {mountpoint}")
-    print("Created a root for WT Filesystem")
-
-    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
-    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
-        for obj in dirs + files:
-            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
-
-    # Before calling girderfs and "escaping" container, we need to make
-    # sure that shared objects we use are available on the host
-    # TODO: this assumes overlayfs
-    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
-    if 'overlay /usr/local' not in mounts:
-        cont = cli.containers.get(socket.gethostname())
-        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
-        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
-                        shell=True)
+    mountpoint = _create_docker_volume(cli, vol_name)
 
     homeDir = self.girder_client.loadOrCreateFolder(
         'Home', user['_id'], 'user')
@@ -114,7 +91,7 @@ def create_volume(self, instance_id):
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
         mountPoint=mountpoint,
-        volumeName=volume.name,
+        volumeName=vol_name,
         sessionId=session['_id'],
         instanceId=instance_id,
     )
@@ -699,3 +676,32 @@ def _make_fuse_dirs(mountpoint, directories):
         _safe_mkdir(HOSTDIR + directory)
         if not os.path.isdir(directory):
             os.makedirs(directory)
+
+def _create_docker_volume(cli, vol_name):
+    """Creates a Docker volume with the specified name"""
+
+    try:
+        volume = cli.volumes.create(name=vol_name, driver='local')
+    except DockerException as dex:
+        logging.error(f"Error creating volume {vol_name} using local driver")
+        logging.exception(dex)
+
+    logging.info(f"Volume: {volume.name} created")
+    mountpoint = volume.attrs['Mountpoint']
+    logging.info(f"Mountpoint: {mountpoint}")
+
+    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
+    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
+        for obj in dirs + files:
+            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
+
+    # Before calling girderfs and "escaping" container, we need to make
+    # sure that shared objects we use are available on the host
+    # TODO: this assumes overlayfs
+    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
+    if 'overlay /usr/local' not in mounts:
+        cont = cli.containers.get(socket.gethostname())
+        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
+        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
+                        shell=True)
+    return mountpoint
