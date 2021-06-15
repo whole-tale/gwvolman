@@ -231,35 +231,15 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
     mounts = []
-    for path in MOUNTPOINTS:
-        source = os.path.join(source_mount, path)
-        target = os.path.join(container_config.target_mount, path)
+    volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
+    for source in volumes:
         mounts.append(
-            docker.types.Mount(type='bind', source=source, target=target)
-        )
-    host = 'tmp-{}'.format(new_user(12).lower())
-
-    if container_config.buildpack:
-        # Mount the MATLAB and Stata runtime licenses
-        if container_config.buildpack == "MatlabBuildPack":
-            mounts.append(
                 docker.types.Mount(type='bind',
-                    source=LICENSE_PATH,
-                    target="/licenses")
-            )
-        elif container_config.buildpack == "StataBuildPack":
-            # Weekly license expires each Sunday and is provided 
-            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
-            # license expiration date.
-            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
-            source_path = os.path.join(
-                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
-            )
-            mounts.append(
-                docker.types.Mount(
-                    type='bind', source=source_path, target="/usr/local/stata/stata.lic"
-                )
-            )
+                    source=source,
+                    target=volumes[source]['bind'])
+        )
+
+    host = 'tmp-{}'.format(new_user(12).lower())
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
@@ -359,3 +339,39 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     # Since detach=True, then we need to explicitly check for the
     # container exit code
     return container.wait()
+
+def _get_container_volumes(mountpoint, container_config, directories):
+    volumes = {
+        '/var/run/docker.sock': {
+            'bind': '/var/run/docker.sock', 'mode': 'rw'
+        },
+        '/tmp': {
+            'bind': '/host/tmp', 'mode': 'ro'
+        }
+    }
+
+    for path in directories:
+        source = os.path.join(mountpoint, path)
+        target = os.path.join(container_config.target_mount, path)
+        volumes[source] = {
+            'bind': target, 'mode': 'rw'
+        }
+
+    if container_config.buildpack:
+        # Mount the MATLAB and Stata runtime licenses
+        if container_config.buildpack == "MatlabBuildPack":
+            volumes[LICENSE_PATH] = {
+                'bind': '/licenses'
+            }
+        elif container_config.buildpack == "StataBuildPack":
+            # Weekly license expires each Sunday and is provided
+            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
+            # license expiration date.
+            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
+            source_path = os.path.join(
+                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
+            )
+            volumes[source_path] = {
+                'bind': '/usr/local/stata/stata.lic'
+            }
+    return volumes
