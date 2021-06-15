@@ -61,7 +61,7 @@ def create_volume(self, instance_id):
         logging.exception(dex)
     logging.info(f"Volume: {volume.name} created")
     mountpoint = volume.attrs['Mountpoint']
-    logging.info("Mountpoint: {mountpoint}")
+    logging.info(f"Mountpoint: {mountpoint}")
     print("Created a root for WT Filesystem")
 
     os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
@@ -101,38 +101,14 @@ def create_volume(self, instance_id):
         session = {'_id': None}
 
     if session['_id'] is not None:
-        cmd = (
-            f"girderfs --hostns -c wt_dms --api-url {GIRDER_API_URL} --api-key {api_key}"
-            f" {os.path.join(mountpoint, 'data')} {session['_id']}"
-        )
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
-        print("Mounted data/")
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key)
+
     #  webdav relies on mount.c module, don't use hostns for now
-    cmd = (
-        f"girderfs -c wt_home --api-url {GIRDER_API_URL} --api-key {api_key}"
-        f" {os.path.join(mountpoint, 'home')} {homeDir['_id']}"
-    )
-    logging.info("Calling: %s", cmd)
-    subprocess.call(cmd, shell=True)
-    print("Mounted home/")
+    _mount_girderfs(mountpoint, 'home', 'wt_home', homeDir['_id'], api_key)
 
     if ENABLE_WORKSPACES:
-        cmd = (
-            f"girderfs -c wt_work --api-url {GIRDER_API_URL} --api-key {api_key}"
-            f" {os.path.join(mountpoint, 'workspace')} {tale['_id']}"
-        )
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
-        print("Mounted workspace/")
-
-        cmd = (
-            f"girderfs --hostns -c wt_versions --api-url {GIRDER_API_URL} --api-key {api_key}"
-            f" {os.path.join(mountpoint, 'versions')} {tale['_id']}"
-        )
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
-        print("Mounted versions/")
+        _mount_girderfs(mountpoint, 'workspace', 'wt_work', tale['_id'], api_key)
+        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key)
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
@@ -220,8 +196,7 @@ def launch_container(self, payload):
     payload.update(attrs)
     payload['name'] = service.name
     return payload
-
-
+    
 @girder_job(title='Update Instance')
 @app.task(bind=True)
 def update_container(task, instanceId, digest=None):
@@ -335,6 +310,7 @@ def remove_volume(self, instanceId):
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
+    # TODO: _remove_volumes()
     for suffix in MOUNTPOINTS:
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
@@ -670,7 +646,6 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
     # TODO: maybe filter results?
     return {'tale': tale, 'instance': instance}
 
-
 @app.task
 def rebuild_image_cache():
     logging.info("Rebuilding image cache")
@@ -708,3 +683,13 @@ def rebuild_image_cache():
             logging.info("Build time: %i seconds", elapsed)
 
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key):
+    """Mount a girderfs directory given a type and id"""
+    cmd = (
+        f"girderfs -c {fs_type} --api-url {GIRDER_API_URL} --api-key {api_key}"
+        f" {os.path.join(mountpoint, directory)} {obj_id}"
+    )
+    logging.info("Calling: %s", cmd)
+    subprocess.call(cmd, shell=True)
+    print(f"Mounted {fs_type} {directory}")
