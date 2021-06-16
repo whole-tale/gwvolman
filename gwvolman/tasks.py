@@ -767,8 +767,10 @@ def recorded_run(self, run_id, tale_id):
     # TODO: Need the environment.json in the workspace. Could be done via fuse.
     work_dir = os.path.join(mountpoint, 'workspace')
     image = self.girder_client.get('/image/%s' % tale['imageId'])
-    print("Dumping the environment to " + work_dir)
-    with open(os.path.join(HOSTDIR + work_dir, 'environment.json'), 'w') as fp:
+    wt_dir = f"{HOSTDIR}{work_dir}/.wholetale/"
+    _safe_mkdir(wt_dir)
+    print(f"Dumping the environment to {wt_dir}")
+    with open(os.path.join(wt_dir, 'environment.json'), 'w') as fp:
         json.dump(image, fp)
 
     # TODO: What should we use here? Latest? What the tale was built with?
