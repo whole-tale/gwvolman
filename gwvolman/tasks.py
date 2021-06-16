@@ -166,7 +166,7 @@ def launch_container(self, payload):
     payload.update(attrs)
     payload['name'] = service.name
     return payload
-    
+
 @girder_job(title='Update Instance')
 @app.task(bind=True)
 def update_container(task, instanceId, digest=None):
@@ -616,6 +616,7 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
     # TODO: maybe filter results?
     return {'tale': tale, 'instance': instance}
 
+
 @app.task
 def rebuild_image_cache():
     logging.info("Rebuilding image cache")
@@ -654,6 +655,7 @@ def rebuild_image_cache():
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+
 def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=False):
 
     hostns_flag = '--hostns' if hostns else ''
@@ -667,8 +669,9 @@ def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=Fals
     subprocess.call(cmd, shell=True)
     print(f"Mounted {fs_type} {directory}")
 
+
 def _make_fuse_dirs(mountpoint, directories):
-    """Create fuse directories""" 
+    """Create fuse directories"""
 
     # FUSE is silly and needs to have mirror inside container
     for suffix in directories:
@@ -676,6 +679,7 @@ def _make_fuse_dirs(mountpoint, directories):
         _safe_mkdir(HOSTDIR + directory)
         if not os.path.isdir(directory):
             os.makedirs(directory)
+
 
 def _create_docker_volume(cli, vol_name):
     """Creates a Docker volume with the specified name"""
@@ -705,6 +709,7 @@ def _create_docker_volume(cli, vol_name):
         subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
                         shell=True)
     return mountpoint
+
 
 def _get_session(gc, tale=None, version_id=None):
     """Returns the session for a tale or version"""
@@ -780,7 +785,7 @@ def recorded_run(self, run_id, tale_id):
     # Build currently assumes tmp directory, in this case mount the run workspace
     container_config = _get_container_config(self.girder_client, tale)
     work_target = os.path.join(container_config.target_mount, 'workspace')
-    extra_volume =  {
+    extra_volume = {
         work_dir: {
             'bind': work_target,
             'mode': 'rw'
@@ -805,6 +810,8 @@ def recorded_run(self, run_id, tale_id):
             message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
             current=4, forceFlush=True)
 
+    except Exception as e:
+        logging.error("Recorded run failed. %s", e)
     finally:
         # TODO: _cleanup_volumes
         for suffix in ['data', 'workspace']:
