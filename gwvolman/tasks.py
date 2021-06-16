@@ -25,7 +25,7 @@ from .utils import \
     HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _build_image, DEPLOYMENT
+    _build_image, _recorded_run, DEPLOYMENT
 
 from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
@@ -38,6 +38,7 @@ LAUNCH_CONTAINER_STEP_TOTAL = 2
 UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
+RECORDED_RUN_STEP_TOTAL = 4
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -717,3 +718,108 @@ def _get_session(gc, tale=None, version_id=None):
                 '/dm/session', parameters={'dataSet': json.dumps(dataset)})
 
     return session
+
+
+@girder_job(title='Recorded Run')
+@app.task(bind=True)
+def recorded_run(self, run_id, tale_id, user_id):
+    """Start a recorded run for a tale version"""
+    # TODO _recorded_run utils
+
+    cli = docker.from_env(version='1.28')
+
+    run = self.girder_client.get('/run/{}'.format(run_id))
+    tale = self.girder_client.get('/tale/{}'.format(tale_id))
+    user = self.girder_client.get('/user/{}'.format(user_id))
+
+    self.job_manager.updateProgress(
+        message='Preparing volumes', total=RECORDED_RUN_STEP_TOTAL,
+        current=1, forceFlush=True)
+
+    # Create Docker volume
+    vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
+    mountpoint = _create_docker_volume(cli, vol_name)
+
+    # Create fuse directories
+    _make_fuse_dirs(mountpoint, ['data', 'workspace'])
+
+    # Mount data and workspace for the run
+    api_key = _get_api_key(self.girder_client)
+    session = _get_session(self.girder_client, version_id=run['runVersionId'])
+    if session['_id'] is not None:
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key)
+
+    _mount_girderfs(mountpoint, 'workspace', 'wt_run', run_id, api_key)
+
+    # Build the image for the run
+    self.job_manager.updateProgress(
+        message='Building image', total=RECORDED_RUN_STEP_TOTAL,
+        current=2, forceFlush=True)
+
+    # Setup image tag
+    build_time = int(time.time())
+    tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
+                            run_id, str(build_time))
+
+    # TODO: Need the environment.json in the workspace. Could be done via fuse.
+    work_dir = os.path.join(mountpoint, 'workspace')
+    image = self.girder_client.get('/image/%s' % tale['imageId'])
+    print("Dumping the environment to " + work_dir)
+    with open(os.path.join(HOSTDIR + work_dir, 'environment.json'), 'w') as fp:
+        json.dump(image, fp)
+
+    # TODO: What should we use here? Latest? What the tale was built with?
+    repo2docker_version = REPO2DOCKER_VERSION
+    print(f"Using repo2docker {repo2docker_version}")
+
+    # Build currently assumes tmp directory, in this case mount the run workspace
+    container_config = _get_container_config(self.girder_client, tale)
+    work_target = os.path.join(container_config.target_mount, 'workspace')
+    extra_volume =  {
+        work_dir: {
+            'bind': work_target,
+            'mode': 'rw'
+        }
+    }
+
+    try:
+        print("Building mage for recorded run " + tag)
+        ret = _build_image(cli, tale_id, image, tag, work_target, repo2docker_version, extra_volume)
+        if ret['StatusCode'] != 0:
+            raise ValueError('Image build failed for recorded run {}'.format(run_id))
+        # TODO: Delete the environment.json?
+        # TODO: Do we push the image? Delete it at the end?
+
+        self.job_manager.updateProgress(
+            message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
+            current=3, forceFlush=True)
+
+        _recorded_run(cli, mountpoint, container_config, tag)
+
+        self.job_manager.updateProgress(
+            message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
+            current=4, forceFlush=True)
+
+    finally:
+        # TODO: _cleanup_volumes
+        for suffix in ['data', 'workspace']:
+            dest = os.path.join(mountpoint, suffix)
+            logging.info("Unmounting %s", dest)
+            subprocess.call("umount %s" % dest, shell=True)
+
+        # Delete the session
+        try:
+            self.girder_client.delete('/dm/session/{}'.format(session['_id']))
+        except Exception as e:
+            logging.error("Unable to remove session. %s", e)
+
+        # Delete the Docker volume
+        try:
+            volume = cli.volumes.get(vol_name)
+        except docker.errors.NotFound:
+            logging.info("Volume not present [%s].", vol_name)
+        try:
+            logging.info("Removing volume: %s", volume.id)
+            volume.remove()
+        except Exception as e:
+            logging.error("Unable to remove volume [%s]: %s", volume.id, e)

@@ -290,7 +290,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     return service, {'url': url}
 
 
-def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
+def _build_image(cli, tale_id, image, tag, build_dir, repo2docker_version, extra_volume=None):
     """
     Run repo2docker on the workspace using a shared temp directory. Note that
     this uses the "local" provider.  Use the same default user-id and
@@ -311,9 +311,20 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
                '--image-name {} {}'.format(
                                            image['config']['user'],
                                            extra_args,
-                                           tag, temp_dir))
+                                           tag, build_dir))
 
     logging.info('Calling %s (%s)', r2d_cmd, tale_id)
+
+    volumes={
+        '/var/run/docker.sock': {
+            'bind': '/var/run/docker.sock', 'mode': 'rw'
+        },
+        '/tmp': {
+            'bind': '/host/tmp', 'mode': 'ro'
+        }
+    }
+    if extra_volume is not None:
+        volumes.update(extra_volume)
 
     container = cli.containers.run(
         image=repo2docker_version,
@@ -322,14 +333,7 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
         privileged=True,
         detach=True,
         remove=True,
-        volumes={
-            '/var/run/docker.sock': {
-                'bind': '/var/run/docker.sock', 'mode': 'rw'
-            },
-            '/tmp': {
-                'bind': '/host/tmp', 'mode': 'ro'
-            }
-        }
+        volumes=volumes
     )
 
     # Job output must come from stdout/stderr
@@ -375,3 +379,40 @@ def _get_container_volumes(mountpoint, container_config, directories):
                 'bind': '/usr/local/stata/stata.lic'
             }
     return volumes
+
+
+def _recorded_run(cli, mountpoint, container_config, tag):
+    print("Starting recorded run")
+
+    # Configure container volumes for recorded run
+    volumes = _get_container_volumes(mountpoint, container_config, ['data', 'workspace'])
+
+    # Start reprozip. The process needs to execute in the run workspace
+    # as if the author ran it from in the container.
+
+    # TODO: use run config, not run.sh
+    rpz_cmd = 'bash -c "mkdir -p .cpr/.reprozip-trace ;'\
+              'reprozip trace --dir .cpr/.reprozip-trace --overwrite ./run.sh"'
+
+    print("Running reprozip with command " + rpz_cmd)
+    print("Running image " + tag)
+
+    # Runs a privileged container for PTRACE
+    container = cli.containers.run(
+        image=tag,
+        command=rpz_cmd,
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        privileged=True,
+        detach=True,
+        remove=True,
+        volumes=volumes
+    )
+
+    # Job output must come from stdout/stderr
+    for line in container.logs(stream=True):
+        print(line.decode('utf-8').strip())
+
+    ret = container.wait()
+
+    if ret['StatusCode'] != 0:
+        raise ValueError('Error executing reprozip for recorded run')
