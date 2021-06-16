@@ -391,17 +391,17 @@ def _recorded_run(cli, mountpoint, container_config, tag):
     # as if the author ran it from in the container.
 
     # TODO: use run config, not run.sh
-    rpz_cmd = 'bash -c "mkdir -p .cpr/.reprozip-trace ;'\
-              'reprozip trace --dir .cpr/.reprozip-trace --overwrite ./run.sh"'
+    rpz_cmd = 'bash -c "mkdir -p .wholetale/.reprozip-trace ;'\
+              'reprozip trace --dir .wholetale/.reprozip-trace --overwrite ./run.sh"'
 
     print("Running reprozip with command " + rpz_cmd)
     print("Running image " + tag)
 
-    # Runs a privileged container for PTRACE
     container = cli.containers.run(
         image=tag,
         command=rpz_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        cap_add = ['SYS_PTRACE'],
         privileged=True,
         detach=True,
         remove=True,
