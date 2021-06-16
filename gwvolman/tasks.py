@@ -71,14 +71,14 @@ def create_volume(self, instance_id):
     session = _get_session(self.girder_client, tale=tale)
 
     if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key)
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
 
     #  webdav relies on mount.c module, don't use hostns for now
     _mount_girderfs(mountpoint, 'home', 'wt_home', homeDir['_id'], api_key)
 
     if ENABLE_WORKSPACES:
         _mount_girderfs(mountpoint, 'workspace', 'wt_work', tale['_id'], api_key)
-        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key)
+        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
@@ -654,10 +654,13 @@ def rebuild_image_cache():
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key):
+def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=False):
+
+    hostns_flag = '--hostns' if hostns else ''
+
     """Mount a girderfs directory given a type and id"""
     cmd = (
-        f"girderfs -c {fs_type} --api-url {GIRDER_API_URL} --api-key {api_key}"
+        f"girderfs {hostns_flag} -c {fs_type} --api-url {GIRDER_API_URL} --api-key {api_key}"
         f" {os.path.join(mountpoint, directory)} {obj_id}"
     )
     logging.info("Calling: %s", cmd)
@@ -722,7 +725,7 @@ def _get_session(gc, tale=None, version_id=None):
 
 @girder_job(title='Recorded Run')
 @app.task(bind=True)
-def recorded_run(self, run_id, tale_id, user_id):
+def recorded_run(self, run_id, tale_id):
     """Start a recorded run for a tale version"""
     # TODO _recorded_run utils
 
@@ -730,7 +733,7 @@ def recorded_run(self, run_id, tale_id, user_id):
 
     run = self.girder_client.get('/run/{}'.format(run_id))
     tale = self.girder_client.get('/tale/{}'.format(tale_id))
-    user = self.girder_client.get('/user/{}'.format(user_id))
+    user = self.girder_client.get('/user/me')
 
     self.job_manager.updateProgress(
         message='Preparing volumes', total=RECORDED_RUN_STEP_TOTAL,
@@ -747,7 +750,7 @@ def recorded_run(self, run_id, tale_id, user_id):
     api_key = _get_api_key(self.girder_client)
     session = _get_session(self.girder_client, version_id=run['runVersionId'])
     if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key)
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
 
     _mount_girderfs(mountpoint, 'workspace', 'wt_run', run_id, api_key)
 
