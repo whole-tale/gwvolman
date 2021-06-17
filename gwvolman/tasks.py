@@ -729,6 +729,17 @@ def _get_session(gc, tale=None, version_id=None):
     return session
 
 
+def _write_env_json(workspace_dir, image):
+    dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
+    _safe_mkdir(dot_dir)
+    env_json = os.path.join(dot_dir, 'environment.json')
+
+    print(f"Dumping the environment to {env_json}")
+    with open(env_json, 'w') as fp:
+        json.dump(image, fp)
+    return env_json
+
+
 @girder_job(title='Recorded Run')
 @app.task(bind=True)
 def recorded_run(self, run_id, tale_id):
@@ -777,14 +788,9 @@ def recorded_run(self, run_id, tale_id):
     tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
                             run_id, str(build_time))
 
-    # TODO: Need the environment.json in the workspace. Could be done via fuse.
     work_dir = os.path.join(mountpoint, 'workspace')
     image = self.girder_client.get('/image/%s' % tale['imageId'])
-    wt_dir = f"{HOSTDIR}{work_dir}/.wholetale/"
-    _safe_mkdir(wt_dir)
-    print(f"Dumping the environment to {wt_dir}")
-    with open(os.path.join(wt_dir, 'environment.json'), 'w') as fp:
-        json.dump(image, fp)
+    env_json = _write_env_json(work_dir, image)
 
     # TODO: What should we use here? Latest? What the tale was built with?
     repo2docker_version = REPO2DOCKER_VERSION
@@ -805,7 +811,6 @@ def recorded_run(self, run_id, tale_id):
         ret = _build_image(cli, tale_id, image, tag, work_target, repo2docker_version, extra_volume)
         if ret['StatusCode'] != 0:
             raise ValueError('Image build failed for recorded run {}'.format(run_id))
-        # TODO: Delete the environment.json?
         # TODO: Do we push the image? Delete it at the end?
 
         self.job_manager.updateProgress(
@@ -824,6 +829,9 @@ def recorded_run(self, run_id, tale_id):
         logging.error("Recorded run failed. %s", e)
         set_run_status(run, RunStatus.FAILED)
     finally:
+        # Remove the environment.json
+        os.remove(env_json)
+
         # TODO: _cleanup_volumes
         for suffix in ['data', 'workspace']:
             dest = os.path.join(mountpoint, suffix)
