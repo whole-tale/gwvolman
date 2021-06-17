@@ -55,3 +55,11 @@ class TaleStatus(object):
     PREPARING = 0
     READY = 1
     ERROR = 2
+
+class RunStatus(object):
+    UNKNOWN = 0
+    STARTING = 1
+    RUNNING = 2
+    COMPLETED = 3
+    FAILED = 4
+    CANCELLED = 5

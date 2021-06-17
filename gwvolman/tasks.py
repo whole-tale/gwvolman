@@ -31,7 +31,8 @@ from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus, \
+    RunStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -732,13 +733,20 @@ def _get_session(gc, tale=None, version_id=None):
 @app.task(bind=True)
 def recorded_run(self, run_id, tale_id):
     """Start a recorded run for a tale version"""
-    # TODO _recorded_run utils
 
     cli = docker.from_env(version='1.28')
 
     run = self.girder_client.get('/run/{}'.format(run_id))
     tale = self.girder_client.get('/tale/{}'.format(tale_id))
     user = self.girder_client.get('/user/me')
+
+    def set_run_status(run, status):
+        self.girder_client.patch(
+            "/run/{_id}/status".format(**run), parameters={'status': status}
+        )
+
+    # UNKNOWN = 0 STARTING = 1 RUNNING = 2 COMPLETED = 3 FAILED = 4 CANCELLED = 5
+    set_run_status(run, RunStatus.STARTING)
 
     self.job_manager.updateProgress(
         message='Preparing volumes', total=RECORDED_RUN_STEP_TOTAL,
@@ -804,14 +812,17 @@ def recorded_run(self, run_id, tale_id):
             message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
             current=3, forceFlush=True)
 
+        set_run_status(run, RunStatus.RUNNING)
         _recorded_run(cli, mountpoint, container_config, tag)
 
+        set_run_status(run, RunStatus.COMPLETED)
         self.job_manager.updateProgress(
             message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
             current=4, forceFlush=True)
 
     except Exception as e:
         logging.error("Recorded run failed. %s", e)
+        set_run_status(run, RunStatus.FAILED)
     finally:
         # TODO: _cleanup_volumes
         for suffix in ['data', 'workspace']:
