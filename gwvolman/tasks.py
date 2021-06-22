@@ -730,9 +730,11 @@ def _get_session(gc, tale=None, version_id=None):
 
 
 def _write_env_json(workspace_dir, image):
-    dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
-    _safe_mkdir(dot_dir)
-    env_json = os.path.join(dot_dir, 'environment.json')
+    #dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
+    #_safe_mkdir(dot_dir)
+    #os.chown(dot_dir, DEFAULT_USER, DEFAULT_GROUP)
+    #env_json = os.path.join(dot_dir, 'environment.json')
+    env_json = os.path.join(f"{HOSTDIR}{workspace_dir}", 'environment.json')
 
     print(f"Dumping the environment to {env_json}")
     with open(env_json, 'w') as fp:
@@ -826,6 +828,7 @@ def recorded_run(self, run_id, tale_id):
             current=4, forceFlush=True)
 
     except Exception as e:
+        logging.exception("message")
         logging.error("Recorded run failed. %s", e)
         set_run_status(run, RunStatus.FAILED)
     finally:

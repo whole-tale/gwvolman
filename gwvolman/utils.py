@@ -15,7 +15,7 @@ import docker
 import datetime
 import dateutil.relativedelta as rel
 
-from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
+from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, CPR_VERSION
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
@@ -397,11 +397,11 @@ def _recorded_run(cli, mountpoint, container_config, tag):
     print("Running reprozip with command " + rpz_cmd)
     print("Running image " + tag)
 
+    #    cap_add = ['SYS_PTRACE'],
     container = cli.containers.run(
         image=tag,
         command=rpz_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-        cap_add = ['SYS_PTRACE'],
         privileged=True,
         detach=True,
         remove=True,
@@ -416,3 +416,28 @@ def _recorded_run(cli, mountpoint, container_config, tag):
 
     if ret['StatusCode'] != 0:
         raise ValueError('Error executing reprozip for recorded run')
+
+    # Run cpr. Needs same volume mounts as original container
+    cpr_cmd = f'bash -c "/cpr/bin/run_reports.sh {container_config.target_mount}/workspace"'
+
+    print("Running cpr with command " + cpr_cmd)
+
+    container = cli.containers.run(
+        image=CPR_VERSION,
+        command=cpr_cmd,
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        detach=True,
+        remove=True,
+        volumes=volumes
+    )
+
+    # Job output must come from stdout/stderr
+    for line in container.logs(stream=True):
+        print(line.decode('utf-8').strip())
+
+    ret = container.wait()
+
+    if ret['StatusCode'] != 0:
+        raise ValueError('Error executing cpr for recorded run')
+
+    return ret
