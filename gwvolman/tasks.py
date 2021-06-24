@@ -667,7 +667,7 @@ def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=Fals
         f" {os.path.join(mountpoint, directory)} {obj_id}"
     )
     logging.info("Calling: %s", cmd)
-    subprocess.call(cmd, shell=True)
+    subprocess.check_call(cmd, shell=True)
     print(f"Mounted {fs_type} {directory}")
 
 
