@@ -850,10 +850,10 @@ def recorded_run(self, run_id, tale_id):
         # Delete the Docker volume
         try:
             volume = cli.volumes.get(vol_name)
+            try:
+                logging.info("Removing volume: %s", volume.id)
+                volume.remove()
+            except Exception as e:
+                logging.error("Unable to remove volume [%s]: %s", volume.id, e)
         except docker.errors.NotFound:
             logging.info("Volume not present [%s].", vol_name)
-        try:
-            logging.info("Removing volume: %s", volume.id)
-            volume.remove()
-        except Exception as e:
-            logging.error("Unable to remove volume [%s]: %s", volume.id, e)
