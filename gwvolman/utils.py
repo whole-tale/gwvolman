@@ -397,12 +397,11 @@ def _recorded_run(cli, mountpoint, container_config, tag):
     print("Running reprozip with command " + rpz_cmd)
     print("Running image " + tag)
 
-    #    cap_add = ['SYS_PTRACE'],
     container = cli.containers.run(
         image=tag,
         command=rpz_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-        privileged=True,
+        cap_add = ['SYS_PTRACE'],
         detach=True,
         remove=True,
         volumes=volumes
