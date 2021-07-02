@@ -71,7 +71,7 @@ RPZ_RUN_CALL = mock.call(
     }
 )
 CPR_RUN_CALL = mock.call(
-    image='craigwillis/wt-cpr:latest',
+    image='wholetale/wt-cpr:latest',
     command='bash -c "/cpr/bin/run_reports.sh /work/workspace"',
     environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
     detach=True,
