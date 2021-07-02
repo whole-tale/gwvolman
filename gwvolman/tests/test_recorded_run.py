@@ -1,7 +1,7 @@
 from girder_client import GirderClient
 import mock
 
-from gwvolman.tasks import recorded_run
+from gwvolman.tasks import recorded_run, _write_env_json
 from gwvolman.utils import ContainerConfig
 from gwvolman.constants import RunStatus
 
@@ -140,3 +140,17 @@ def test_recorded_run(mg, mfd, cdv, gs, wej, gak, gcc, bi, osr, sp, containers, 
         assert status == RunStatus.FAILED
 
     containers.run.assert_has_calls([RPZ_RUN_CALL], any_order=True)
+
+
+def test_write_env_json():
+    mock_image = {
+        '_id': 'image1', 
+        'name': 'Mock Image'
+    }
+
+    workspace_dir =  '/path/to/mountpoint/workspace'
+
+    with mock.patch('builtins.open', mock.mock_open()) as mock_open:
+        env_json = _write_env_json(workspace_dir, mock_image)
+
+        assert env_json == '/host/path/to/mountpoint/workspace/environment.json'

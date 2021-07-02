@@ -730,13 +730,17 @@ def _get_session(gc, tale=None, version_id=None):
 
 
 def _write_env_json(workspace_dir, image):
-    #dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
-    #_safe_mkdir(dot_dir)
-    #os.chown(dot_dir, DEFAULT_USER, DEFAULT_GROUP)
-    #env_json = os.path.join(dot_dir, 'environment.json')
-    env_json = os.path.join(f"{HOSTDIR}{workspace_dir}", 'environment.json')
+    # TODO: I wanted to write to the .wholetale directory, but this would 
+    # mean that the user's r2d config needs to be there too (e.g, apt.txt).
+    # So for now, write to root of workspace.
 
-    print(f"Dumping the environment to {env_json}")
+    env_json = os.path.join(f"{HOSTDIR}{workspace_dir}", 'environment.json')
+    # dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
+    # _safe_mkdir(dot_dir)
+    # os.chown(dot_dir, DEFAULT_USER, DEFAULT_GROUP)
+    # env_json = os.path.join(dot_dir, 'environment.json')
+
+    print(f"Writing the environment to {env_json}")
     with open(env_json, 'w') as fp:
         json.dump(image, fp)
     return env_json
