@@ -832,8 +832,8 @@ def recorded_run(self, run_id, tale_id):
             current=4, forceFlush=True)
 
     except Exception as e:
-        logging.exception("message")
         logging.error("Recorded run failed. %s", e)
+        logging.exception(e)
         set_run_status(run, RunStatus.FAILED)
     finally:
         # Remove the environment.json
