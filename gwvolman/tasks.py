@@ -25,19 +25,21 @@ from .utils import \
     HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _build_image, DEPLOYMENT
+    _build_image, _recorded_run, DEPLOYMENT
 
 from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus, \
+    RunStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
 UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
+RECORDED_RUN_STEP_TOTAL = 4
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -54,30 +56,7 @@ def create_volume(self, instance_id):
         message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
         current=1, forceFlush=True)
 
-    try:
-        volume = cli.volumes.create(name=vol_name, driver='local')
-    except DockerException as dex:
-        logging.error(f"Error creating volume {vol_name} using local driver")
-        logging.exception(dex)
-    logging.info(f"Volume: {volume.name} created")
-    mountpoint = volume.attrs['Mountpoint']
-    logging.info("Mountpoint: {mountpoint}")
-    print("Created a root for WT Filesystem")
-
-    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
-    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
-        for obj in dirs + files:
-            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
-
-    # Before calling girderfs and "escaping" container, we need to make
-    # sure that shared objects we use are available on the host
-    # TODO: this assumes overlayfs
-    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
-    if 'overlay /usr/local' not in mounts:
-        cont = cli.containers.get(socket.gethostname())
-        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
-        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
-                        shell=True)
+    mountpoint = _create_docker_volume(cli, vol_name)
 
     homeDir = self.girder_client.loadOrCreateFolder(
         'Home', user['_id'], 'user')
@@ -86,53 +65,21 @@ def create_volume(self, instance_id):
     if ENABLE_WORKSPACES:
         work_dir = os.path.join(mountpoint, 'workspace')
 
-    # FUSE is silly and needs to have mirror inside container
-    for suffix in MOUNTPOINTS:
-        directory = os.path.join(mountpoint, suffix)
-        _safe_mkdir(HOSTDIR + directory)
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
+    _make_fuse_dirs(mountpoint, MOUNTPOINTS)
+
     api_key = _get_api_key(self.girder_client)
 
-    if tale.get('dataSet') is not None:
-        session = self.girder_client.post(
-            '/dm/session', parameters={'taleId': tale['_id']})
-    else:
-        session = {'_id': None}
+    session = _get_session(self.girder_client, tale=tale)
 
     if session['_id'] is not None:
-        cmd = (
-            f"girderfs --hostns -c wt_dms --api-url {GIRDER_API_URL} --api-key {api_key}"
-            f" {os.path.join(mountpoint, 'data')} {session['_id']}"
-        )
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
-        print("Mounted data/")
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
+
     #  webdav relies on mount.c module, don't use hostns for now
-    cmd = (
-        f"girderfs -c wt_home --api-url {GIRDER_API_URL} --api-key {api_key}"
-        f" {os.path.join(mountpoint, 'home')} {homeDir['_id']}"
-    )
-    logging.info("Calling: %s", cmd)
-    subprocess.call(cmd, shell=True)
-    print("Mounted home/")
+    _mount_girderfs(mountpoint, 'home', 'wt_home', homeDir['_id'], api_key)
 
     if ENABLE_WORKSPACES:
-        cmd = (
-            f"girderfs -c wt_work --api-url {GIRDER_API_URL} --api-key {api_key}"
-            f" {os.path.join(mountpoint, 'workspace')} {tale['_id']}"
-        )
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
-        print("Mounted workspace/")
-
-        cmd = (
-            f"girderfs --hostns -c wt_versions --api-url {GIRDER_API_URL} --api-key {api_key}"
-            f" {os.path.join(mountpoint, 'versions')} {tale['_id']}"
-        )
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
-        print("Mounted versions/")
+        _mount_girderfs(mountpoint, 'workspace', 'wt_work', tale['_id'], api_key)
+        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
@@ -142,7 +89,7 @@ def create_volume(self, instance_id):
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
         mountPoint=mountpoint,
-        volumeName=volume.name,
+        volumeName=vol_name,
         sessionId=session['_id'],
         instanceId=instance_id,
     )
@@ -220,7 +167,6 @@ def launch_container(self, payload):
     payload.update(attrs)
     payload['name'] = service.name
     return payload
-
 
 @girder_job(title='Update Instance')
 @app.task(bind=True)
@@ -335,6 +281,7 @@ def remove_volume(self, instanceId):
     containerInfo = instance['containerInfo']  # VALIDATE
 
     cli = docker.from_env(version='1.28')
+    # TODO: _remove_volumes()
     for suffix in MOUNTPOINTS:
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
@@ -708,3 +655,209 @@ def rebuild_image_cache():
             logging.info("Build time: %i seconds", elapsed)
 
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=False):
+
+    hostns_flag = '--hostns' if hostns else ''
+
+    """Mount a girderfs directory given a type and id"""
+    cmd = (
+        f"girderfs {hostns_flag} -c {fs_type} --api-url {GIRDER_API_URL} --api-key {api_key}"
+        f" {os.path.join(mountpoint, directory)} {obj_id}"
+    )
+    logging.info("Calling: %s", cmd)
+    subprocess.check_call(cmd, shell=True)
+    print(f"Mounted {fs_type} {directory}")
+
+
+def _make_fuse_dirs(mountpoint, directories):
+    """Create fuse directories"""
+
+    # FUSE is silly and needs to have mirror inside container
+    for suffix in directories:
+        directory = os.path.join(mountpoint, suffix)
+        _safe_mkdir(HOSTDIR + directory)
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+
+
+def _create_docker_volume(cli, vol_name):
+    """Creates a Docker volume with the specified name"""
+
+    try:
+        volume = cli.volumes.create(name=vol_name, driver='local')
+    except DockerException as dex:
+        logging.error(f"Error creating volume {vol_name} using local driver")
+        logging.exception(dex)
+
+    logging.info(f"Volume: {volume.name} created")
+    mountpoint = volume.attrs['Mountpoint']
+    logging.info(f"Mountpoint: {mountpoint}")
+
+    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
+    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
+        for obj in dirs + files:
+            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
+
+    # Before calling girderfs and "escaping" container, we need to make
+    # sure that shared objects we use are available on the host
+    # TODO: this assumes overlayfs
+    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
+    if 'overlay /usr/local' not in mounts:
+        cont = cli.containers.get(socket.gethostname())
+        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
+        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
+                        shell=True)
+    return mountpoint
+
+
+def _get_session(gc, tale=None, version_id=None):
+    """Returns the session for a tale or version"""
+    session = {'_id': None}
+
+    if tale is not None and tale.get('dataSet') is not None:
+        session = gc.post(
+            '/dm/session', parameters={'taleId': tale['_id']})
+    elif version_id is not None:
+        # Get the dataset for the version
+        dataset = gc.get('/version/{}/dataSet'.format(version_id))
+        if dataset is not None:
+            session = gc.post(
+                '/dm/session', parameters={'dataSet': json.dumps(dataset)})
+
+    return session
+
+
+def _write_env_json(workspace_dir, image):
+    # TODO: I wanted to write to the .wholetale directory, but this would 
+    # mean that the user's r2d config needs to be there too (e.g, apt.txt).
+    # So for now, write to root of workspace.
+
+    env_json = os.path.join(f"{HOSTDIR}{workspace_dir}", 'environment.json')
+    # dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
+    # _safe_mkdir(dot_dir)
+    # os.chown(dot_dir, DEFAULT_USER, DEFAULT_GROUP)
+    # env_json = os.path.join(dot_dir, 'environment.json')
+
+    print(f"Writing the environment to {env_json}")
+    with open(env_json, 'w') as fp:
+        json.dump(image, fp)
+    return env_json
+
+
+@girder_job(title='Recorded Run')
+@app.task(bind=True)
+def recorded_run(self, run_id, tale_id):
+    """Start a recorded run for a tale version"""
+
+    cli = docker.from_env(version='1.28')
+
+    run = self.girder_client.get('/run/{}'.format(run_id))
+    tale = self.girder_client.get('/tale/{}'.format(tale_id))
+    user = self.girder_client.get('/user/me')
+
+    def set_run_status(run, status):
+        self.girder_client.patch(
+            "/run/{_id}/status".format(**run), parameters={'status': status}
+        )
+
+    # UNKNOWN = 0 STARTING = 1 RUNNING = 2 COMPLETED = 3 FAILED = 4 CANCELLED = 5
+    set_run_status(run, RunStatus.STARTING)
+
+    self.job_manager.updateProgress(
+        message='Preparing volumes', total=RECORDED_RUN_STEP_TOTAL,
+        current=1, forceFlush=True)
+
+    # Create Docker volume
+    vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
+    mountpoint = _create_docker_volume(cli, vol_name)
+
+    # Create fuse directories
+    _make_fuse_dirs(mountpoint, ['data', 'workspace'])
+
+    # Mount data and workspace for the run
+    api_key = _get_api_key(self.girder_client)
+    session = _get_session(self.girder_client, version_id=run['runVersionId'])
+    if session['_id'] is not None:
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
+
+    _mount_girderfs(mountpoint, 'workspace', 'wt_run', run_id, api_key)
+
+    # Build the image for the run
+    self.job_manager.updateProgress(
+        message='Building image', total=RECORDED_RUN_STEP_TOTAL,
+        current=2, forceFlush=True)
+
+    # Setup image tag
+    build_time = int(time.time())
+    tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
+                            run_id, str(build_time))
+
+    work_dir = os.path.join(mountpoint, 'workspace')
+    image = self.girder_client.get('/image/%s' % tale['imageId'])
+    env_json = _write_env_json(work_dir, image)
+
+    # TODO: What should we use here? Latest? What the tale was built with?
+    repo2docker_version = REPO2DOCKER_VERSION
+    print(f"Using repo2docker {repo2docker_version}")
+
+    # Build currently assumes tmp directory, in this case mount the run workspace
+    container_config = _get_container_config(self.girder_client, tale)
+    work_target = os.path.join(container_config.target_mount, 'workspace')
+    extra_volume = {
+        work_dir: {
+            'bind': work_target,
+            'mode': 'rw'
+        }
+    }
+
+    try:
+        print("Building mage for recorded run " + tag)
+        ret = _build_image(cli, tale_id, image, tag, work_target, repo2docker_version, extra_volume)
+        if ret['StatusCode'] != 0:
+            raise ValueError('Image build failed for recorded run {}'.format(run_id))
+        # TODO: Do we push the image? Delete it at the end?
+
+        self.job_manager.updateProgress(
+            message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
+            current=3, forceFlush=True)
+
+        set_run_status(run, RunStatus.RUNNING)
+        _recorded_run(cli, mountpoint, container_config, tag)
+
+        set_run_status(run, RunStatus.COMPLETED)
+        self.job_manager.updateProgress(
+            message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
+            current=4, forceFlush=True)
+
+    except Exception as e:
+        logging.error("Recorded run failed. %s", e)
+        logging.exception(e)
+        set_run_status(run, RunStatus.FAILED)
+    finally:
+        # Remove the environment.json
+        os.remove(env_json)
+
+        # TODO: _cleanup_volumes
+        for suffix in ['data', 'workspace']:
+            dest = os.path.join(mountpoint, suffix)
+            logging.info("Unmounting %s", dest)
+            subprocess.call("umount %s" % dest, shell=True)
+
+        # Delete the session
+        try:
+            self.girder_client.delete('/dm/session/{}'.format(session['_id']))
+        except Exception as e:
+            logging.error("Unable to remove session. %s", e)
+
+        # Delete the Docker volume
+        try:
+            volume = cli.volumes.get(vol_name)
+            try:
+                logging.info("Removing volume: %s", volume.id)
+                volume.remove()
+            except Exception as e:
+                logging.error("Unable to remove volume [%s]: %s", volume.id, e)
+        except docker.errors.NotFound:
+            logging.info("Volume not present [%s].", vol_name)

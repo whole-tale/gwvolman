@@ -21,7 +21,9 @@ except socket.gaierror:
 GIRDER_API_URL = os.environ.get("GIRDER_API_URL", DEFAULT_GIRDER_API_URL)
 LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
-REPO2DOCKER_VERSION = "wholetale/repo2docker_wholetale:v1.0rc4"
+REPO2DOCKER_VERSION = os.environ.get("REPO2DOCKER_VERSION", "wholetale/repo2docker_wholetale:latest")
+CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
+
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"
     "logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhki"
@@ -53,3 +55,11 @@ class TaleStatus(object):
     PREPARING = 0
     READY = 1
     ERROR = 2
+
+class RunStatus(object):
+    UNKNOWN = 0
+    STARTING = 1
+    RUNNING = 2
+    COMPLETED = 3
+    FAILED = 4
+    CANCELLED = 5

@@ -15,7 +15,7 @@ import docker
 import datetime
 import dateutil.relativedelta as rel
 
-from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
+from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, CPR_VERSION
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 HOSTDIR = os.environ.get("HOSTDIR", "/host")
@@ -231,35 +231,15 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     # FIXME: get mountPoint
     source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
     mounts = []
-    for path in MOUNTPOINTS:
-        source = os.path.join(source_mount, path)
-        target = os.path.join(container_config.target_mount, path)
+    volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
+    for source in volumes:
         mounts.append(
-            docker.types.Mount(type='bind', source=source, target=target)
-        )
-    host = 'tmp-{}'.format(new_user(12).lower())
-
-    if container_config.buildpack:
-        # Mount the MATLAB and Stata runtime licenses
-        if container_config.buildpack == "MatlabBuildPack":
-            mounts.append(
                 docker.types.Mount(type='bind',
-                    source=LICENSE_PATH,
-                    target="/licenses")
-            )
-        elif container_config.buildpack == "StataBuildPack":
-            # Weekly license expires each Sunday and is provided 
-            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
-            # license expiration date.
-            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
-            source_path = os.path.join(
-                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
-            )
-            mounts.append(
-                docker.types.Mount(
-                    type='bind', source=source_path, target="/usr/local/stata/stata.lic"
-                )
-            )
+                    source=source,
+                    target=volumes[source]['bind'])
+        )
+
+    host = 'tmp-{}'.format(new_user(12).lower())
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
@@ -310,7 +290,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     return service, {'url': url}
 
 
-def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
+def _build_image(cli, tale_id, image, tag, build_dir, repo2docker_version, extra_volume=None):
     """
     Run repo2docker on the workspace using a shared temp directory. Note that
     this uses the "local" provider.  Use the same default user-id and
@@ -331,9 +311,20 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
                '--image-name {} {}'.format(
                                            image['config']['user'],
                                            extra_args,
-                                           tag, temp_dir))
+                                           tag, build_dir))
 
     logging.info('Calling %s (%s)', r2d_cmd, tale_id)
+
+    volumes={
+        '/var/run/docker.sock': {
+            'bind': '/var/run/docker.sock', 'mode': 'rw'
+        },
+        '/tmp': {
+            'bind': '/host/tmp', 'mode': 'ro'
+        }
+    }
+    if extra_volume is not None:
+        volumes.update(extra_volume)
 
     container = cli.containers.run(
         image=repo2docker_version,
@@ -342,14 +333,7 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
         privileged=True,
         detach=True,
         remove=True,
-        volumes={
-            '/var/run/docker.sock': {
-                'bind': '/var/run/docker.sock', 'mode': 'rw'
-            },
-            '/tmp': {
-                'bind': '/host/tmp', 'mode': 'ro'
-            }
-        }
+        volumes=volumes
     )
 
     # Job output must come from stdout/stderr
@@ -359,3 +343,100 @@ def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
     # Since detach=True, then we need to explicitly check for the
     # container exit code
     return container.wait()
+
+def _get_container_volumes(mountpoint, container_config, directories):
+    volumes = {
+        '/var/run/docker.sock': {
+            'bind': '/var/run/docker.sock', 'mode': 'rw'
+        },
+        '/tmp': {
+            'bind': '/host/tmp', 'mode': 'ro'
+        }
+    }
+
+    for path in directories:
+        source = os.path.join(mountpoint, path)
+        target = os.path.join(container_config.target_mount, path)
+        volumes[source] = {
+            'bind': target, 'mode': 'rw'
+        }
+
+    if container_config.buildpack:
+        # Mount the MATLAB and Stata runtime licenses
+        if container_config.buildpack == "MatlabBuildPack":
+            volumes[LICENSE_PATH] = {
+                'bind': '/licenses'
+            }
+        elif container_config.buildpack == "StataBuildPack":
+            # Weekly license expires each Sunday and is provided
+            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
+            # license expiration date.
+            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
+            source_path = os.path.join(
+                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
+            )
+            volumes[source_path] = {
+                'bind': '/usr/local/stata/stata.lic'
+            }
+    return volumes
+
+
+def _recorded_run(cli, mountpoint, container_config, tag):
+    print("Starting recorded run")
+
+    # Configure container volumes for recorded run
+    volumes = _get_container_volumes(mountpoint, container_config, ['data', 'workspace'])
+
+    # Start reprozip. The process needs to execute in the run workspace
+    # as if the author ran it from in the container.
+
+    # TODO: use run config, not run.sh
+    rpz_cmd = 'bash -c "mkdir -p .wholetale/.reprozip-trace ;'\
+              'reprozip trace --dir .wholetale/.reprozip-trace --overwrite ./run.sh"'
+
+    print("Running reprozip with command " + rpz_cmd)
+    print("Running image " + tag)
+
+    container = cli.containers.run(
+        image=tag,
+        command=rpz_cmd,
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        cap_add = ['SYS_PTRACE'],
+        detach=True,
+        remove=True,
+        volumes=volumes
+    )
+
+    # Job output must come from stdout/stderr
+    for line in container.logs(stream=True):
+        print(line.decode('utf-8').strip())
+
+    ret = container.wait()
+
+    if ret['StatusCode'] != 0:
+        raise ValueError('Error executing reprozip for recorded run')
+
+    # Run cpr. Needs same volume mounts as original container
+    cpr_cmd = f'bash -c "/cpr/bin/run_reports.sh {container_config.target_mount}/workspace"'
+
+    print("Running cpr with command " + cpr_cmd)
+
+    container = cli.containers.run(
+        image=CPR_VERSION,
+        command=cpr_cmd,
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        detach=True,
+        remove=True,
+        volumes=volumes
+    )
+
+    # Job output must come from stdout/stderr
+    for line in container.logs(stream=True):
+        print(line.decode('utf-8').strip())
+
+    ret = container.wait()
+
+    if ret['StatusCode'] != 0:
+        raise ValueError('Error executing cpr for recorded run')
+
+    return ret
