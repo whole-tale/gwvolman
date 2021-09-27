@@ -18,29 +18,13 @@ class MockVolume:
 
 
 def mock_gc_get(path, parameters=None):
-    if path in ("/image/jupyter"):
+    if path.startswith("/image"):
+        env = os.path.basename(path)
+        if env not in {"jupyter", "stata", "matlab"}:
+            raise ValueError(f"Unknown image '{env}'")
         return {
-            "_id": "jupyter",
-            "config": {
-                "buildpack": "JupyterBuildPack",
-                "user": "jovyan",
-            }
-        }
-    elif path in ("/image/stata"):
-        return {
-            "_id": "stata",
-            "config": {
-                "buildpack": "StataBuildPack",
-                "user": "jovyan",
-            }
-        }
-    elif path in ("/image/matlab"):
-        return {
-            "_id": "matlab",
-            "config": {
-                "buildpack": "MatlabBuildPack",
-                "user": "jovyan",
-            }
+            "_id": env,
+            "config": {"builpack": f"{env.capitalize()}BuildPack", "user": "jovyan"},
         }
     elif path in ("/folder/workspace1"):
         return {
