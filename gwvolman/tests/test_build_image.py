@@ -24,49 +24,30 @@ def mock_gc_get(path, parameters=None):
             raise ValueError(f"Unknown image '{env}'")
         return {
             "_id": env,
-            "config": {"builpack": f"{env.capitalize()}BuildPack", "user": "jovyan"},
+            "config": {"buildpack": f"{env.capitalize()}BuildPack", "user": "jovyan"},
         }
     elif path in ("/folder/workspace1"):
         return {
             "_id": "workspace1",
             "updated": "2",
         }
-    elif path in ("/tale/tale1"):
-        return {
-            "_id": "tale1",
-            "imageId": "jupyter",
-            "workspaceId": "workspace1",
-            "status": 1,
-            "imageInfo": {
-                "last_build": 1,
-                "imageId": "image1",
-                "repo2docker_version": "wholetale/r2d_wt",
+    elif path.startswith("/tale"):
+        tale_id = os.path.basename(path)
+        images = {"tale1": "jupyter", "tale2": "stata", "tale3": "matlab"}
+        try:
+            return {
+                "_id": tale_id,
+                "workspaceId": "workspace1",
+                "status": 1,
+                "imageId": images[tale_id],
+                "imageInfo": {
+                    "last_build": 1,
+                    "imageId": images[tale_id],
+                    "repo2docker_version": "wholetale/r2d_wt",
+                }
             }
-        }
-    elif path in ("/tale/tale2"):
-        return {
-            "_id": "tale2",
-            "imageId": "stata",
-            "workspaceId": "workspace1",
-            "status": 1,
-            "imageInfo": {
-                "last_build": 1,
-                "imageId": "stata",
-                "repo2docker_version": "wholetale/r2d_wt",
-            }
-        }
-    elif path in ("/tale/tale3"):
-        return {
-            "_id": "tale3",
-            "imageId": "matlab",
-            "workspaceId": "workspace1",
-            "status": 1,
-            "imageInfo": {
-                "last_build": 1,
-                "imageId": "matlab",
-                "repo2docker_version": "wholetale/r2d_wt",
-            }
-        }
+        except KeyError:
+            raise ValueError(f"Unknown tale '{tale_id}'")
     elif path in ("/user/me"):
         return {"login": "user1"}
 
