@@ -14,6 +14,7 @@ import logging
 import docker
 import datetime
 import dateutil.relativedelta as rel
+import base64
 
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, CPR_VERSION
 
@@ -301,13 +302,22 @@ def _build_image(cli, tale_id, image, tag, build_dir, repo2docker_version, extra
     if image['config']['buildpack'] == "MatlabBuildPack":
         extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
                 os.environ.get("MATLAB_FILE_INSTALLATION_KEY"))
+    elif image['config']['buildpack'] == "StataBuildPack":
+        # License is also needed at build time but can't easily
+        # be mounted. Pass it as a build arg
 
-    r2d_cmd = ('jupyter-repo2docker '
-               '--config="/wholetale/repo2docker_config.py" '
-               '--target-repo-dir="/home/jovyan/work/workspace" '
-               '--user-id=1000 --user-name={} '
-               '--no-clean --no-run --debug {} '
-               '--image-name {} {}'.format(
+        source_path = _get_stata_license_path()
+        with open("/host/" + source_path, "r") as license_file:
+            stata_license = license_file.read()
+            encoded = base64.b64encode(stata_license.encode("ascii")).decode("ascii")
+            extra_args = " --build-arg STATA_LICENSE_ENCODED='{}' ".format(encoded)
+
+    r2d_cmd = ("jupyter-repo2docker "
+               "--config='/wholetale/repo2docker_config.py' "
+               "--target-repo-dir='/home/jovyan/work/workspace' "
+               "--user-id=1000 --user-name={} "
+               "--no-clean --no-run --debug {} "
+               "--image-name {} {}".format(
                                            image['config']['user'],
                                            extra_args,
                                            tag, build_dir))
@@ -322,6 +332,7 @@ def _build_image(cli, tale_id, image, tag, build_dir, repo2docker_version, extra
             'bind': '/host/tmp', 'mode': 'ro'
         }
     }
+
     if extra_volume is not None:
         volumes.update(extra_volume)
 
@@ -370,10 +381,7 @@ def _get_container_volumes(mountpoint, container_config, directories):
             # Weekly license expires each Sunday and is provided
             # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
             # license expiration date.
-            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
-            source_path = os.path.join(
-                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
-            )
+            source_path = _get_stata_license_path()
             volumes[source_path] = {
                 'bind': '/usr/local/stata/stata.lic'
             }
@@ -439,3 +447,9 @@ def _recorded_run(cli, mountpoint, container_config, tag):
         raise ValueError('Error executing cpr for recorded run')
 
     return ret
+
+def _get_stata_license_path():
+    license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
+    return os.path.join(
+        LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
+    )
