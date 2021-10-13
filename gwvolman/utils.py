@@ -388,7 +388,7 @@ def _get_container_volumes(mountpoint, container_config, directories):
     return volumes
 
 
-def _recorded_run(cli, mountpoint, container_config, tag):
+def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
     print("Starting recorded run")
 
     # Configure container volumes for recorded run
@@ -399,7 +399,7 @@ def _recorded_run(cli, mountpoint, container_config, tag):
 
     # TODO: use run config, not run.sh
     rpz_cmd = 'bash -c "mkdir -p .wholetale/.reprozip-trace ;'\
-              'reprozip trace --dir .wholetale/.reprozip-trace --overwrite ./run.sh"'
+              'reprozip trace --dir .wholetale/.reprozip-trace --overwrite sh {}"'.format(entrypoint)
 
     print("Running reprozip with command " + rpz_cmd)
     print("Running image " + tag)
