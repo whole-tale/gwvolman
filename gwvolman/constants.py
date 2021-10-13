@@ -12,6 +12,7 @@ MOUNTPOINTS = ["data", "home"]
 if ENABLE_WORKSPACES:
     MOUNTPOINTS.append("workspace")
     MOUNTPOINTS.append("versions")
+    MOUNTPOINTS.append("runs")
 
 
 try:

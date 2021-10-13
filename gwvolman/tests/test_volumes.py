@@ -86,7 +86,9 @@ def test_create_volume(mgfs, mfd, cdv, gs, gak, volumes, info, nu):
         mock.call('/path/to/mountpoint/', 'home', 'wt_home', 'folder1', 'apikey1'),
         mock.call('/path/to/mountpoint/', 'workspace', 'wt_work', 'tale1', 'apikey1'),
         mock.call('/path/to/mountpoint/', 'versions', 'wt_versions', 'tale1',
-                  'apikey1', hostns=True)
+                  'apikey1', hostns=True),
+        mock.call('/path/to/mountpoint/', 'runs', 'wt_runs', 'tale1', 'apikey1',
+                  hostns=True)
         ], any_order=False)
 
 
