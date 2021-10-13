@@ -62,6 +62,7 @@ def create_volume(self, instance_id):
         'Home', user['_id'], 'user')
     data_dir = os.path.join(mountpoint, 'data')
     versions_dir = os.path.join(mountpoint, 'versions')
+    runs_dir = os.path.join(mountpoint, 'runs')
     if ENABLE_WORKSPACES:
         work_dir = os.path.join(mountpoint, 'workspace')
 
@@ -80,6 +81,7 @@ def create_volume(self, instance_id):
     if ENABLE_WORKSPACES:
         _mount_girderfs(mountpoint, 'workspace', 'wt_work', tale['_id'], api_key)
         _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=True)
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
