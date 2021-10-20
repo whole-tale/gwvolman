@@ -646,15 +646,15 @@ def _get_session(gc, tale=None, version_id=None):
     """Returns the session for a tale or version"""
     session = {'_id': None}
 
-    if tale is not None and tale.get('dataSet') is not None:
-        session = gc.post(
-            '/dm/session', parameters={'taleId': tale['_id']})
+    if tale is not None:
+        dataset = tale.get("dataSet")
     elif version_id is not None:
         # Get the dataset for the version
         dataset = gc.get('/version/{}/dataSet'.format(version_id))
-        if dataset is not None:
-            session = gc.post(
-                '/dm/session', parameters={'dataSet': json.dumps(dataset)})
+
+    if dataset is not None:
+        session = gc.post(
+            '/dm/session', parameters={'dataSet': json.dumps(dataset)})
 
     return session
 

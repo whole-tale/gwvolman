@@ -1,8 +1,9 @@
-from girder_client import GirderClient
+import json
 import mock
 import os
-
 os.environ['GIRDER_API_URL'] = 'https://girder.dev.wholetale.org/api/v1'
+
+from girder_client import GirderClient
 
 from gwvolman.tasks import create_volume, _mount_girderfs, \
     _make_fuse_dirs, _create_docker_volume, _get_session # noqa
@@ -29,10 +30,8 @@ class MockVolume:
 
 def mock_gc_post(path, parameters=None):
     if path in ("/dm/session"):
-        if 'taleId' in parameters:
-            return {"_id": "session1"}
-        elif 'dataSet' in parameters:
-            return {"_id": "session2"}
+        dataSet = json.loads(parameters["dataSet"])
+        return {"_id": dataSet[0]["mountPath"]}
 
 
 def mock_gc_get(path, parameters=None):
@@ -43,7 +42,7 @@ def mock_gc_get(path, parameters=None):
     elif path in ("/user/me"):
         return {"_id": "ghi567", "login": "user1"}
     elif path in ("/version/version1/dataSet"):
-        return {}
+        return [{"mountPath": "session2", "itemId": "1234", "_modelType": "folder"}]
 
 
 @mock.patch("gwvolman.tasks.new_user", return_value="123456")
@@ -146,11 +145,13 @@ def test_get_session():
 
     mock_tale = {
         '_id': 'tale1',
-        'dataSet': {
-            '_modelType': 'item',
-            'itemId': '60d4897ce13fb71b1c179fe4',
-            'mountPath': 'usco2000.xls'
-        }
+        'dataSet': [
+            {
+                '_modelType': 'item',
+                'itemId': '60d4897ce13fb71b1c179fe4',
+                'mountPath': 'session1'
+            },
+        ],
     }
 
     mock_gc = mock.MagicMock(spec=GirderClient)
