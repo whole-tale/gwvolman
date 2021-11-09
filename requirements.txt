@@ -16,3 +16,4 @@ dataone.libclient==3.4.7
 dataone.cli==3.4.7
 git+https://github.com/whole-tale/girderfs@master#egg=girderfs
 python-dateutil
+pyparsing<3,>=2.0.2  # for packaging 21.2 ... 
