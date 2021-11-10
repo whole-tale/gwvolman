@@ -356,26 +356,29 @@ def build_tale_image(task, tale_id, force=False):
     r2d_id = r2d_image.short_id.split(":")[-1]
     registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
     tag = f"{registry_netloc}/{env_checksum['checksum']}/{r2d_id}"
-    try:
-        apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
-        apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-                     registry=DEPLOYMENT.registry_url)
-        image = apicli.inspect_distribution(tag)
-        print('Workspace not modified since last build. Skipping.')
-        task.job_manager.updateProgress(
-            message='Workspace not modified, no need to build',
-            total=BUILD_TALE_IMAGE_STEP_TOTAL,
-            current=BUILD_TALE_IMAGE_STEP_TOTAL,
-            forceFlush=True
-        )
-        return {
-            'image_digest': f"{tag}@{image['Descriptor']['digest']}",
-            'repo2docker_version': container_config.repo2docker_version,
-            # optionally it ^^ could be: r2d_image.tags[0],
-            'last_build': last_build_time
-        }
-    except docker.errors.NotFound:
-        pass
+    if not force:
+        try:
+            apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
+            apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+                         registry=DEPLOYMENT.registry_url)
+            image = apicli.inspect_distribution(tag)
+            print('Workspace not modified since last build. Skipping.')
+            task.job_manager.updateProgress(
+                message='Workspace not modified, no need to build',
+                total=BUILD_TALE_IMAGE_STEP_TOTAL,
+                current=BUILD_TALE_IMAGE_STEP_TOTAL,
+                forceFlush=True
+            )
+            return {
+                'image_digest': f"{tag}@{image['Descriptor']['digest']}",
+                'repo2docker_version': container_config.repo2docker_version,
+                # optionally it ^^ could be: r2d_image.tags[0],
+                'last_build': last_build_time
+            }
+        except docker.errors.NotFound:
+            pass
+    else:
+        print("Forcing build.")
 
     # Workspace modified so try to build.
     try:
