@@ -340,29 +340,42 @@ def build_tale_image(task, tale_id, force=False):
         pass
 
     logging.info('Last build time {}'.format(last_build_time))
+    env_checksum = task.girder_client.get(f"/tale/{tale['_id']}/checksum")
 
-    image_changed = tale["imageId"] != tale["imageInfo"].get("imageId")
-    if image_changed:
-        logging.info("Base image has changed. Forcing rebuild.")
-        force = True
+    cli = docker.from_env(version='1.28')
+    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+              registry=DEPLOYMENT.registry_url)
+    container_config = _get_container_config(task.girder_client, tale)
+    try:
+        r2d_image = cli.images.pull(container_config.repo2docker_version)
+    except docker.errors.NotFound:
+        raise ValueError(
+            f"Requested r2d image '{container_config.repo2docker_version}' not found."
+        )
 
-    # TODO: Move this check to the model?
-    # Only rebuild if files have changed since last build or base image was changed
-    if last_build_time > 0:
-        workspace_folder = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
-        workspace_mtime = int(parse(workspace_folder['updated']).strftime('%s'))
-
-        if not force and last_build_time > 0 and workspace_mtime < last_build_time:
-            print('Workspace not modified since last build. Skipping.')
-            task.job_manager.updateProgress(
-                message='Workspace not modified, no need to build', total=BUILD_TALE_IMAGE_STEP_TOTAL,
-                current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
-
-            return {
-                'image_digest': tale['imageInfo']['digest'],
-                'repo2docker_version': tale['imageInfo']['repo2docker_version'],
-                'last_build': last_build_time
-            }
+    r2d_id = r2d_image.short_id.split(":")[-1]
+    registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
+    tag = f"{registry_netloc}/{env_checksum['checksum']}/{r2d_id}"
+    try:
+        apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
+        apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
+                     registry=DEPLOYMENT.registry_url)
+        image = apicli.inspect_distribution(tag)
+        print('Workspace not modified since last build. Skipping.')
+        task.job_manager.updateProgress(
+            message='Workspace not modified, no need to build',
+            total=BUILD_TALE_IMAGE_STEP_TOTAL,
+            current=BUILD_TALE_IMAGE_STEP_TOTAL,
+            forceFlush=True
+        )
+        return {
+            'image_digest': f"{tag}@{image['Descriptor']['digest']}",
+            'repo2docker_version': container_config.repo2docker_version,
+            # optionally it ^^ could be: r2d_image.tags[0],
+            'last_build': last_build_time
+        }
+    except docker.errors.NotFound:
+        pass
 
     # Workspace modified so try to build.
     try:
@@ -380,23 +393,9 @@ def build_tale_image(task, tale_id, force=False):
         logging.warn("Workspace folder not found for tale: %s", tale_id)
         pass
 
-    cli = docker.from_env(version='1.28')
-    container_config = _get_container_config(task.girder_client, tale)
-    # Ensure that we have proper version of r2d
-    try:
-        cli.images.pull(container_config.repo2docker_version)
-    except docker.errors.NotFound:
-        raise ValueError(
-            f"Requested r2d image '{container_config.repo2docker_version}' not found."
-        )
-    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=DEPLOYMENT.registry_url)
 
     # Use the current time as the image build time and tag
     build_time = int(time.time())
-
-    tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
-                            tale_id, str(build_time))
 
     # Image is required for config information
     image = task.girder_client.get('/image/%s' % tale['imageId'])
@@ -815,7 +814,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     }
 
     try:
-        print("Building mage for recorded run " + tag)
+        print("Building image for recorded run " + tag)
         ret = _build_image(cli, tale_id, image, tag, work_target, repo2docker_version, extra_volume)
         if ret['StatusCode'] != 0:
             raise ValueError('Image build failed for recorded run {}'.format(run_id))
