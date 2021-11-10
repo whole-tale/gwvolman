@@ -1,5 +1,6 @@
 """A set of WT related Girder tasks."""
 from datetime import datetime, timedelta
+import hashlib
 import os
 import shutil
 import socket
@@ -7,11 +8,9 @@ import json
 import time
 import tempfile
 import docker
-import requests
 import subprocess
 from docker.errors import DockerException
 import girder_client
-from dateutil.parser import parse
 
 import logging
 try:
@@ -31,8 +30,8 @@ from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, REPO2DOCKER_VERSION, TaleStatus, \
-    RunStatus
+    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, TaleStatus, \
+    RunStatus, R2D_FILENAMES
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -60,11 +59,6 @@ def create_volume(self, instance_id):
 
     homeDir = self.girder_client.loadOrCreateFolder(
         'Home', user['_id'], 'user')
-    data_dir = os.path.join(mountpoint, 'data')
-    versions_dir = os.path.join(mountpoint, 'versions')
-    runs_dir = os.path.join(mountpoint, 'runs')
-    if ENABLE_WORKSPACES:
-        work_dir = os.path.join(mountpoint, 'workspace')
 
     _make_fuse_dirs(mountpoint, MOUNTPOINTS)
 
@@ -169,6 +163,7 @@ def launch_container(self, payload):
     payload.update(attrs)
     payload['name'] = service.name
     return payload
+
 
 @girder_job(title='Update Instance')
 @app.task(bind=True)
@@ -311,6 +306,84 @@ def remove_volume(self, instanceId):
         pass
 
 
+class DockerHelper:
+    def __init__(self):
+        self.cli = docker.from_env(version='1.28')
+        self.cli.login(
+            username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
+        )
+        self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
+        self.apicli.login(
+            username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
+        )
+
+
+def get_image_tag(gc, imageId=None, tale=None, force=False):
+    """Given imageId or tale object compute unique docker image tag.
+
+    Tag is created as combination of 1) checksum of repo2docker files (apt.txt, etc)
+    and the tale/image environment file, 2) checksum of Dockerfile created by r2d
+    using files from 1).
+    """
+    if (imageId is None) == (tale is None):
+        raise ValueError("Only one of 'imageId' and 'tale' can be set")
+    dh = DockerHelper()
+    if tale is None:
+        tale = {"imageId": imageId}
+    tale_id = tale.get("_id")
+    container_config = _get_container_config(gc, tale)
+    try:
+        dh.cli.images.pull(container_config.repo2docker_version)
+    except docker.errors.NotFound:
+        raise ValueError(
+            f"Requested r2d image '{container_config.repo2docker_version}' not found."
+        )
+
+    temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
+    logging.info("Downloading r2d files to %s (taleId:%s)", temp_dir, tale_id)
+    if tale.get("workspaceId"):
+        for name in R2D_FILENAMES:
+            if item := next(gc.listItem(tale["workspaceId"], name=name), None):
+                gc.downloadItem(item["_id"], temp_dir)
+
+    # Write the environment.json to the r2d context directory
+    with open(os.path.join(temp_dir, "environment.json"), "w") as fp:
+        json.dump(
+            {
+                "config": {
+                    "buildpack": container_config.buildpack,
+                    "environment": container_config.environment,
+                    "user": container_config.container_user,
+                }
+            },
+            fp
+        )
+
+    env_hash = hashlib.md5("Environment checksum".encode())
+    for fname in os.listdir(temp_dir):
+        env_hash.update(fname.encode())
+        with open(os.path.join(temp_dir, fname), "rb") as fp:
+            env_hash.update(fp.read())
+    if force and tale_id:
+        env_hash.update(tale_id.encode())
+
+    # Perform dry run to get the Dockerfile's checksum
+    registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
+    ret, output_digest = _build_image(
+        dh.cli,
+        container_config,
+        f"{registry_netloc}/placeholder_env/placeholder_dockerfile",
+        temp_dir,
+        dry_run=True,
+    )
+
+    # Remove the temporary directory, cause we want entire workspace for build
+    # NOTE: or maybe not? That would avoid bloating image with things we override anyway
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+    return f"{registry_netloc}/tale/{env_hash.hexdigest()}:{output_digest}"
+
+
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
 def build_tale_image(task, tale_id, force=False):
@@ -339,32 +412,32 @@ def build_tale_image(task, tale_id, force=False):
     except KeyError:
         pass
 
-    logging.info('Last build time {}'.format(last_build_time))
-    env_checksum = task.girder_client.get(f"/tale/{tale['_id']}/checksum")
+    dh = DockerHelper()
 
-    cli = docker.from_env(version='1.28')
-    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=DEPLOYMENT.registry_url)
+    logging.info('Last build time {}'.format(last_build_time))
+
     container_config = _get_container_config(task.girder_client, tale)
     try:
-        r2d_image = cli.images.pull(container_config.repo2docker_version)
+        dh.cli.images.pull(container_config.repo2docker_version)
     except docker.errors.NotFound:
         raise ValueError(
             f"Requested r2d image '{container_config.repo2docker_version}' not found."
         )
 
-    r2d_id = r2d_image.short_id.split(":")[-1]
-    registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
-    tag = f"{registry_netloc}/{env_checksum['checksum']}/{r2d_id}"
+    tag = get_image_tag(task.girder_client, tale=tale, force=force)
+
+    logging.info("Computed tag: %s (taleId:%s)", tag, tale_id)
+
+    # Use the current time as the image build time and tag
+    build_time = int(time.time())
+
+    # Check if image already exists
     if not force:
         try:
-            apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
-            apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-                         registry=DEPLOYMENT.registry_url)
-            image = apicli.inspect_distribution(tag)
-            print('Workspace not modified since last build. Skipping.')
+            image = dh.apicli.inspect_distribution(tag)
+            print('Cached image exists for this Tale. Skipping build.')
             task.job_manager.updateProgress(
-                message='Workspace not modified, no need to build',
+                message='Tale not modified, no need to build',
                 total=BUILD_TALE_IMAGE_STEP_TOTAL,
                 current=BUILD_TALE_IMAGE_STEP_TOTAL,
                 forceFlush=True
@@ -372,7 +445,6 @@ def build_tale_image(task, tale_id, force=False):
             return {
                 'image_digest': f"{tag}@{image['Descriptor']['digest']}",
                 'repo2docker_version': container_config.repo2docker_version,
-                # optionally it ^^ could be: r2d_image.tags[0],
                 'last_build': last_build_time
             }
         except docker.errors.NotFound:
@@ -380,38 +452,19 @@ def build_tale_image(task, tale_id, force=False):
     else:
         print("Forcing build.")
 
-    # Workspace modified so try to build.
-    try:
-        temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
-        logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
-        workspace = task.girder_client.get('/folder/{workspaceId}'.format(**tale))
-        task.girder_client.downloadFolderRecursive(workspace['_id'], temp_dir)
+    # Prepare build context
+    temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
+    logging.info("Downloading workspace to %s (taleId:%s)", temp_dir, tale_id)
+    task.girder_client.downloadFolderRecursive(tale["workspaceId"], temp_dir)
 
-    except Exception as e:
-        raise ValueError('Error accessing Girder: {}'.format(e))
-    except KeyError:
-        logging.info('KeyError')
-        pass  # no workspace folderId
-    except girder_client.HttpError:
-        logging.warn("Workspace folder not found for tale: %s", tale_id)
-        pass
-
-
-    # Use the current time as the image build time and tag
-    build_time = int(time.time())
-
-    # Image is required for config information
-    image = task.girder_client.get('/image/%s' % tale['imageId'])
-
-    # Write the environment.json to the workspace
-    with open(os.path.join(temp_dir, 'environment.json'), 'w') as fp:
-        json.dump(image, fp)
-
-    # Build the image from the workspace
-    ret = _build_image(
-        cli, tale_id, image, tag, temp_dir, container_config.repo2docker_version
+    # Build the image now
+    ret, output_digest = _build_image(
+        dh.cli,
+        container_config,
+        tag,
+        temp_dir,
+        dry_run=False,
     )
-
     # Remove the temporary directory whether the build succeeded or not
     shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -420,19 +473,15 @@ def build_tale_image(task, tale_id, force=False):
         raise ValueError('Error building tale {}'.format(tale_id))
 
     # If the repo2docker build succeeded, push the image to our registry
-    apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
-    apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-                 registry=DEPLOYMENT.registry_url)
-
     # remove clone
     shutil.rmtree(temp_dir, ignore_errors=True)
-    for line in apicli.push(tag, stream=True):
+    for line in dh.apicli.push(tag, stream=True):
         print(line.decode('utf-8'))
 
     # TODO: if push succeeded, delete old image?
 
     # Get the built image digest
-    image = cli.images.get(tag)
+    image = dh.cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
 
@@ -622,35 +671,30 @@ def import_tale(self, lookup_kwargs, tale, spawn=True):
     return {'tale': tale, 'instance': instance}
 
 
-@app.task
-def rebuild_image_cache():
+@app.task(bind=True)
+def rebuild_image_cache(self):
     logging.info("Rebuilding image cache")
 
     # Get the list of images
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    r = requests.get(GIRDER_API_URL + "/image", headers=headers)
-    r.raise_for_status()
-    images = r.json()
-
+    images = self.girder_client.get("/image")
     cli = docker.from_env(version="1.28")
-    version = REPO2DOCKER_VERSION.split(":")[1]
 
     # Build each base image
     for image in images:
         temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
-        tag = f"cache/{image['_id']}:{version}"
+        tag = get_image_tag(self.girder_client, imageId=image["_id"])
+        container_config = _get_container_config(self.girder_client, {"imageId": image["_id"]})
 
         logging.info(
-            "Building %s %s in %s with %s", image["name"], tag, temp_dir, REPO2DOCKER_VERSION
+            "Building %s %s in %s with %s", image["name"], tag, temp_dir,
+            container_config.repo2docker_version
         )
 
         with open(os.path.join(temp_dir, "environment.json"), "w") as fp:
             json.dump(image, fp)
 
         start = time.time()
-        ret = _build_image(
-            cli, image["_id"], image, tag, temp_dir, REPO2DOCKER_VERSION
-        )
+        ret, _ = _build_image(cli, container_config, tag, temp_dir)
 
         elapsed = int(time.time() - start)
         if ret["StatusCode"] != 0:
@@ -734,7 +778,7 @@ def _get_session(gc, tale=None, version_id=None):
 
 
 def _write_env_json(workspace_dir, image):
-    # TODO: I wanted to write to the .wholetale directory, but this would 
+    # TODO: I wanted to write to the .wholetale directory, but this would
     # mean that the user's r2d config needs to be there too (e.g, apt.txt).
     # So for now, write to root of workspace.
 
@@ -802,12 +846,11 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     image = self.girder_client.get('/image/%s' % tale['imageId'])
     env_json = _write_env_json(work_dir, image)
 
-    # TODO: What should we use here? Latest? What the tale was built with?
-    repo2docker_version = REPO2DOCKER_VERSION
-    print(f"Using repo2docker {repo2docker_version}")
-
     # Build currently assumes tmp directory, in this case mount the run workspace
     container_config = _get_container_config(self.girder_client, tale)
+    # TODO: What should we use here? Latest? What the tale was built with?
+    # repo2docker_version = REPO2DOCKER_VERSION
+    print(f"Using repo2docker {container_config.repo2docker_version}")
     work_target = os.path.join(container_config.target_mount, 'workspace')
     extra_volume = {
         work_dir: {
@@ -818,7 +861,9 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     try:
         print("Building image for recorded run " + tag)
-        ret = _build_image(cli, tale_id, image, tag, work_target, repo2docker_version, extra_volume)
+        ret, _ = _build_image(
+            cli, container_config, tag, work_target, extra_volume=extra_volume
+        )
         if ret['StatusCode'] != 0:
             raise ValueError('Image build failed for recorded run {}'.format(run_id))
         # TODO: Do we push the image? Delete it at the end?

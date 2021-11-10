@@ -46,6 +46,30 @@ RUN_WT_BUTTON_IMG = (
 )
 
 
+# NOTE: changing order of ENV_FILES will result in cache invalidation.
+# You have been warned.
+R2D_FILENAMES = (
+    "environment.yml",
+    "Pipfile",
+    "Pipfile.lock",
+    "requirements.txt",
+    "setup.py",
+    "Project.toml",
+    "REQUIRE",
+    "install.R",
+    "apt.txt",
+    "DESCRIPTION",
+    "postBuild",
+    "start",
+    "runtime.txt",
+    "default.nix",
+    "install.do",
+    "JuliaProject.toml",
+    "requirements3.txt",
+    "toolboxes.txt",
+    "Dockerfile",
+)
+
 class InstanceStatus(object):
     LAUNCHING = 0
     RUNNING = 1
