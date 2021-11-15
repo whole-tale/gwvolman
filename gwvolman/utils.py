@@ -5,7 +5,6 @@
 """A set of helper routines for WT related tasks."""
 
 from collections import namedtuple
-import hashlib
 import os
 import random
 import re
@@ -15,7 +14,6 @@ import logging
 import docker
 import datetime
 import dateutil.relativedelta as rel
-import base64
 
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, CPR_VERSION
 
@@ -291,84 +289,6 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         path=rendered_url_path)
 
     return service, {'url': url}
-
-
-def _build_image(
-    cli,
-    container_config,
-    tag,
-    build_dir,
-    extra_volume=None,
-    dry_run=False,
-):
-    """
-    Run repo2docker on the workspace using a shared temp directory. Note that
-    this uses the "local" provider.  Use the same default user-id and
-    user-name as BinderHub
-    """
-
-    # Extra arguments for r2d
-    extra_args = ''
-    if container_config.buildpack == "MatlabBuildPack":
-        extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
-            os.environ.get("MATLAB_FILE_INSTALLATION_KEY")
-        )
-    elif container_config.buildpack == "StataBuildPack":
-        # License is also needed at build time but can't easily
-        # be mounted. Pass it as a build arg
-
-        source_path = _get_stata_license_path()
-        with open("/host/" + source_path, "r") as license_file:
-            stata_license = license_file.read()
-            encoded = base64.b64encode(stata_license.encode("ascii")).decode("ascii")
-            extra_args = " --build-arg STATA_LICENSE_ENCODED='{}' ".format(encoded)
-
-    op = "--no-build" if dry_run else "--no-run"
-    r2d_cmd = (
-        "jupyter-repo2docker "
-        "--config='/wholetale/repo2docker_config.py' "
-        "--target-repo-dir='/home/jovyan/work/workspace' "
-        f"--user-id=1000 --user-name={container_config.container_user} "
-        f"--no-clean {op} --debug {extra_args} "
-        f"--image-name {tag} {build_dir}"
-    )
-
-    logging.info('Calling %s', r2d_cmd)
-
-    volumes = {
-        '/var/run/docker.sock': {
-            'bind': '/var/run/docker.sock', 'mode': 'rw'
-        },
-        '/tmp': {
-            'bind': '/host/tmp', 'mode': 'ro'
-        }
-    }
-
-    if extra_volume is not None:
-        volumes.update(extra_volume)
-
-    container = cli.containers.run(
-        image=container_config.repo2docker_version,
-        command=r2d_cmd,
-        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-        privileged=True,
-        detach=True,
-        remove=True,
-        volumes=volumes
-    )
-
-    # Job output must come from stdout/stderr
-    h = hashlib.md5("R2D output".encode())
-    for line in container.logs(stream=True):
-        output = line.decode("utf-8").strip()
-        if not output.startswith("Using local repo"):  # contains variable path
-            h.update(output.encode("utf-8"))
-        if not dry_run:  # We don't want to see it.
-            print(output)
-
-    # Since detach=True, then we need to explicitly check for the
-    # container exit code
-    return container.wait(), h.hexdigest()
 
 
 def _get_container_volumes(mountpoint, container_config, directories):

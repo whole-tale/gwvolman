@@ -1,12 +1,9 @@
 """A set of WT related Girder tasks."""
 from datetime import datetime, timedelta
-import hashlib
 import os
-import shutil
 import socket
 import json
 import time
-import tempfile
 import docker
 import subprocess
 from docker.errors import DockerException
@@ -20,18 +17,19 @@ except ImportError:
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
+from .build_utils import ImageBuilder
 from .utils import \
     HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _build_image, _recorded_run, DEPLOYMENT
+    _recorded_run, DEPLOYMENT
 
 from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
     DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, TaleStatus, \
-    RunStatus, R2D_FILENAMES
+    RunStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -318,72 +316,6 @@ class DockerHelper:
         )
 
 
-def get_image_tag(gc, imageId=None, tale=None, force=False):
-    """Given imageId or tale object compute unique docker image tag.
-
-    Tag is created as combination of 1) checksum of repo2docker files (apt.txt, etc)
-    and the tale/image environment file, 2) checksum of Dockerfile created by r2d
-    using files from 1).
-    """
-    if (imageId is None) == (tale is None):
-        raise ValueError("Only one of 'imageId' and 'tale' can be set")
-    dh = DockerHelper()
-    if tale is None:
-        tale = {"imageId": imageId}
-    tale_id = tale.get("_id")
-    container_config = _get_container_config(gc, tale)
-    try:
-        dh.cli.images.pull(container_config.repo2docker_version)
-    except docker.errors.NotFound:
-        raise ValueError(
-            f"Requested r2d image '{container_config.repo2docker_version}' not found."
-        )
-
-    temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
-    logging.info("Downloading r2d files to %s (taleId:%s)", temp_dir, tale_id)
-    if tale.get("workspaceId"):
-        for name in R2D_FILENAMES:
-            if item := next(gc.listItem(tale["workspaceId"], name=name), None):
-                gc.downloadItem(item["_id"], temp_dir)
-
-    # Write the environment.json to the r2d context directory
-    with open(os.path.join(temp_dir, "environment.json"), "w") as fp:
-        json.dump(
-            {
-                "config": {
-                    "buildpack": container_config.buildpack,
-                    "environment": container_config.environment,
-                    "user": container_config.container_user,
-                }
-            },
-            fp
-        )
-
-    env_hash = hashlib.md5("Environment checksum".encode())
-    for fname in os.listdir(temp_dir):
-        env_hash.update(fname.encode())
-        with open(os.path.join(temp_dir, fname), "rb") as fp:
-            env_hash.update(fp.read())
-    if force and tale_id:
-        env_hash.update(tale_id.encode())
-
-    # Perform dry run to get the Dockerfile's checksum
-    registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
-    ret, output_digest = _build_image(
-        dh.cli,
-        container_config,
-        f"{registry_netloc}/placeholder_env/placeholder_dockerfile",
-        temp_dir,
-        dry_run=True,
-    )
-
-    # Remove the temporary directory, cause we want entire workspace for build
-    # NOTE: or maybe not? That would avoid bloating image with things we override anyway
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-    return f"{registry_netloc}/tale/{env_hash.hexdigest()}:{output_digest}"
-
-
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
 def build_tale_image(task, tale_id, force=False):
@@ -412,19 +344,11 @@ def build_tale_image(task, tale_id, force=False):
     except KeyError:
         pass
 
-    dh = DockerHelper()
-
     logging.info('Last build time {}'.format(last_build_time))
+    image_builder = ImageBuilder(task.girder_client, tale=tale)
+    image_builder.pull_r2d()
 
-    container_config = _get_container_config(task.girder_client, tale)
-    try:
-        dh.cli.images.pull(container_config.repo2docker_version)
-    except docker.errors.NotFound:
-        raise ValueError(
-            f"Requested r2d image '{container_config.repo2docker_version}' not found."
-        )
-
-    tag = get_image_tag(task.girder_client, tale=tale, force=force)
+    tag = image_builder.get_tag(force=force)
 
     logging.info("Computed tag: %s (taleId:%s)", tag, tale_id)
 
@@ -434,7 +358,7 @@ def build_tale_image(task, tale_id, force=False):
     # Check if image already exists
     if not force:
         try:
-            image = dh.apicli.inspect_distribution(tag)
+            image = image_builder.dh.apicli.inspect_distribution(tag)
             print('Cached image exists for this Tale. Skipping build.')
             task.job_manager.updateProgress(
                 message='Tale not modified, no need to build',
@@ -444,7 +368,7 @@ def build_tale_image(task, tale_id, force=False):
             )
             return {
                 'image_digest': f"{tag}@{image['Descriptor']['digest']}",
-                'repo2docker_version': container_config.repo2docker_version,
+                'repo2docker_version': image_builder.container_config.repo2docker_version,
                 'last_build': last_build_time
             }
         except docker.errors.NotFound:
@@ -453,35 +377,18 @@ def build_tale_image(task, tale_id, force=False):
         print("Forcing build.")
 
     # Prepare build context
-    temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
-    logging.info("Downloading workspace to %s (taleId:%s)", temp_dir, tale_id)
-    task.girder_client.downloadFolderRecursive(tale["workspaceId"], temp_dir)
-
-    # Build the image now
-    ret, output_digest = _build_image(
-        dh.cli,
-        container_config,
-        tag,
-        temp_dir,
-        dry_run=False,
-    )
-    # Remove the temporary directory whether the build succeeded or not
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    # temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
+    ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
 
     if ret['StatusCode'] != 0:
         # repo2docker build failed
         raise ValueError('Error building tale {}'.format(tale_id))
 
-    # If the repo2docker build succeeded, push the image to our registry
-    # remove clone
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    for line in dh.apicli.push(tag, stream=True):
+    for line in image_builder.dh.apicli.push(tag, stream=True):
         print(line.decode('utf-8'))
 
-    # TODO: if push succeeded, delete old image?
-
     # Get the built image digest
-    image = dh.cli.images.get(tag)
+    image = image_builder.dh.cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
 
@@ -494,7 +401,7 @@ def build_tale_image(task, tale_id, force=False):
     # Image digest used by updateBuildStatus handler
     return {
         'image_digest': digest,
-        'repo2docker_version': container_config.repo2docker_version,
+        'repo2docker_version': image_builder.container_config.repo2docker_version,
         'last_build': build_time
     }
 
@@ -677,32 +584,26 @@ def rebuild_image_cache(self):
 
     # Get the list of images
     images = self.girder_client.get("/image")
-    cli = docker.from_env(version="1.28")
 
     # Build each base image
     for image in images:
-        temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
-        tag = get_image_tag(self.girder_client, imageId=image["_id"])
-        container_config = _get_container_config(self.girder_client, {"imageId": image["_id"]})
+        image_builder = ImageBuilder(self.girder_client, imageId=image["_id"])
+        tag = image_builder.get_tag()
+        container_config = image_builder.container_config
 
         logging.info(
-            "Building %s %s in %s with %s", image["name"], tag, temp_dir,
+            "Building %s %s in %s with %s", image["name"], tag, image_builder.build_context,
             container_config.repo2docker_version
         )
 
-        with open(os.path.join(temp_dir, "environment.json"), "w") as fp:
-            json.dump(image, fp)
-
         start = time.time()
-        ret, _ = _build_image(cli, container_config, tag, temp_dir)
+        ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
 
         elapsed = int(time.time() - start)
         if ret["StatusCode"] != 0:
             logging.error("Error building %s", image["name"])
         else:
             logging.info("Build time: %i seconds", elapsed)
-
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=False):
@@ -861,9 +762,8 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     try:
         print("Building image for recorded run " + tag)
-        ret, _ = _build_image(
-            cli, container_config, tag, work_target, extra_volume=extra_volume
-        )
+        image_builder = ImageBuilder(self.girder_client, tale=tale)
+        ret, _ = image_builder.run_r2d(tag, work_target, extra_volume=extra_volume)
         if ret['StatusCode'] != 0:
             raise ValueError('Image build failed for recorded run {}'.format(run_id))
         # TODO: Do we push the image? Delete it at the end?
