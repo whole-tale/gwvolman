@@ -9,20 +9,20 @@ import tempfile
 from urllib.parse import urlparse
 
 from .constants import R2D_FILENAMES
-from .utils import _get_container_config, DEPLOYMENT, \
-    HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
-    _get_stata_license_path
+from .utils import _get_container_config, DEPLOYMENT, _get_stata_license_path
 
 
 class DockerHelper:
     def __init__(self):
+        username = os.environ.get("REGISTRY_USER", "fido")
+        password = os.environ.get("REGISTRY_PASS")
         self.cli = docker.from_env(version='1.28')
         self.cli.login(
-            username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
+            username=username, password=password, registry=DEPLOYMENT.registry_url
         )
         self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
         self.apicli.login(
-            username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
+            username=username, password=password, registry=DEPLOYMENT.registry_url
         )
 
 
@@ -60,7 +60,7 @@ class ImageBuilder:
             )
 
     def _create_build_context(self):
-        temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
+        temp_dir = tempfile.mkdtemp(dir=os.environ.get("HOSTDIR", "/host") + "/tmp")
         logging.info("Downloading r2d files to %s (taleId:%s)", temp_dir, self.tale["_id"])
         extra_build_files = self.tale["config"].get("extra_build_files", [])
         workspaceId = self.tale.get("workspaceId")
