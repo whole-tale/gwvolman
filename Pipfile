@@ -29,6 +29,7 @@ lxml = "*"
 "dataone.common" = "==3.4.7"
 "dataone.libclient" = "==3.4.7"
 "dataone.cli" = "==3.4.7"
+pytest-pudb = "*"
 
 [requires]
 python_version = "3.8"

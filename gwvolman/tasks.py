@@ -19,7 +19,7 @@ from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .build_utils import ImageBuilder
 from .utils import \
-    HOSTDIR, REGISTRY_USER, REGISTRY_PASS, \
+    HOSTDIR, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _recorded_run, DEPLOYMENT
@@ -302,18 +302,6 @@ def remove_volume(self, instanceId):
     except Exception as e:
         logging.error("Unable to remove volume [%s]: %s", volume.id, e)
         pass
-
-
-class DockerHelper:
-    def __init__(self):
-        self.cli = docker.from_env(version='1.28')
-        self.cli.login(
-            username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
-        )
-        self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
-        self.apicli.login(
-            username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
-        )
 
 
 @girder_job(title='Build Tale Image')
@@ -700,11 +688,10 @@ def _write_env_json(workspace_dir, image):
 def recorded_run(self, run_id, tale_id, entrypoint):
     """Start a recorded run for a tale version"""
 
-    cli = docker.from_env(version='1.28')
-
     run = self.girder_client.get('/run/{}'.format(run_id))
     tale = self.girder_client.get('/tale/{}'.format(tale_id))
     user = self.girder_client.get('/user/me')
+    image_builder = ImageBuilder(self.girder_client, tale=tale)
 
     def set_run_status(run, status):
         self.girder_client.patch(
@@ -720,7 +707,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     # Create Docker volume
     vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
-    mountpoint = _create_docker_volume(cli, vol_name)
+    mountpoint = _create_docker_volume(image_builder.dh.cli, vol_name)
 
     # Create fuse directories
     _make_fuse_dirs(mountpoint, ['data', 'workspace'])
@@ -748,7 +735,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     env_json = _write_env_json(work_dir, image)
 
     # Build currently assumes tmp directory, in this case mount the run workspace
-    container_config = _get_container_config(self.girder_client, tale)
+    container_config = image_builder.container_config
     # TODO: What should we use here? Latest? What the tale was built with?
     # repo2docker_version = REPO2DOCKER_VERSION
     print(f"Using repo2docker {container_config.repo2docker_version}")
@@ -762,7 +749,6 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     try:
         print("Building image for recorded run " + tag)
-        image_builder = ImageBuilder(self.girder_client, tale=tale)
         ret, _ = image_builder.run_r2d(tag, work_target, extra_volume=extra_volume)
         if ret['StatusCode'] != 0:
             raise ValueError('Image build failed for recorded run {}'.format(run_id))
@@ -773,7 +759,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
             current=3, forceFlush=True)
 
         set_run_status(run, RunStatus.RUNNING)
-        _recorded_run(cli, mountpoint, container_config, tag, entrypoint)
+        _recorded_run(image_builder.dh.cli, mountpoint, container_config, tag, entrypoint)
 
         set_run_status(run, RunStatus.COMPLETED)
         self.job_manager.updateProgress(
@@ -802,7 +788,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
         # Delete the Docker volume
         try:
-            volume = cli.volumes.get(vol_name)
+            volume = image_builder.dh.cli.volumes.get(vol_name)
             try:
                 logging.info("Removing volume: %s", volume.id)
                 volume.remove()
