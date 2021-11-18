@@ -112,10 +112,12 @@ class ImageBuilder:
         using files from 1).
         """
         env_hash = hashlib.md5("Environment checksum".encode())
-        for fname in os.listdir(self.build_context):
-            env_hash.update(fname.encode())
-            with open(os.path.join(self.build_context, fname), "rb") as fp:
-                env_hash.update(fp.read())
+        for root, dirs, files in os.walk(self.build_context):
+            dirs.sort()
+            for fname in sorted(files):
+                env_hash.update(fname.encode())
+                with open(os.path.join(root, fname), "rb") as fp:
+                    env_hash.update(fp.read())
         if force and self.tale["_id"]:
             env_hash.update(self.tale["_id"].encode())
 
