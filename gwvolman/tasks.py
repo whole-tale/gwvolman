@@ -750,7 +750,7 @@ def _write_env_json(workspace_dir, image):
 
 @girder_job(title='Recorded Run')
 @app.task(bind=True)
-def recorded_run(self, run_id, tale_id):
+def recorded_run(self, run_id, tale_id, entrypoint):
     """Start a recorded run for a tale version"""
 
     cli = docker.from_env(version='1.28')
@@ -826,7 +826,7 @@ def recorded_run(self, run_id, tale_id):
             current=3, forceFlush=True)
 
         set_run_status(run, RunStatus.RUNNING)
-        _recorded_run(cli, mountpoint, container_config, tag)
+        _recorded_run(cli, mountpoint, container_config, tag, entrypoint)
 
         set_run_status(run, RunStatus.COMPLETED)
         self.job_manager.updateProgress(

@@ -50,7 +50,7 @@ CONTAINER_CONFIG = ContainerConfig(
 RPZ_RUN_CALL = mock.call(
     image='registry.test.wholetale.org/123abc/1624994605',
     command='bash -c "mkdir -p .wholetale/.reprozip-trace ;reprozip trace '
-            '--dir .wholetale/.reprozip-trace --overwrite ./run.sh"',
+            '--dir .wholetale/.reprozip-trace --overwrite sh entrypoint.sh"',
     environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
     cap_add = ['SYS_PTRACE'],
     detach=True,
@@ -122,7 +122,7 @@ def test_recorded_run(mg, mfd, cdv, gs, wej, gak, gcc, bi, osr, sp, containers, 
     try:
         with mock.patch('gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock) as mock_dep:
             mock_dep.return_value = 'https://registry.test.wholetale.org'
-            recorded_run("123abc", "abc123")
+            recorded_run("123abc", "abc123", "entrypoint.sh")
             assert status == RunStatus.COMPLETED
     except ValueError:
         assert False
@@ -134,7 +134,7 @@ def test_recorded_run(mg, mfd, cdv, gs, wej, gak, gcc, bi, osr, sp, containers, 
     try:
         with mock.patch('gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock) as mock_dep:
             mock_dep.return_value = 'https://registry.test.wholetale.org'
-            recorded_run("123abc", "abc123")
+            recorded_run("123abc", "abc123", "entrypoint.sh")
     except ValueError:
         assert True
         assert status == RunStatus.FAILED
