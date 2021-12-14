@@ -210,8 +210,6 @@ class ImageBuilder:
         ret = container.wait()
         if ret["StatusCode"] != 0:
             logging.error("Error building image")
-        else:
-            logging.error("Should push image")
         # Since detach=True, then we need to explicitly check for the
         # container exit code
         return ret, h.hexdigest()
