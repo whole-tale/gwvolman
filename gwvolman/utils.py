@@ -14,7 +14,6 @@ import logging
 import docker
 import datetime
 import dateutil.relativedelta as rel
-import base64
 
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, CPR_VERSION
 
@@ -27,7 +26,7 @@ REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 MOUNTS = {}
 RETRIES = 5
-container_name_pattern = re.compile('tmp\.([^.]+)\.(.+)\Z')
+container_name_pattern = re.compile(r'tmp\.([^.]+)\.(.+)\Z')
 
 PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
@@ -37,7 +36,7 @@ ContainerConfig = namedtuple('ContainerConfig', [
     'url_path', 'environment', 'csp'
 ])
 
-SIZE_NOTATION_RE = re.compile("^(\d+)([kmg]?b?)$", re.IGNORECASE)
+SIZE_NOTATION_RE = re.compile(r"^(\d+)([kmg]?b?)$", re.IGNORECASE)
 SIZE_TABLE = {
     '': 1, 'b': 1,
     'k': 1024, 'kb': 1024,
@@ -114,7 +113,7 @@ class Deployment(object):
             ns = service.attrs['Spec']['Labels']['com.docker.stack.namespace']
             router = service_name.replace('%s_' % ns,  '')
             rule = service.attrs['Spec']['Labels']['traefik.http.routers.%s.rule' % router]
-            host =  re.search(r'Host\(`(.+)`\)', rule).group(1)
+            host = re.search(r'Host\(`(.+)`\)', rule).group(1)
             return 'https://' + host
         except docker.errors.APIError:
             return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
@@ -164,19 +163,18 @@ def _get_user_and_instance(girder_client, instanceId):
     return user, instance
 
 
-
 def _get_container_config(gc, tale):
     if tale is None:
         container_config = {}  # settings['container_config']
     else:
         image = gc.get('/image/%s' % tale['imageId'])
         tale_config = image['config'] or {}
-        if tale['config']:
+        if tale.get('config'):
             tale_config.update(tale['config'])
 
         image_info = tale.get("imageInfo", {})
         digest = image_info.get("digest")
-        repo2docker_version = tale_config.get("repo2docker_version", REPO2DOCKER_VERSION)
+        repo2docker_version = image_info.get("repo2docker_version", REPO2DOCKER_VERSION)
 
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
@@ -234,9 +232,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
     for source in volumes:
         mounts.append(
-                docker.types.Mount(type='bind',
-                    source=source,
-                    target=volumes[source]['bind'])
+            docker.types.Mount(type='bind', source=source, target=volumes[source]['bind'])
         )
 
     host = 'tmp-{}'.format(new_user(12).lower())
@@ -251,18 +247,23 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     else:
         csp = "frame-ancestors 'self' {}".format(DEPLOYMENT.dashboard_url)
 
+    traefik_loadbalancer_prefix = f"traefik.http.services.{host}.loadbalancer"
+
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
         labels={
-            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
             'traefik.enable': 'true',
             'traefik.http.routers.%s.rule' % host: 'Host(`{}.{}`)'.format(host, DOMAIN),
             'traefik.http.routers.%s.entrypoints' % host: TRAEFIK_ENTRYPOINT,
             'traefik.http.routers.%s.tls' % host: 'true',
-            'traefik.http.middlewares.%s-csp.headers.customresponseheaders.Content-Security-Policy' % host: csp,
-            'traefik.http.services.%s.loadbalancer.passhostheader' % host: 'true',
-            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            (
+                f'traefik.http.middlewares.{host}'
+                '-csp.headers.customresponseheaders.Content-Security-Policy'
+            ): csp,
+            f"{traefik_loadbalancer_prefix}.passhostheader": 'true',
+            f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
             'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
             'wholetale.instanceId': instance_id,
@@ -289,70 +290,6 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
 
     return service, {'url': url}
 
-
-def _build_image(cli, tale_id, image, tag, build_dir, repo2docker_version, extra_volume=None):
-    """
-    Run repo2docker on the workspace using a shared temp directory. Note that
-    this uses the "local" provider.  Use the same default user-id and
-    user-name as BinderHub
-    """
-
-    # Extra arguments for r2d
-    extra_args = ''
-    if image['config']['buildpack'] == "MatlabBuildPack":
-        extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
-                os.environ.get("MATLAB_FILE_INSTALLATION_KEY"))
-    elif image['config']['buildpack'] == "StataBuildPack":
-        # License is also needed at build time but can't easily
-        # be mounted. Pass it as a build arg
-
-        source_path = _get_stata_license_path()
-        with open("/host/" + source_path, "r") as license_file:
-            stata_license = license_file.read()
-            encoded = base64.b64encode(stata_license.encode("ascii")).decode("ascii")
-            extra_args = " --build-arg STATA_LICENSE_ENCODED='{}' ".format(encoded)
-
-    r2d_cmd = ("jupyter-repo2docker "
-               "--config='/wholetale/repo2docker_config.py' "
-               "--target-repo-dir='/home/jovyan/work/workspace' "
-               "--user-id=1000 --user-name={} "
-               "--no-clean --no-run --debug {} "
-               "--image-name {} {}".format(
-                                           image['config']['user'],
-                                           extra_args,
-                                           tag, build_dir))
-
-    logging.info('Calling %s (%s)', r2d_cmd, tale_id)
-
-    volumes={
-        '/var/run/docker.sock': {
-            'bind': '/var/run/docker.sock', 'mode': 'rw'
-        },
-        '/tmp': {
-            'bind': '/host/tmp', 'mode': 'ro'
-        }
-    }
-
-    if extra_volume is not None:
-        volumes.update(extra_volume)
-
-    container = cli.containers.run(
-        image=repo2docker_version,
-        command=r2d_cmd,
-        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-        privileged=True,
-        detach=True,
-        remove=True,
-        volumes=volumes
-    )
-
-    # Job output must come from stdout/stderr
-    for line in container.logs(stream=True):
-        print(line.decode('utf-8').strip())
-
-    # Since detach=True, then we need to explicitly check for the
-    # container exit code
-    return container.wait()
 
 def _get_container_volumes(mountpoint, container_config, directories):
     volumes = {
@@ -408,7 +345,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
         image=tag,
         command=rpz_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-        cap_add = ['SYS_PTRACE'],
+        cap_add=['SYS_PTRACE'],
         detach=True,
         remove=True,
         volumes=volumes
@@ -447,6 +384,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
         raise ValueError('Error executing cpr for recorded run')
 
     return ret
+
 
 def _get_stata_license_path():
     license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)

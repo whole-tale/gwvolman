@@ -1,8 +1,8 @@
 from girder_client import GirderClient
 import mock
 
-from gwvolman.tasks import recorded_run, _write_env_json
 from gwvolman.utils import ContainerConfig
+from gwvolman.tasks import recorded_run, _write_env_json
 from gwvolman.constants import RunStatus
 
 
@@ -13,6 +13,7 @@ class MockVolume:
 
     def remove(self):
         return True
+
 
 def mock_gc_patch(path, parameters=None):
     global status
@@ -52,7 +53,7 @@ RPZ_RUN_CALL = mock.call(
     command='bash -c "mkdir -p .wholetale/.reprozip-trace ;reprozip trace '
             '--dir .wholetale/.reprozip-trace --overwrite sh entrypoint.sh"',
     environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-    cap_add = ['SYS_PTRACE'],
+    cap_add=['SYS_PTRACE'],
     detach=True,
     remove=True,
     volumes={
@@ -98,7 +99,6 @@ CPR_RUN_CALL = mock.call(
 @mock.patch("docker.client.DockerClient.containers")
 @mock.patch("subprocess.call", return_value=True)
 @mock.patch("os.remove", return_value=True)
-@mock.patch("gwvolman.tasks._build_image", return_value={"StatusCode": 0})
 @mock.patch("gwvolman.tasks._get_container_config", return_value=CONTAINER_CONFIG)
 @mock.patch("gwvolman.tasks._get_api_key", return_value="key123")
 @mock.patch("gwvolman.tasks._write_env_json", return_value="/path/to/environment.json")
@@ -106,51 +106,75 @@ CPR_RUN_CALL = mock.call(
 @mock.patch("gwvolman.tasks._create_docker_volume", return_value="/path/to/mountpoint/")
 @mock.patch("gwvolman.tasks._make_fuse_dirs", return_value=True)
 @mock.patch("gwvolman.tasks._mount_girderfs", return_value=True)
-def test_recorded_run(mg, mfd, cdv, gs, wej, gak, gcc, bi, osr, sp, containers, volumes, time):
-
+@mock.patch("gwvolman.tasks.ImageBuilder")
+def test_recorded_run(
+    image_builder,
+    mg,
+    mfd,
+    cdv,
+    gs,
+    wej,
+    gak,
+    gcc,
+    osr,
+    sp,
+    containers,
+    volumes,
+    time
+):
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
     mock_gc.patch = mock_gc_patch
 
-    recorded_run.girder_client = mock_gc
-    recorded_run.job_manager = mock.MagicMock()
-
     volumes.get.return_value = MockVolume()
 
     # This should succeed
-    containers.run.return_value.wait.return_value = {"StatusCode": 0}
+    image_builder.return_value.run_r2d.return_value = ({"StatusCode": 0}, "")
+    image_builder.return_value.container_config.target_mount = "/work"
+    image_builder.return_value.dh.cli.containers.run.return_value.wait.return_value = \
+        {"StatusCode": 0}
     try:
-        with mock.patch('gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock) as mock_dep:
+        with mock.patch(
+            'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
+        ) as mock_dep:
             mock_dep.return_value = 'https://registry.test.wholetale.org'
+            recorded_run.girder_client = mock_gc
+            recorded_run.job_manager = mock.MagicMock()
             recorded_run("123abc", "abc123", "entrypoint.sh")
             assert status == RunStatus.COMPLETED
     except ValueError:
         assert False
 
-    containers.run.assert_has_calls([RPZ_RUN_CALL, CPR_RUN_CALL], any_order=True)
+    image_builder.return_value.dh.cli.containers.run.assert_has_calls(
+        [RPZ_RUN_CALL, CPR_RUN_CALL], any_order=True
+    )
 
     # This should fail
-    containers.run.return_value.wait.return_value = {"StatusCode": 1}
+    image_builder.return_value.run_r2d.return_value = ({"StatusCode": 1}, "")
     try:
-        with mock.patch('gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock) as mock_dep:
+        with mock.patch(
+            'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
+        ) as mock_dep:
             mock_dep.return_value = 'https://registry.test.wholetale.org'
             recorded_run("123abc", "abc123", "entrypoint.sh")
     except ValueError:
         assert True
         assert status == RunStatus.FAILED
 
-    containers.run.assert_has_calls([RPZ_RUN_CALL], any_order=True)
+    image_builder.return_value.dh.cli.containers.run.assert_has_calls(
+        [RPZ_RUN_CALL], any_order=True
+    )
 
 
 def test_write_env_json():
     mock_image = {
-        '_id': 'image1', 
+        '_id': 'image1',
         'name': 'Mock Image'
     }
 
-    workspace_dir =  '/path/to/mountpoint/workspace'
+    workspace_dir = '/path/to/mountpoint/workspace'
 
-    with mock.patch('builtins.open', mock.mock_open()) as mock_open:
+    with mock.patch('builtins.open', mock.mock_open()):
         env_json = _write_env_json(workspace_dir, mock_image)
 
         assert env_json == '/host/path/to/mountpoint/workspace/environment.json'

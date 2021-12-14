@@ -313,6 +313,11 @@ class DataONEPublishProvider(PublishProvider):
             res_map = metadata.resource_map.serialize()
             # Update the resource map with citations
             # Turn the resource map into readable bytes
+            try:
+                res_map = res_map.encode()
+            except AttributeError:
+                pass
+
             res_meta = metadata.generate_system_metadata(
                 pid=res_pid,
                 name=str(),
