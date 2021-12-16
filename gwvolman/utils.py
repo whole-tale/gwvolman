@@ -323,18 +323,15 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
     # Configure container volumes for recorded run
     volumes = _get_container_volumes(mountpoint, container_config, ['data', 'workspace'])
 
-    # Start reprozip. The process needs to execute in the run workspace
-    # as if the author ran it from in the container.
-
     # TODO: use run config, not entrypoint
-    rpz_cmd = f"sh {entrypoint}"
+    run_cmd = f"sh {entrypoint}"
 
-    print("Running reprozip with command " + rpz_cmd)
-    print("Running image " + tag)
+    print("Running Tale with command: " + run_cmd)
+    print("Running image: " + tag)
 
     container = cli.containers.run(
         image=tag,
-        command=rpz_cmd,
+        command=run_cmd,
         detach=True,
         remove=False,
         volumes=volumes
@@ -357,7 +354,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
 
     container.remove()
     if ret['StatusCode'] != 0:
-        raise ValueError('Error executing reprozip for recorded run')
+        raise ValueError('Error executing recorded run')
 
     return ret
 
