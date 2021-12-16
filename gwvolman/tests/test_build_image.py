@@ -143,7 +143,10 @@ def test_image_builder(depl, dapicli):
         "imageId": "jupyter",
         "workspaceId": "workspace1",
         "_id": "tale1",
-        "config": {"extra_build_files": ["some_file.txt", "some_folder"]},
+        "config": {
+            "extra_build_files": ["some_file.txt", "some_folder"],
+            "targetMount": "/home/jovyan/work",
+        },
     }
     with mock.patch("docker.from_env") as dcli:
         dcli.return_value.containers.run = docker_run_r2d_container
@@ -201,7 +204,10 @@ def test_r2d_calls(depl, dapicli):
         "imageId": "jupyter",
         "workspaceId": "workspace1",
         "_id": "tale1",
-        "config": {"extra_build_files": ["some_file.txt", "some_folder"]},
+        "config": {
+            "extra_build_files": ["some_file.txt", "some_folder"],
+            "targetMount": "/home/jovyan/work",
+        },
     }
 
     from gwvolman.build_utils import ImageBuilder
@@ -262,13 +268,11 @@ def test_r2d_calls(depl, dapicli):
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                 "/tmp": {"bind": "/host/tmp", "mode": "ro"},
-                "/ala": {"bind": "/ala", "mode": "rw"},
             },
         )
         ret, _ = image_builder.run_r2d(
             "some_tag",
             image_builder.build_context,
-            extra_volume={"/ala": {"bind": "/ala", "mode": "rw"}},
         )
         mock_container_run.assert_has_calls([matlab_expected_call])
 
@@ -319,7 +323,7 @@ def test_build_image_task(deployment):
         ]
         build_tale_image.girder_client = gc
         image_builder.return_value.get_tag.return_value = "some_tag"
-        image_builder.return_value.dh.apicli.inspect_distribution.return_value = {
+        image_builder.return_value.cached_image.return_value = {
             "Descriptor": {"digest": "some_digest"}
         }
 
@@ -329,18 +333,14 @@ def test_build_image_task(deployment):
 
         image_builder.return_value.run_r2d.return_value = ({"StatusCode": 1}, 0)
         gc.get = mock_gc_get
-        image_builder.return_value.dh.apicli.inspect_distribution.side_effect = [
-            docker.errors.NotFound("No image")
-        ]
+        image_builder.return_value.cached_image.return_value = None
         with pytest.raises(ValueError) as ex:
             result = build_tale_image(tale["_id"], force=False)
         image_builder.return_value.run_r2d.assert_called()
         assert ex.match("Error building tale tale1")
 
         image_builder.return_value.run_r2d.return_value = ({"StatusCode": 0}, 0)
-        image_builder.return_value.dh.apicli.inspect_distribution.side_effect = [
-            docker.errors.NotFound("No image")
-        ]
+        image_builder.return_value.cached_image.return_value = None
         image = mock.MagicMock()
         image_builder.return_value.dh.cli.images.get.return_value = image
         image.attrs = {"RepoDigests": ["registry.dev.wholetale.org/foo:tag"]}
