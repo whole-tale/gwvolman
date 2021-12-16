@@ -139,7 +139,6 @@ class ImageBuilder:
         self,
         tag,
         build_dir,
-        extra_volume=None,
         dry_run=False,
     ):
         """
@@ -186,9 +185,6 @@ class ImageBuilder:
             }
         }
 
-        if extra_volume is not None:
-            volumes.update(extra_volume)
-
         container = self.dh.cli.containers.run(
             image=self.container_config.repo2docker_version,
             command=r2d_cmd,
@@ -218,3 +214,9 @@ class ImageBuilder:
     def __del__(self):
         if self._build_context is not None:
             shutil.rmtree(self._build_context, ignore_errors=True)
+
+    def cached_image(self, tag):
+        try:
+            return self.dh.apicli.inspect_distribution(tag)
+        except docker.errors.NotFound:
+            pass
