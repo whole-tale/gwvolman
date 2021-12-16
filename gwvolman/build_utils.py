@@ -165,10 +165,11 @@ class ImageBuilder:
                 extra_args = " --build-arg STATA_LICENSE_ENCODED='{}' ".format(encoded)
 
         op = "--no-build" if dry_run else "--no-run"
+        target_repo_dir = os.path.join(self.container_config.target_mount, "workspace")
         r2d_cmd = (
             "jupyter-repo2docker "
             "--config='/wholetale/repo2docker_config.py' "
-            "--target-repo-dir='/home/jovyan/work/workspace' "
+            f"--target-repo-dir='{target_repo_dir}' "
             f"--user-id=1000 --user-name={self.container_config.container_user} "
             f"--no-clean {op} --debug {extra_args} "
             f"--image-name {tag} {build_dir}"
