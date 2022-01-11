@@ -8,7 +8,9 @@ from collections import namedtuple
 import os
 import random
 import re
+import signal
 import string
+import subprocess
 import uuid
 import logging
 import docker
@@ -329,29 +331,55 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
     print("Running Tale with command: " + run_cmd)
     print("Running image: " + tag)
 
-    container = cli.containers.run(
+    container = cli.containers.create(
         image=tag,
         command=run_cmd,
         detach=True,
-        remove=False,
         volumes=volumes
     )
 
+    cmd = [
+        HOSTDIR + "/usr/bin/docker",
+        "stats",
+        "--format",
+        '"{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
+        container.id
+    ]
+    workspace_path = os.path.join(HOSTDIR + mountpoint, "workspace")
+    # Setup docker stats logging via a subprocesses
+    dstats_tmppath = os.path.join(workspace_path, ".docker_stats.tmp")
+    dstats_fp = open(dstats_tmppath, "w")
+    p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
+    # use ts for nice timestamps
+    p2 = subprocess.Popen(["ts", '"%Y-%m-%dT%H:%M:%.S"'], stdin=p1.stdout, stdout=dstats_fp)
+    p1.stdout.close()
+
     # Job output must come from stdout/stderr
+    container.start()
     for line in container.logs(stream=True):
         print(line.decode('utf-8').strip())
 
     ret = container.wait()
+    # Shutdown docker stats
+    p1.send_signal(signal.SIGTERM)
+    dstats_fp.close()
+    p2.wait()
+    p1.wait()
 
     # Dump run std{out,err} and entrypoint used.
-    workspace_path = os.path.join(HOSTDIR + mountpoint, "workspace")
     with open(os.path.join(workspace_path, ".stdout"), "wb") as fp:
         fp.write(container.logs(stdout=True, stderr=False))
     with open(os.path.join(workspace_path, ".stderr"), "wb") as fp:
         fp.write(container.logs(stdout=False, stderr=True))
     with open(os.path.join(workspace_path, ".entrypoint"), "w") as fp:
         fp.write(entrypoint)
-
+    # Remove 'clear screen' special chars from docker stats output
+    # and save it as new file
+    with open(dstats_tmppath, "r") as infp:
+        with open(dstats_tmppath[:-4], "w") as outfp:
+            for line in infp.readlines():
+                outfp.write(re.sub(r"\x1b\[2J\x1b\[H", "", line))
+    os.remove(dstats_tmppath)
     container.remove()
     if ret['StatusCode'] != 0:
         raise ValueError('Error executing recorded run')
