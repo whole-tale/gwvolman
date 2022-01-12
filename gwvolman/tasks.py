@@ -758,10 +758,6 @@ def recorded_run(self, run_id, tale_id, entrypoint):
             message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
             current=4, forceFlush=True)
 
-    except Exception as e:
-        logging.error("Recorded run failed. %s", e)
-        logging.exception(e)
-        set_run_status(run, RunStatus.FAILED)
     finally:
         # Remove the environment.json
         os.remove(env_json)
