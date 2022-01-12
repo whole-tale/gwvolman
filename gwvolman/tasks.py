@@ -344,25 +344,21 @@ def build_tale_image(task, tale_id, force=False):
     build_time = int(time.time())
 
     # Check if image already exists
-    if not force:
-        try:
-            image = image_builder.dh.apicli.inspect_distribution(tag)
-            print('Cached image exists for this Tale. Skipping build.')
-            task.job_manager.updateProgress(
-                message='Tale not modified, no need to build',
-                total=BUILD_TALE_IMAGE_STEP_TOTAL,
-                current=BUILD_TALE_IMAGE_STEP_TOTAL,
-                forceFlush=True
-            )
-            return {
-                'image_digest': f"{tag}@{image['Descriptor']['digest']}",
-                'repo2docker_version': image_builder.container_config.repo2docker_version,
-                'last_build': last_build_time
-            }
-        except docker.errors.NotFound:
-            pass
-    else:
-        print("Forcing build.")
+    if not force and (image := image_builder.cached_image(tag)):
+        print('Cached image exists for this Tale. Skipping build.')
+        task.job_manager.updateProgress(
+            message='Tale not modified, no need to build',
+            total=BUILD_TALE_IMAGE_STEP_TOTAL,
+            current=BUILD_TALE_IMAGE_STEP_TOTAL,
+            forceFlush=True
+        )
+        return {
+            'image_digest': f"{tag}@{image['Descriptor']['digest']}",
+            'repo2docker_version': image_builder.container_config.repo2docker_version,
+            'last_build': last_build_time
+        }
+
+    print("Forcing build.")
 
     # Prepare build context
     # temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
@@ -687,9 +683,10 @@ def _write_env_json(workspace_dir, image):
 @app.task(bind=True)
 def recorded_run(self, run_id, tale_id, entrypoint):
     """Start a recorded run for a tale version"""
-
-    run = self.girder_client.get('/run/{}'.format(run_id))
-    tale = self.girder_client.get('/tale/{}'.format(tale_id))
+    run = self.girder_client.get(f"/run/{run_id}")
+    tale = self.girder_client.get(
+        f"/tale/{tale_id}/restore", parameters={"versionId": run["runVersionId"]}
+    )
     user = self.girder_client.get('/user/me')
     image_builder = ImageBuilder(self.girder_client, tale=tale)
 
@@ -726,9 +723,10 @@ def recorded_run(self, run_id, tale_id, entrypoint):
         current=2, forceFlush=True)
 
     # Setup image tag
-    build_time = int(time.time())
-    tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
-                            run_id, str(build_time))
+    tag = image_builder.get_tag()
+    logging.info(
+        "Computed tag: %s (taleId:%s, versionId:%s)", tag, tale_id, run["runVersionId"]
+    )
 
     work_dir = os.path.join(mountpoint, 'workspace')
     image = self.girder_client.get('/image/%s' % tale['imageId'])
@@ -740,19 +738,13 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     # repo2docker_version = REPO2DOCKER_VERSION
     print(f"Using repo2docker {container_config.repo2docker_version}")
     work_target = os.path.join(container_config.target_mount, 'workspace')
-    extra_volume = {
-        work_dir: {
-            'bind': work_target,
-            'mode': 'rw'
-        }
-    }
 
     try:
-        print("Building image for recorded run " + tag)
-        ret, _ = image_builder.run_r2d(tag, work_target, extra_volume=extra_volume)
-        if ret['StatusCode'] != 0:
-            raise ValueError('Image build failed for recorded run {}'.format(run_id))
-        # TODO: Do we push the image? Delete it at the end?
+        if not image_builder.cached_image(tag):
+            print("Building image for recorded run " + tag)
+            ret, _ = image_builder.run_r2d(tag, work_target)
+            if ret['StatusCode'] != 0:
+                raise ValueError('Image build failed for recorded run {}'.format(run_id))
 
         self.job_manager.updateProgress(
             message='Recording run', total=RECORDED_RUN_STEP_TOTAL,

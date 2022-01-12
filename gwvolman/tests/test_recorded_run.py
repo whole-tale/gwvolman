@@ -27,6 +27,8 @@ def mock_gc_get(path, parameters=None):
         return {"_id": "abc123", "buildPack": "JupyterBuildPack"}
     elif path in ("/tale/abc123"):
         return {"_id": "abc123", "imageId": "abc123"}
+    elif path in ("/tale/abc123/restore"):
+        return {"_id": "abc123", "imageId": "abc123"}
     elif path in ("/user/me"):
         return {"login": "user1"}
     elif path in "/run/123abc":
@@ -50,25 +52,12 @@ CONTAINER_CONFIG = ContainerConfig(
 
 RPZ_RUN_CALL = mock.call(
     image='registry.test.wholetale.org/123abc/1624994605',
-    command='bash -c "mkdir -p .wholetale/.reprozip-trace ;reprozip trace '
-            '--dir .wholetale/.reprozip-trace --overwrite sh entrypoint.sh"',
-    environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-    cap_add=['SYS_PTRACE'],
+    command="sh entrypoint.sh",
     detach=True,
-    remove=True,
+    remove=False,
     volumes={
-        '/var/run/docker.sock': {
-            'bind': '/var/run/docker.sock', 'mode': 'rw'
-        },
-        '/tmp': {
-            'bind': '/host/tmp', 'mode': 'ro'
-        },
-        '/path/to/mountpoint/data': {
-            'bind': '/work/data', 'mode': 'rw'
-        },
-        '/path/to/mountpoint/workspace': {
-            'bind': '/work/workspace', 'mode': 'rw'
-        }
+        '/path/to/mountpoint/data': {'bind': '/work/data', 'mode': 'rw'},
+        '/path/to/mountpoint/workspace': {'bind': '/work/workspace', 'mode': 'rw'}
     }
 )
 CPR_RUN_CALL = mock.call(
@@ -133,20 +122,22 @@ def test_recorded_run(
     image_builder.return_value.container_config.target_mount = "/work"
     image_builder.return_value.dh.cli.containers.run.return_value.wait.return_value = \
         {"StatusCode": 0}
+    image_builder.return_value.get_tag.return_value = \
+        "registry.test.wholetale.org/123abc/1624994605"
     try:
         with mock.patch(
             'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
-        ) as mock_dep:
+        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()):
             mock_dep.return_value = 'https://registry.test.wholetale.org'
             recorded_run.girder_client = mock_gc
             recorded_run.job_manager = mock.MagicMock()
             recorded_run("123abc", "abc123", "entrypoint.sh")
             assert status == RunStatus.COMPLETED
     except ValueError:
-        assert False
+        raise AssertionError
 
     image_builder.return_value.dh.cli.containers.run.assert_has_calls(
-        [RPZ_RUN_CALL, CPR_RUN_CALL], any_order=True
+        [RPZ_RUN_CALL], any_order=True
     )
 
     # This should fail

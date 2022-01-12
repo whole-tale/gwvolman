@@ -139,7 +139,6 @@ class ImageBuilder:
         self,
         tag,
         build_dir,
-        extra_volume=None,
         dry_run=False,
     ):
         """
@@ -165,10 +164,11 @@ class ImageBuilder:
                 extra_args = " --build-arg STATA_LICENSE_ENCODED='{}' ".format(encoded)
 
         op = "--no-build" if dry_run else "--no-run"
+        target_repo_dir = os.path.join(self.container_config.target_mount, "workspace")
         r2d_cmd = (
             "jupyter-repo2docker "
             "--config='/wholetale/repo2docker_config.py' "
-            "--target-repo-dir='/home/jovyan/work/workspace' "
+            f"--target-repo-dir='{target_repo_dir}' "
             f"--user-id=1000 --user-name={self.container_config.container_user} "
             f"--no-clean {op} --debug {extra_args} "
             f"--image-name {tag} {build_dir}"
@@ -184,9 +184,6 @@ class ImageBuilder:
                 'bind': '/host/tmp', 'mode': 'ro'
             }
         }
-
-        if extra_volume is not None:
-            volumes.update(extra_volume)
 
         container = self.dh.cli.containers.run(
             image=self.container_config.repo2docker_version,
@@ -217,3 +214,9 @@ class ImageBuilder:
     def __del__(self):
         if self._build_context is not None:
             shutil.rmtree(self._build_context, ignore_errors=True)
+
+    def cached_image(self, tag):
+        try:
+            return self.dh.apicli.inspect_distribution(tag)
+        except docker.errors.NotFound:
+            pass
