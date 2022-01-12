@@ -197,7 +197,7 @@ def _get_container_config(gc, tale):
     return container_config
 
 
-def _launch_container(volumeName, nodeId, container_config, tale_id='', instance_id=''):
+def _launch_container(volume_info, container_config):
 
     token = uuid.uuid4().hex
     # command
@@ -227,8 +227,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     #                        target=container_config.target_mount)
     # ]
 
-    # FIXME: get mountPoint
-    source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
+    source_mount = volume_info["mountPoint"]
     mounts = []
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
     for source in volumes:
@@ -267,8 +266,8 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
             f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
             'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
-            'wholetale.instanceId': instance_id,
-            'wholetale.taleId': tale_id,
+            'wholetale.instanceId': volume_info["instanceId"],
+            'wholetale.taleId': volume_info["taleId"],
         },
         env=container_config.environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
@@ -276,7 +275,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         name=host,
         mounts=mounts,
         endpoint_spec=endpoint_spec,
-        constraints=['node.id == {}'.format(nodeId)],
+        constraints=['node.id == {}'.format(volume_info["nodeId"])],
         resources=docker.types.Resources(mem_limit=container_config.mem_limit),
         restart_policy=docker.types.RestartPolicy(condition="none")
     )

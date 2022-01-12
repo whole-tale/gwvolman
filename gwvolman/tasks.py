@@ -84,18 +84,19 @@ def create_volume(self, instance_id):
         nodeId=cli.info()['Swarm']['NodeID'],
         mountPoint=mountpoint,
         volumeName=vol_name,
-        sessionId=session['_id'],
+        sessionId=session["_id"],
         instanceId=instance_id,
+        taleId=tale["_id"],
     )
 
 
 @girder_job(title='Spawn Instance')
 @app.task(bind=True)
-def launch_container(self, payload):
+def launch_container(self, service_info):
     """Launch a container using a Tale object."""
     user, instance = _get_user_and_instance(
-        self.girder_client, payload['instanceId'])
-    tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
+        self.girder_client, service_info['instanceId'])
+    tale = self.girder_client.get(f"/tale/{service_info['taleId']}")
 
     self.job_manager.updateProgress(
         message='Starting container', total=LAUNCH_CONTAINER_STEP_TOTAL,
@@ -118,15 +119,11 @@ def launch_container(self, payload):
             print(msg)
             time.sleep(5)
 
-    # _pull_image() #FIXME
     container_config = _get_container_config(self.girder_client, tale)
-    service, attrs = _launch_container(
-        payload['volumeName'], payload['nodeId'],
-        container_config,
-        tale_id=tale['_id'], instance_id=payload['instanceId'])
+    service, attrs = _launch_container(service_info, container_config)
     print(
-        f"Started a container using volume: {payload['volumeName']} "
-        f"on node: {payload['nodeId']}"
+        f"Started a container using volume: {service_info['volumeName']} "
+        f"on node: {service_info['nodeId']}"
     )
 
     # wait until task is started
@@ -158,9 +155,9 @@ def launch_container(self, payload):
         message='Container started', total=LAUNCH_CONTAINER_STEP_TOTAL,
         current=LAUNCH_CONTAINER_STEP_TOTAL, forceFlush=True)
 
-    payload.update(attrs)
-    payload['name'] = service.name
-    return payload
+    service_info.update(attrs)
+    service_info['name'] = service.name
+    return service_info
 
 
 @girder_job(title='Update Instance')
