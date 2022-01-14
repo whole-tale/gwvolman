@@ -54,7 +54,6 @@ RPZ_RUN_CALL = mock.call(
     image='registry.test.wholetale.org/123abc/1624994605',
     command="sh entrypoint.sh",
     detach=True,
-    remove=False,
     volumes={
         '/path/to/mountpoint/data': {'bind': '/work/data', 'mode': 'rw'},
         '/path/to/mountpoint/workspace': {'bind': '/work/workspace', 'mode': 'rw'}
@@ -86,7 +85,7 @@ CPR_RUN_CALL = mock.call(
 @mock.patch("time.time", return_value=1624994605)
 @mock.patch("docker.client.DockerClient.volumes")
 @mock.patch("docker.client.DockerClient.containers")
-@mock.patch("subprocess.call", return_value=True)
+@mock.patch("subprocess.Popen")
 @mock.patch("os.remove", return_value=True)
 @mock.patch("gwvolman.tasks._get_container_config", return_value=CONTAINER_CONFIG)
 @mock.patch("gwvolman.tasks._get_api_key", return_value="key123")
@@ -120,14 +119,16 @@ def test_recorded_run(
     # This should succeed
     image_builder.return_value.run_r2d.return_value = ({"StatusCode": 0}, "")
     image_builder.return_value.container_config.target_mount = "/work"
-    image_builder.return_value.dh.cli.containers.run.return_value.wait.return_value = \
+    image_builder.return_value.dh.cli.containers.create.return_value.wait.return_value = \
         {"StatusCode": 0}
+    image_builder.return_value.dh.cli.containers.create.return_value.id = \
+        "container_id"
     image_builder.return_value.get_tag.return_value = \
         "registry.test.wholetale.org/123abc/1624994605"
     try:
         with mock.patch(
             'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
-        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()):
+        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()) as bo:
             mock_dep.return_value = 'https://registry.test.wholetale.org'
             recorded_run.girder_client = mock_gc
             recorded_run.job_manager = mock.MagicMock()
@@ -136,8 +137,29 @@ def test_recorded_run(
     except ValueError:
         raise AssertionError
 
-    image_builder.return_value.dh.cli.containers.run.assert_has_calls(
+    image_builder.return_value.dh.cli.containers.create.assert_has_calls(
         [RPZ_RUN_CALL], any_order=True
+    )
+    sp.assert_has_calls(
+        [
+            mock.call(
+                [
+                    "/host/usr/bin/docker",
+                    "stats",
+                    "--format",
+                    '"{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
+                    "container_id",
+                ],
+                stdout=-1,
+                universal_newlines=True,
+            ),
+            mock.call(
+                ["ts", '"%Y-%m-%dT%H:%M:%.S"'],
+                stdin=sp.return_value.stdout,
+                stdout=bo.return_value,
+            )
+        ],
+        any_order=True,
     )
 
     # This should fail
@@ -152,7 +174,7 @@ def test_recorded_run(
         assert True
         assert status == RunStatus.FAILED
 
-    image_builder.return_value.dh.cli.containers.run.assert_has_calls(
+    image_builder.return_value.dh.cli.containers.create.assert_has_calls(
         [RPZ_RUN_CALL], any_order=True
     )
 
