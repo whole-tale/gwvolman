@@ -1,5 +1,6 @@
 from girder_client import GirderClient
 import mock
+import pytest
 
 from gwvolman.utils import ContainerConfig
 from gwvolman.tasks import recorded_run, _write_env_json
@@ -162,17 +163,16 @@ def test_recorded_run(
         any_order=True,
     )
 
-    # This should fail
-    image_builder.return_value.run_r2d.return_value = ({"StatusCode": 1}, "")
-    try:
+    # Test execution failure
+    image_builder.return_value.dh.cli.containers.run.return_value.wait.side_effect = \
+        ValueError("foo")
+
+    with pytest.raises(ValueError):
         with mock.patch(
             'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
-        ) as mock_dep:
+        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()):
             mock_dep.return_value = 'https://registry.test.wholetale.org'
             recorded_run("123abc", "abc123", "entrypoint.sh")
-    except ValueError:
-        assert True
-        assert status == RunStatus.FAILED
 
     image_builder.return_value.dh.cli.containers.create.assert_has_calls(
         [RPZ_RUN_CALL], any_order=True
