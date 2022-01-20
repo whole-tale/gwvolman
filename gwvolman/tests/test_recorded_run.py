@@ -164,7 +164,7 @@ def test_recorded_run(
     )
 
     # Test execution failure
-    image_builder.return_value.dh.cli.containers.run.return_value.wait.side_effect = \
+    image_builder.return_value.dh.cli.containers.create.return_value.wait.side_effect = \
         ValueError("foo")
 
     with pytest.raises(ValueError):
