@@ -73,7 +73,8 @@ def test_create_volume(mgfs, mfd, cdv, gs, gak, volumes, info, nu):
             'mountPoint': '/path/to/mountpoint/',
             'volumeName': 'tale1_user1_123456',
             'sessionId': 'session1',
-            'instanceId': 'instance1'
+            'instanceId': 'instance1',
+            'taleId': "tale1",
         }
 
         assert ret == expected
