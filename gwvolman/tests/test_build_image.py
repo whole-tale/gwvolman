@@ -211,6 +211,7 @@ def test_r2d_calls(depl, dapicli):
     }
 
     from gwvolman.build_utils import ImageBuilder
+    from gwvolman.constants import REPO2DOCKER_VERSION
 
     with mock.patch("docker.from_env") as dcli:
         dcli.return_value.images.pull.side_effect = docker.errors.NotFound("blah")
@@ -218,7 +219,7 @@ def test_r2d_calls(depl, dapicli):
         with pytest.raises(ValueError) as ex:
             image_builder.pull_r2d()
         assert ex.match(
-            "Requested r2d image 'wholetale/repo2docker_wholetale:latest' not found."
+            f"Requested r2d image '{REPO2DOCKER_VERSION}' not found."
         )
 
     with mock.patch("docker.from_env") as dcli:
@@ -230,7 +231,7 @@ def test_r2d_calls(depl, dapicli):
         tale["imageId"] = "stata"
         image_builder = ImageBuilder(gc, tale=tale)
         stata_expected_call = mock.call(
-            image="wholetale/repo2docker_wholetale:latest",
+            image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --config='/wholetale/repo2docker_config.py'"
             " --target-repo-dir='/home/jovyan/work/workspace'"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
@@ -255,7 +256,7 @@ def test_r2d_calls(depl, dapicli):
         tale["imageId"] = "matlab"
         image_builder = ImageBuilder(gc, tale=tale)
         matlab_expected_call = mock.call(
-            image="wholetale/repo2docker_wholetale:latest",
+            image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --config='/wholetale/repo2docker_config.py'"
             " --target-repo-dir='/home/jovyan/work/workspace'"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
