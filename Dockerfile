@@ -17,6 +17,7 @@ RUN apt-get update -qqy && \
     libcurl4-openssl-dev \
     zlib1g-dev \
     libfuse-dev \
+    moreutils \
     libpython3-dev && \
   apt-get -qqy clean all && \
   echo "user_allow_other" >> /etc/fuse.conf && \

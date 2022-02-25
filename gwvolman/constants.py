@@ -12,6 +12,7 @@ MOUNTPOINTS = ["data", "home"]
 if ENABLE_WORKSPACES:
     MOUNTPOINTS.append("workspace")
     MOUNTPOINTS.append("versions")
+    MOUNTPOINTS.append("runs")
 
 
 try:
@@ -21,7 +22,12 @@ except socket.gaierror:
 GIRDER_API_URL = os.environ.get("GIRDER_API_URL", DEFAULT_GIRDER_API_URL)
 LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
-REPO2DOCKER_VERSION = "wholetale/repo2docker_wholetale:v1.0"
+REPO2DOCKER_VERSION = os.environ.get(
+    "REPO2DOCKER_VERSION",
+    "wholetale/repo2docker_wholetale:v1.1rc1"
+)
+CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
+
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"
     "logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhki"
@@ -43,6 +49,30 @@ RUN_WT_BUTTON_IMG = (
 )
 
 
+# NOTE: changing order of ENV_FILES will result in cache invalidation.
+# You have been warned.
+R2D_FILENAMES = (
+    "environment.yml",
+    "Pipfile",
+    "Pipfile.lock",
+    "requirements.txt",
+    "setup.py",
+    "Project.toml",
+    "REQUIRE",
+    "install.R",
+    "apt.txt",
+    "DESCRIPTION",
+    "postBuild",
+    "start",
+    "runtime.txt",
+    "default.nix",
+    "install.do",
+    "JuliaProject.toml",
+    "requirements3.txt",
+    "toolboxes.txt",
+    "Dockerfile",
+)
+
 class InstanceStatus(object):
     LAUNCHING = 0
     RUNNING = 1
@@ -53,3 +83,11 @@ class TaleStatus(object):
     PREPARING = 0
     READY = 1
     ERROR = 2
+
+class RunStatus(object):
+    UNKNOWN = 0
+    STARTING = 1
+    RUNNING = 2
+    COMPLETED = 3
+    FAILED = 4
+    CANCELLED = 5

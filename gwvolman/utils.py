@@ -8,7 +8,9 @@ from collections import namedtuple
 import os
 import random
 import re
+import signal
 import string
+import subprocess
 import uuid
 import logging
 import docker
@@ -26,7 +28,7 @@ REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
 MOUNTS = {}
 RETRIES = 5
-container_name_pattern = re.compile('tmp\.([^.]+)\.(.+)\Z')
+container_name_pattern = re.compile(r'tmp\.([^.]+)\.(.+)\Z')
 
 PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
 ContainerConfig = namedtuple('ContainerConfig', [
@@ -36,7 +38,7 @@ ContainerConfig = namedtuple('ContainerConfig', [
     'url_path', 'environment', 'csp'
 ])
 
-SIZE_NOTATION_RE = re.compile("^(\d+)([kmg]?b?)$", re.IGNORECASE)
+SIZE_NOTATION_RE = re.compile(r"^(\d+)([kmg]?b?)$", re.IGNORECASE)
 SIZE_TABLE = {
     '': 1, 'b': 1,
     'k': 1024, 'kb': 1024,
@@ -104,7 +106,7 @@ class Deployment(object):
         return self._registry_url
 
     def get_host_from_traefik_rule(self, service_name):
-        """Infer service's hostname from traefik frontend rule label
+        """Infer service's hostname from traefik frontend rule label.
 
         If services are unavailable (slave node), default to DOMAIN env settting
         """
@@ -113,7 +115,7 @@ class Deployment(object):
             ns = service.attrs['Spec']['Labels']['com.docker.stack.namespace']
             router = service_name.replace('%s_' % ns,  '')
             rule = service.attrs['Spec']['Labels']['traefik.http.routers.%s.rule' % router]
-            host =  re.search(r'Host\(`(.+)`\)', rule).group(1)
+            host = re.search(r'Host\(`(.+)`\)', rule).group(1)
             return 'https://' + host
         except docker.errors.APIError:
             return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
@@ -163,19 +165,18 @@ def _get_user_and_instance(girder_client, instanceId):
     return user, instance
 
 
-
 def _get_container_config(gc, tale):
     if tale is None:
         container_config = {}  # settings['container_config']
     else:
         image = gc.get('/image/%s' % tale['imageId'])
         tale_config = image['config'] or {}
-        if tale['config']:
+        if tale.get('config'):
             tale_config.update(tale['config'])
 
         image_info = tale.get("imageInfo", {})
         digest = image_info.get("digest")
-        repo2docker_version = tale_config.get("repo2docker_version", REPO2DOCKER_VERSION)
+        repo2docker_version = image_info.get("repo2docker_version", REPO2DOCKER_VERSION)
 
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
@@ -198,7 +199,7 @@ def _get_container_config(gc, tale):
     return container_config
 
 
-def _launch_container(volumeName, nodeId, container_config, tale_id='', instance_id=''):
+def _launch_container(volume_info, container_config):
 
     token = uuid.uuid4().hex
     # command
@@ -228,38 +229,15 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     #                        target=container_config.target_mount)
     # ]
 
-    # FIXME: get mountPoint
-    source_mount = '/var/lib/docker/volumes/{}/_data'.format(volumeName)
+    source_mount = volume_info["mountPoint"]
     mounts = []
-    for path in MOUNTPOINTS:
-        source = os.path.join(source_mount, path)
-        target = os.path.join(container_config.target_mount, path)
+    volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
+    for source in volumes:
         mounts.append(
-            docker.types.Mount(type='bind', source=source, target=target)
+            docker.types.Mount(type='bind', source=source, target=volumes[source]['bind'])
         )
-    host = 'tmp-{}'.format(new_user(12).lower())
 
-    if container_config.buildpack:
-        # Mount the MATLAB and Stata runtime licenses
-        if container_config.buildpack == "MatlabBuildPack":
-            mounts.append(
-                docker.types.Mount(type='bind',
-                    source=LICENSE_PATH,
-                    target="/licenses")
-            )
-        elif container_config.buildpack == "StataBuildPack":
-            # Weekly license expires each Sunday and is provided 
-            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
-            # license expiration date.
-            license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
-            source_path = os.path.join(
-                LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
-            )
-            mounts.append(
-                docker.types.Mount(
-                    type='bind', source=source_path, target="/usr/local/stata/stata.lic"
-                )
-            )
+    host = 'tmp-{}'.format(new_user(12).lower())
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
@@ -271,22 +249,27 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     else:
         csp = "frame-ancestors 'self' {}".format(DEPLOYMENT.dashboard_url)
 
+    traefik_loadbalancer_prefix = f"traefik.http.services.{host}.loadbalancer"
+
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
         labels={
-            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
             'traefik.enable': 'true',
             'traefik.http.routers.%s.rule' % host: 'Host(`{}.{}`)'.format(host, DOMAIN),
             'traefik.http.routers.%s.entrypoints' % host: TRAEFIK_ENTRYPOINT,
             'traefik.http.routers.%s.tls' % host: 'true',
-            'traefik.http.middlewares.%s-csp.headers.customresponseheaders.Content-Security-Policy' % host: csp,
-            'traefik.http.services.%s.loadbalancer.passhostheader' % host: 'true',
-            'traefik.http.services.%s.loadbalancer.server.port' % host: str(container_config.container_port),
+            (
+                f'traefik.http.middlewares.{host}'
+                '-csp.headers.customresponseheaders.Content-Security-Policy'
+            ): csp,
+            f"{traefik_loadbalancer_prefix}.passhostheader": 'true',
+            f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
             'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
-            'wholetale.instanceId': instance_id,
-            'wholetale.taleId': tale_id,
+            'wholetale.instanceId': volume_info["instanceId"],
+            'wholetale.taleId': volume_info["taleId"],
         },
         env=container_config.environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
@@ -294,7 +277,7 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
         name=host,
         mounts=mounts,
         endpoint_spec=endpoint_spec,
-        constraints=['node.id == {}'.format(nodeId)],
+        constraints=['node.id == {}'.format(volume_info["nodeId"])],
         resources=docker.types.Resources(mem_limit=container_config.mem_limit),
         restart_policy=docker.types.RestartPolicy(condition="none")
     )
@@ -310,52 +293,102 @@ def _launch_container(volumeName, nodeId, container_config, tale_id='', instance
     return service, {'url': url}
 
 
-def _build_image(cli, tale_id, image, tag, temp_dir, repo2docker_version):
-    """
-    Run repo2docker on the workspace using a shared temp directory. Note that
-    this uses the "local" provider.  Use the same default user-id and
-    user-name as BinderHub
-    """
-
-    # Extra arguments for r2d
-    extra_args = ''
-    if image['config']['buildpack'] == "MatlabBuildPack":
-        extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
-                os.environ.get("MATLAB_FILE_INSTALLATION_KEY"))
-
-    r2d_cmd = ('jupyter-repo2docker '
-               '--config="/wholetale/repo2docker_config.py" '
-               '--target-repo-dir="/home/jovyan/work/workspace" '
-               '--user-id=1000 --user-name={} '
-               '--no-clean --no-run --debug {} '
-               '--image-name {} {}'.format(
-                                           image['config']['user'],
-                                           extra_args,
-                                           tag, temp_dir))
-
-    logging.info('Calling %s (%s)', r2d_cmd, tale_id)
-
-    container = cli.containers.run(
-        image=repo2docker_version,
-        command=r2d_cmd,
-        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
-        privileged=True,
-        detach=True,
-        remove=True,
-        volumes={
-            '/var/run/docker.sock': {
-                'bind': '/var/run/docker.sock', 'mode': 'rw'
-            },
-            '/tmp': {
-                'bind': '/host/tmp', 'mode': 'ro'
-            }
+def _get_container_volumes(mountpoint, container_config, directories):
+    volumes = {}
+    for path in directories:
+        source = os.path.join(mountpoint, path)
+        target = os.path.join(container_config.target_mount, path)
+        volumes[source] = {
+            'bind': target, 'mode': 'rw'
         }
+
+    if container_config.buildpack:
+        # Mount the MATLAB and Stata runtime licenses
+        if container_config.buildpack == "MatlabBuildPack":
+            volumes[LICENSE_PATH] = {
+                'bind': '/licenses'
+            }
+        elif container_config.buildpack == "StataBuildPack":
+            # Weekly license expires each Sunday and is provided
+            # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
+            # license expiration date.
+            source_path = _get_stata_license_path()
+            volumes[source_path] = {
+                'bind': '/usr/local/stata/stata.lic'
+            }
+    return volumes
+
+
+def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
+    print("Starting recorded run")
+
+    # Configure container volumes for recorded run
+    volumes = _get_container_volumes(mountpoint, container_config, ['data', 'workspace'])
+
+    # TODO: use run config, not entrypoint
+    run_cmd = f"sh {entrypoint}"
+
+    print("Running Tale with command: " + run_cmd)
+    print("Running image: " + tag)
+
+    container = cli.containers.create(
+        image=tag,
+        command=run_cmd,
+        detach=True,
+        volumes=volumes
     )
 
+    cmd = [
+        HOSTDIR + "/usr/bin/docker",
+        "stats",
+        "--format",
+        '"{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
+        container.id
+    ]
+    workspace_path = os.path.join(HOSTDIR + mountpoint, "workspace")
+    # Setup docker stats logging via a subprocesses
+    dstats_tmppath = os.path.join(workspace_path, ".docker_stats.tmp")
+    dstats_fp = open(dstats_tmppath, "w")
+    p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
+    # use ts for nice timestamps
+    p2 = subprocess.Popen(["ts", '"%Y-%m-%dT%H:%M:%.S"'], stdin=p1.stdout, stdout=dstats_fp)
+    p1.stdout.close()
+
     # Job output must come from stdout/stderr
+    container.start()
     for line in container.logs(stream=True):
         print(line.decode('utf-8').strip())
 
-    # Since detach=True, then we need to explicitly check for the
-    # container exit code
-    return container.wait()
+    ret = container.wait()
+    # Shutdown docker stats
+    p1.send_signal(signal.SIGTERM)
+    dstats_fp.close()
+    p2.wait()
+    p1.wait()
+
+    # Dump run std{out,err} and entrypoint used.
+    with open(os.path.join(workspace_path, ".stdout"), "wb") as fp:
+        fp.write(container.logs(stdout=True, stderr=False))
+    with open(os.path.join(workspace_path, ".stderr"), "wb") as fp:
+        fp.write(container.logs(stdout=False, stderr=True))
+    with open(os.path.join(workspace_path, ".entrypoint"), "w") as fp:
+        fp.write(entrypoint)
+    # Remove 'clear screen' special chars from docker stats output
+    # and save it as new file
+    with open(dstats_tmppath, "r") as infp:
+        with open(dstats_tmppath[:-4], "w") as outfp:
+            for line in infp.readlines():
+                outfp.write(re.sub(r"\x1b\[2J\x1b\[H", "", line))
+    os.remove(dstats_tmppath)
+    container.remove()
+    if ret['StatusCode'] != 0:
+        raise ValueError('Error executing recorded run')
+
+    return ret
+
+
+def _get_stata_license_path():
+    license_date = datetime.date.today() + rel.relativedelta(days=1, weekday=rel.SU)
+    return os.path.join(
+        LICENSE_PATH, "stata", f"stata.{license_date.strftime('%Y%m%d')}.lic"
+    )
