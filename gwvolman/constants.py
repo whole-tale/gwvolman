@@ -22,7 +22,10 @@ except socket.gaierror:
 GIRDER_API_URL = os.environ.get("GIRDER_API_URL", DEFAULT_GIRDER_API_URL)
 LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
-REPO2DOCKER_VERSION = os.environ.get("REPO2DOCKER_VERSION", "wholetale/repo2docker_wholetale:latest")
+REPO2DOCKER_VERSION = os.environ.get(
+    "REPO2DOCKER_VERSION",
+    "wholetale/repo2docker_wholetale:v1.1rc1"
+)
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 
 RUN_WT_BUTTON_IMG = (
