@@ -94,8 +94,10 @@ class DataONEPublishProvider(PublishProvider):
         # to upload the files.
         ignore_files = [
             "tagmanifest-sha256.txt",
+            "tagmanifest-sha1.txt",
             "tagmanifest-md5.txt",
             "manifest-sha256.txt",
+            "manifest-sha1.txt",
             "manifest-md5.txt",
             "bag-info.txt",
             "bagit.txt",
