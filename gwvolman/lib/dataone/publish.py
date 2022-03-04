@@ -312,7 +312,7 @@ class DataONEPublishProvider(PublishProvider):
             metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
             metadata.set_related_identifiers(manifest, eml_pid, self.tale,
                                                 self.dataone_node,  self.gc)
-            res_map = metadata.resource_map.serialize()
+            res_map = metadata.resource_map.serialize_to_transport()
             # Update the resource map with citations
             # Turn the resource map into readable bytes
             try:
