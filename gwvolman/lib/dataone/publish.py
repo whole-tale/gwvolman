@@ -133,7 +133,6 @@ class DataONEPublishProvider(PublishProvider):
                 m.update(chunk)
             tmp.seek(0)
             md5_hash = m.hexdigest()
-            print(md5_hash)
 
             # Read the zipfile
             zip_file = zipfile.ZipFile(tmp, "r")
@@ -188,8 +187,6 @@ class DataONEPublishProvider(PublishProvider):
                     mimetypes.guess_type(zip_name)[0]
                 )
 
-                print(mimeType)
-                print(tmp.name)
                 file_meta = metadata.generate_system_metadata(
                     file_pid, zip_name, mimeType, zip_size, md5_hash, user_id
                 )
