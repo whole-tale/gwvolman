@@ -88,20 +88,8 @@ class DataONEPublishProvider(PublishProvider):
 
         # Progress indicators
         step = 1
-        steps = 100
+        steps = 6
 
-        # Files to ignore when uploading. These come from the bagged Tale that's used
-        # to upload the files.
-        ignore_files = [
-            "tagmanifest-sha256.txt",
-            "tagmanifest-sha1.txt",
-            "tagmanifest-md5.txt",
-            "manifest-sha256.txt",
-            "manifest-sha1.txt",
-            "manifest-md5.txt",
-            "bag-info.txt",
-            "bagit.txt",
-        ]
         self.job_manager.updateProgress(
             message="Connecting to {}".format(self.dataone_node),
             total=100,
@@ -125,6 +113,9 @@ class DataONEPublishProvider(PublishProvider):
         )
         step += 1
 
+        # Pre-generate resource map pid for use in EML doc
+        res_pid = self._generate_pid(scheme="UUID")
+
         # Export the tale to a temp directory
         stream = self.gc.sendRestRequest(
             "get",
@@ -136,58 +127,29 @@ class DataONEPublishProvider(PublishProvider):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
 
             # Write the zip file
+            m = md5()
             for chunk in stream.iter_content(chunk_size=65536):
                 tmp.write(chunk)
+                m.update(chunk)
             tmp.seek(0)
+            md5_hash = m.hexdigest()
+            print(md5_hash)
 
             # Read the zipfile
             zip_file = zipfile.ZipFile(tmp, "r")
-            files = [fname for fname in zip_file.namelist() if not fname.endswith("/")]
-
-            # Now we know the number of steps for progress
-            steps = len(files) + 5
+            zip_size = os.path.getsize(tmp.name)
 
             version_path = str(self.version_id)
             # Get the manifest
             manifest_path = f"{version_path}/metadata/manifest.json"
-            manifest_size = zip_file.getinfo(manifest_path).file_size
             with zip_file.open(manifest_path) as f:
                 data = f.read()
-                manifest_md5 = md5(data).hexdigest()
                 manifest = json.loads(data.decode("utf-8"))
 
             # Read the license text
             license_path = f"{version_path}/data/LICENSE"
             with zip_file.open(license_path) as f:
                 license_text = str(f.read().decode("utf-8"))
-
-            # Get the environment
-            environment_path = f"{version_path}/metadata/environment.json"
-            environment_size = zip_file.getinfo(environment_path).file_size
-            with zip_file.open(environment_path) as f:
-                data = f.read()
-                environment_md5 = md5(data).hexdigest()
-
-            # Get the run-local.sh
-            run_local_path = f"{version_path}/run-local.sh"
-            run_local_size = zip_file.getinfo(run_local_path).file_size
-            with zip_file.open(run_local_path) as f:
-                data = f.read()
-                run_local_md5 = md5(data).hexdigest()
-
-            # Get the fetch.txt
-            fetch_path = f"{version_path}/fetch.txt"
-            fetch_size = zip_file.getinfo(fetch_path).file_size
-            with zip_file.open(fetch_path) as f:
-                data = f.read()
-                fetch_md5 = md5(data).hexdigest()
-
-            # Get the README.md
-            readme_path = f"{version_path}/README.md"
-            readme_size = zip_file.getinfo(readme_path).file_size
-            with zip_file.open(readme_path) as f:
-                data = f.read()
-                readme_md5 = md5(data).hexdigest()
 
             self.job_manager.updateProgress(
                 message="Creating EML document from manifest",
@@ -198,67 +160,50 @@ class DataONEPublishProvider(PublishProvider):
             metadata = DataONEMetadata(self.coordinating_node)
             # Create an EML document based on the manifest
             eml_pid = self._generate_pid()
+            zip_name = "{}.zip".format(self.version_id)
             eml_doc = metadata.create_eml_doc(
                 eml_pid,
+                res_pid,
                 manifest,
                 user_id,
-                manifest_size,
-                environment_size,
-                run_local_size,
-                fetch_size,
-                license_text,
+                zip_name,
+                zip_size,
+                license_text
             )
 
             # Keep track of uploaded objects because the resource needs them
             uploaded_pids = []
             try:
-                for fpath in files:
-                    with zip_file.open(fpath) as f:
-                        relpath = f"./{os.sep.join(Path(fpath).parts[2:])}"
-                        fname = os.path.basename(fpath)
 
-                        # Skip over the files we want to ignore
-                        if fname in ignore_files:
-                            continue
-                        self.job_manager.updateProgress(
-                            message="Uploading file {}".format(fname),
-                            total=100,
-                            current=int(step / steps * 100),
-                        )
-                        step += 1
+                self.job_manager.updateProgress(
+                    message="Uploading file {}".format(zip_name),
+                    total=100,
+                    current=int(step / steps * 100),
+                )
+                step += 1
 
-                        file_pid = self._generate_pid(scheme="UUID")
+                file_pid = self._generate_pid(scheme="UUID")
 
-                        mimeType = metadata.check_dataone_mimetype(
-                            mimetypes.guess_type(fpath)[0]
-                        )
+                mimeType = metadata.check_dataone_mimetype(
+                    mimetypes.guess_type(zip_name)[0]
+                )
 
-                        if fname == "manifest.json":
-                            size, md5_hash = manifest_size, manifest_md5
-                        elif fname == "environment.json":
-                            size, md5_hash = environment_size, environment_md5
-                        elif fname == "run-local.sh":
-                            size, md5_hash = run_local_size, run_local_md5
-                        elif fname == "fetch.txt":
-                            size, md5_hash = fetch_size, fetch_md5
-                        elif fname == 'README.md':
-                            size, md5_hash = readme_size, readme_md5
-                        else:
-                            size, md5_hash = self._get_manifest_file_info(manifest, relpath)
+                print(mimeType)
+                print(tmp.name)
+                file_meta = metadata.generate_system_metadata(
+                    file_pid, zip_name, mimeType, zip_size, md5_hash, user_id
+                )
 
-                        file_meta = metadata.generate_system_metadata(
-                            file_pid, fname, mimeType, size, md5_hash, user_id
-                        )
-
-                        self._upload_file(
-                            pid=file_pid,
-                            file_object=f.read(),
-                            system_metadata=file_meta,
-                        )
-                        uploaded_pids.append(file_pid)
+                tmp.seek(0)
+                self._upload_file(
+                    pid=file_pid,
+                    file_object=tmp.read(),
+                    system_metadata=file_meta,
+                )
+                uploaded_pids.append(file_pid)
             except Exception as e:
-                logging.error("There was an error while uploading %s\n%s", fname, str(e))
-                raise ValueError(f'There was a fatal error while uploading {fname}. Please '\
+                logging.error("There was an error while uploading %s\n%s", zip_name, str(e))
+                raise ValueError(f'There was a fatal error while uploading {zip_name}. Please '\
                                  'contact the support team.')
 
             self.job_manager.updateProgress(
@@ -308,11 +253,10 @@ class DataONEPublishProvider(PublishProvider):
             step += 1
 
             # Create ORE
-            res_pid = self._generate_pid(scheme="UUID")
             metadata.create_resource_map(res_pid, eml_pid, uploaded_pids)
             metadata.set_related_identifiers(manifest, eml_pid, self.tale,
                                                 self.dataone_node,  self.gc)
-            res_map = metadata.resource_map.serialize()
+            res_map = metadata.resource_map.serialize_to_transport()
             # Update the resource map with citations
             # Turn the resource map into readable bytes
             try:
@@ -368,6 +312,7 @@ class DataONEPublishProvider(PublishProvider):
                 logging.error('Error updating Tale {e}')
                 raise ValueError("There was an error while updating the Tale.")
 
+
     @staticmethod
     def _get_manifest_file_info(manifest, relpath):
         for file in manifest["aggregates"]:
@@ -377,6 +322,7 @@ class DataONEPublishProvider(PublishProvider):
                 size = file["wt:size"]
                 return size, md5_checksum
         return None, None
+
 
     def _upload_file(self, pid: str, file_object: Union[str, io.BytesIO],
                      system_metadata: SystemMetadata):

@@ -2,6 +2,8 @@ import httmock
 from gwvolman.lib.dataone.metadata import DataONEMetadata
 from gwvolman.tests import mock_dataone_formats
 
+from gwvolman.tests import MANIFEST, EML
+
 
 def test_ctor():
     with httmock.HTTMock(mock_dataone_formats):
@@ -60,3 +62,21 @@ def test_generate_system_metadata():
         assert sys_meta.checksum.value() == dataoneTypes.checksum(md5).value()
         assert sys_meta.checksum.algorithm == 'MD5'
         assert sys_meta.fileName == name
+
+
+def test_create_eml_doc():
+
+    with httmock.HTTMock(mock_dataone_formats):
+        node = "https://cn-stage-2.test.dataone.org/cn/"
+        metadata = DataONEMetadata(node)
+        eml_pid = "urn:uuid:3c5d3c8d-b6c2-4dff-ac28-9f2e60a157a1"
+        res_pid = "urn:uuid:3c5d3c8d-b6c2-4dff-ac28-9f2e60a157a2"
+        manifest = MANIFEST
+        user_id = "user1"
+        zip_name = "tale.zip"
+        zip_size = 12345
+        license_text = "License text"
+        eml_doc = metadata.create_eml_doc(eml_pid, res_pid, manifest, user_id,
+                                          zip_name, zip_size, license_text)
+
+        assert str(eml_doc, 'utf-8') == EML.rstrip("\n")
