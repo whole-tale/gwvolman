@@ -176,7 +176,7 @@ class DataONEPublishProvider(PublishProvider):
 
                 self.job_manager.updateProgress(
                     message="Uploading file {}".format(zip_name),
-                    total=100,
+                    total=steps,
                     current=int(step / steps * 100),
                 )
                 step += 1
