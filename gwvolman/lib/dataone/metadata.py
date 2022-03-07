@@ -300,7 +300,7 @@ class DataONEMetadata(object):
                 Creates an initial EML record for the package based on a manifest.
         Individual objects will be added after-the-fact.
         :param eml_pid: The pid of the EML document
-        :param eml_pid: The pid of the to-be-created resource map
+        :param res_pid: The pid of the to-be-created resource map
         :param manifest: The manifest document
         :param user_id: The ORCID of the publisher
         :param zip_name: The name of the zipfile
