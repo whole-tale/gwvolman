@@ -379,6 +379,7 @@ class ZenodoPublishProvider(PublishProvider):
             "date": datetime.datetime.utcnow().isoformat(),
             "repository_id": str(deposition["id"]),
             "repository": self.resource_server,
+            "versionId": self.version_id,
         }
         if self.published:
             self.tale["publishInfo"][self._published_info_index].update(publish_info)

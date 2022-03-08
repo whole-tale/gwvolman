@@ -113,6 +113,10 @@ TALE_NO_DESC = {
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 MANIFEST = json.load(open(os.path.join(DATA_DIR, "manifest.json"), "r"))
 
+EML = ""
+with open(os.path.join(DATA_DIR, "eml_doc.xml"), "r") as f:
+    EML = f.read()
+
 PUBLISHED_TALE = {
     "_accessLevel": 2,
     "_id": "1cfd57fca18691e5d1feeda6",

@@ -1,7 +1,5 @@
 import io
-import json
 import logging
-import os
 from rdflib import Namespace
 from rdflib.term import URIRef
 import re
@@ -16,10 +14,6 @@ from d1_common.types.generated.dataoneTypes_v1 import AccessPolicy
 from d1_common import const as d1_const
 from d1_common.resource_map import \
     ResourceMap, DCTERMS
-
-from .constants import \
-    ExtraFileNames, \
-    file_descriptions
 
 """
 Methods that are responsible for handling metadata generation and parsing
@@ -300,19 +294,17 @@ class DataONEMetadata(object):
         userid_elem.text = user_id
         userid_elem.set('directory', self._get_directory(user_id))
 
-    def create_eml_doc(self, eml_pid, manifest, user_id, manifest_size,
-                       environment_size, run_local_size, fetch_size,
-                       license_text):
+    def create_eml_doc(self, eml_pid, res_pid, manifest, user_id, zip_name,
+                       zip_size, license_text):
         """
                 Creates an initial EML record for the package based on a manifest.
         Individual objects will be added after-the-fact.
         :param eml_pid: The pid of the EML document
+        :param res_pid: The pid of the to-be-created resource map
         :param manifest: The manifest document
         :param user_id: The ORCID of the publisher
-        :param manifest_size: The size of the manifest
-        :param environment_size: The size of the environment
-        :param run_local_size: The size of the run-local script
-        :param fetch_size: The size of the fetch file
+        :param zip_name: The name of the zipfile
+        :param zip_size: The size of the zipfile
         :param license_text: The text of the license file
         :return: ETree
         """
@@ -362,6 +354,9 @@ class DataONEMetadata(object):
             ET.SubElement(abstract_elem, 'para').text = \
                 self._strip_html_tags(str(description))
 
+        keywordset_elem = ET.SubElement(dataset_elem, 'keywordSet')
+        ET.SubElement(keywordset_elem, 'keyword').text = "Tale"
+
         # Add a section for the license file
         self.create_intellectual_rights(dataset_elem, license_text)
 
@@ -376,38 +371,11 @@ class DataONEMetadata(object):
         self.set_user_name(contact_elem, first_name, last_name)
         self.set_user_contact(contact_elem, user_id, contact_email)
 
-        for item in manifest['aggregates']:
-            if 'bundledAs' not in item:
-                name = os.path.basename(item['uri'])
-                size = item['wt:size']
-                mime_type = self.check_dataone_mimetype(item['wt:mimeType'])
-                self.add_object_record(dataset_elem, name, '', size, mime_type)
-
-        # Add the manifest itself
-        name = ExtraFileNames.manifest_file
-        description = file_descriptions[ExtraFileNames.manifest_file]
-        self.add_object_record(dataset_elem, name, description,
-                               manifest_size, 'application/json')
-
-        # Add the environment json
-        name = ExtraFileNames.environment_file
-        description = file_descriptions[ExtraFileNames.environment_file]
-        self.add_object_record(dataset_elem, name, description,
-                               environment_size, 'application/json')
-
-        # Add the run-local.sh file
-        description = file_descriptions[ExtraFileNames.run_local_file]
-        self.add_object_record(dataset_elem, ExtraFileNames.run_local_file, description,
-                               run_local_size, 'application/octet-stream')
-        # Add the fetch.txt file
-        description = file_descriptions[ExtraFileNames.fetch_file]
-        self.add_object_record(dataset_elem, ExtraFileNames.fetch_file, description,
-                               fetch_size, 'text/plain')
-
-        # Add README.md file
-        description = file_descriptions[ExtraFileNames.readme_file]
-        self.add_object_record(dataset_elem, ExtraFileNames.readme_file, description,
-                               fetch_size, 'text/plain')
+        # Add zipped bag
+        description = 'Contains complete export of Tale that can be downloaded and '\
+                      'run locally or re-imported into Whole Tale.'
+        self.add_object_record(dataset_elem, zip_name, description,
+                               zip_size, 'application/zip')
 
         """
         Emulate the behavior of ElementTree.tostring in Python 3.6.0
