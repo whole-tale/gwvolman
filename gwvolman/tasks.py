@@ -431,6 +431,8 @@ def publish(self,
     else:
         raise ValueError("Unsupported publisher ({})".format(token["provider"]))
 
+    if provider.published and provider.publication_info.get("versionId") == version_id:
+        raise ValueError(f"This version of the Tale ({version_id}) has already been published.")
     provider.publish()
 
 

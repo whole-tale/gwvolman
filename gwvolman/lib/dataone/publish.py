@@ -6,7 +6,6 @@ import jwt
 import logging
 import mimetypes
 import os
-from pathlib import Path
 import sys
 import tempfile
 from typing import Tuple, Union
@@ -296,6 +295,7 @@ class DataONEPublishProvider(PublishProvider):
                 "repository_id": res_pid,
                 "uri": package_url,
                 "date": datetime.datetime.utcnow().isoformat(),
+                "versionId": self.version_id,
             }
 
             if self.published:
