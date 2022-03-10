@@ -342,7 +342,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
         HOSTDIR + "/usr/bin/docker",
         "stats",
         "--format",
-        '"{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
+        '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
         container.id
     ]
     workspace_path = os.path.join(HOSTDIR + mountpoint, "workspace")

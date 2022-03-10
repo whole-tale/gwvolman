@@ -148,7 +148,7 @@ def test_recorded_run(
                     "/host/usr/bin/docker",
                     "stats",
                     "--format",
-                    '"{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
+                    '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
                     "container_id",
                 ],
                 stdout=-1,
