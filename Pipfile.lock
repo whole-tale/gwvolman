@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "eeeed18a0a2c96a39b642db1bbce80257dc51f7270d99de504ff17a2840e7729"
+            "sha256": "c6587eb84b327f854c98316f24ce36c6c307d798e6bf14a0d404bde5550d3fda"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -379,7 +379,7 @@
         },
         "girderfs": {
             "git": "https://github.com/whole-tale/girderfs",
-            "ref": "4723da340b97fea8a7cfe423eabb0de758bd9849"
+            "ref": "e8efef4412768b37eeac2363dd4924a9afafc6e5"
         },
         "idna": {
             "hashes": [
