@@ -37,6 +37,7 @@ UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
 RECORDED_RUN_STEP_TOTAL = 4
+VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -55,9 +56,6 @@ def create_volume(self, instance_id):
 
     mountpoint = _create_docker_volume(cli, vol_name)
 
-    homeDir = self.girder_client.loadOrCreateFolder(
-        'Home', user['_id'], 'user')
-
     _make_fuse_dirs(mountpoint, MOUNTPOINTS)
 
     api_key = _get_api_key(self.girder_client)
@@ -67,11 +65,10 @@ def create_volume(self, instance_id):
     if session['_id'] is not None:
         _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
 
-    #  webdav relies on mount.c module, don't use hostns for now
-    _mount_girderfs(mountpoint, 'home', 'wt_home', homeDir['_id'], api_key)
+    _mount_bind(mountpoint, 'home', user)
 
     if ENABLE_WORKSPACES:
-        _mount_girderfs(mountpoint, 'workspace', 'wt_work', tale['_id'], api_key)
+        _mount_bind(mountpoint, 'workspace', tale)
         _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
         _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=True)
 
@@ -587,6 +584,21 @@ def rebuild_image_cache(self):
             logging.error("Error building %s", image["name"])
         else:
             logging.info("Build time: %i seconds", elapsed)
+
+
+def _mount_bind(mountpoint, res_type, girder_obj):
+    if res_type == "home":
+        login = girder_obj["login"]
+        source_path = f"{VOLUMES_ROOT}/homes/{login[0]}/{login}"
+    elif res_type == "workspace":
+        tale_id = girder_obj["_id"]
+        source_path = f"{VOLUMES_ROOT}/workspaces/{tale_id[0]}/{tale_id}"
+    else:
+        raise ValueError(f"Unknown bind type {res_type}")
+    cmd = f"mount --bind {source_path} {mountpoint}/{res_type}"
+    logging.info("Calling: %s", cmd)
+    subprocess.check_call(cmd, shell=True)
+    print(f"Mounted {source_path} to {mountpoint}/{res_type}")
 
 
 def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=False):
