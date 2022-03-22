@@ -331,6 +331,8 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
     print("Running Tale with command: " + run_cmd)
     print("Running image: " + tag)
 
+    cli.images.pull(tag)
+
     container = cli.containers.create(
         image=tag,
         command=run_cmd,
