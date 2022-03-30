@@ -87,6 +87,7 @@ CPR_RUN_CALL = mock.call(
 @mock.patch("docker.client.DockerClient.volumes")
 @mock.patch("docker.client.DockerClient.containers")
 @mock.patch("subprocess.Popen")
+@mock.patch("subprocess.check_call")
 @mock.patch("os.remove", return_value=True)
 @mock.patch("gwvolman.tasks._get_container_config", return_value=CONTAINER_CONFIG)
 @mock.patch("gwvolman.tasks._get_api_key", return_value="key123")
@@ -106,6 +107,7 @@ def test_recorded_run(
     gak,
     gcc,
     osr,
+    spcc,
     sp,
     containers,
     volumes,
