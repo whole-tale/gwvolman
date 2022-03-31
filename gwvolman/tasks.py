@@ -586,13 +586,17 @@ def rebuild_image_cache(self):
             logging.info("Build time: %i seconds", elapsed)
 
 
-def _mount_bind(mountpoint, res_type, girder_obj):
+def _mount_bind(mountpoint, res_type, obj):
     if res_type == "home":
-        login = girder_obj["login"]
-        source_path = f"{VOLUMES_ROOT}/homes/{login[0]}/{login}"
+        source_path = f"{VOLUMES_ROOT}/homes/{obj['login'][0]}/{obj['login']}"
     elif res_type == "workspace":
-        tale_id = girder_obj["_id"]
-        source_path = f"{VOLUMES_ROOT}/workspaces/{tale_id[0]}/{tale_id}"
+        source_path = f"{VOLUMES_ROOT}/workspaces/{obj['_id'][0]}/{obj['_id']}"
+    elif res_type == "run":
+        source_path = (
+            f"{VOLUMES_ROOT}/runs/{obj['taleId'][0:2]}/{obj['taleId']}/"
+            f"{obj['runId']}/workspace"
+        )
+        res_type = "workspace"
     else:
         raise ValueError(f"Unknown bind type {res_type}")
     cmd = f"mount --bind {source_path} {mountpoint}/{res_type}"
@@ -725,8 +729,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     session = _get_session(self.girder_client, version_id=run['runVersionId'])
     if session['_id'] is not None:
         _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
-
-    _mount_girderfs(mountpoint, 'workspace', 'wt_run', run_id, api_key)
+    _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
 
     # Build the image for the run
     self.job_manager.updateProgress(
