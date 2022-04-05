@@ -54,7 +54,8 @@ def mock_gc_get(path, parameters=None):
 @mock.patch("gwvolman.tasks._create_docker_volume", return_value="/path/to/mountpoint/")
 @mock.patch("gwvolman.tasks._make_fuse_dirs", return_value=True)
 @mock.patch("gwvolman.tasks._mount_girderfs", return_value=True)
-def test_create_volume(mgfs, mfd, cdv, gs, gak, volumes, info, nu):
+@mock.patch("gwvolman.tasks._mount_bind", return_value=True)
+def test_create_volume(mbind, mgfs, mfd, cdv, gs, gak, volumes, info, nu):
 
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
@@ -81,11 +82,13 @@ def test_create_volume(mgfs, mfd, cdv, gs, gak, volumes, info, nu):
     except ValueError:
         assert False
 
+    mbind.assert_has_calls([
+        mock.call('/path/to/mountpoint/', 'home', {'_id': 'ghi567', 'login': 'user1'}),
+        mock.call('/path/to/mountpoint/', 'workspace', {'_id': 'tale1'}),
+    ])
     mgfs.assert_has_calls([
         mock.call('/path/to/mountpoint/', 'data', 'wt_dms', 'session1',
                   'apikey1', hostns=True),
-        mock.call('/path/to/mountpoint/', 'home', 'wt_home', 'folder1', 'apikey1'),
-        mock.call('/path/to/mountpoint/', 'workspace', 'wt_work', 'tale1', 'apikey1'),
         mock.call('/path/to/mountpoint/', 'versions', 'wt_versions', 'tale1',
                   'apikey1', hostns=True),
         mock.call('/path/to/mountpoint/', 'runs', 'wt_runs', 'tale1', 'apikey1',
