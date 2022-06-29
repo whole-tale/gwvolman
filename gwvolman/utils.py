@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 # Copyright (c) 2016, Data Exploration Lab
 # Distributed under the terms of the Modified BSD License.
 
@@ -8,6 +8,7 @@ from collections import namedtuple
 import os
 import random
 import re
+import requests
 import signal
 import string
 import subprocess
@@ -319,7 +320,30 @@ def _get_container_volumes(mountpoint, container_config, directories):
     return volumes
 
 
-def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
+class DummyTask:
+    canceled = False
+
+
+def stop_container(container):
+    try:
+        container.stop()
+    except requests.exceptions.ReadTimeout:
+        tries = 10
+        while tries > 0:
+            container.reload()
+            if container.status == "exited":
+                break
+        if container.status != "exited":
+            logging.error(f"Unable to stop container: {container.id}")
+    except docker.errors.NotFound:
+        logging.warning(f"Container {container.id} was already gone.")
+    except docker.errors.DockerException as dex:
+        logging.error(dex)
+        raise
+
+
+def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None):
+    task = task or DummyTask
     print("Starting recorded run")
 
     # Configure container volumes for recorded run
@@ -359,9 +383,19 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
     # Job output must come from stdout/stderr
     container.start()
     for line in container.logs(stream=True):
+        if task.canceled:
+            stop_container(container)
+            break
         print(line.decode('utf-8').strip())
 
-    ret = container.wait()
+    try:
+        ret = container.wait()
+    except docker.errors.NotFound:
+        if task.canceled:
+            ret = {"StatusCode": -123}
+        else:
+            raise
+
     # Shutdown docker stats
     p1.send_signal(signal.SIGTERM)
     dstats_fp.close()
@@ -382,7 +416,13 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
             for line in infp.readlines():
                 outfp.write(re.sub(r"\x1b\[2J\x1b\[H", "", line))
     os.remove(dstats_tmppath)
-    container.remove()
+    try:
+        container.remove()
+    except docker.errors.NotFound:
+        if task.canceled:
+            return ret
+        pass
+
     if ret['StatusCode'] != 0:
         raise ValueError('Error executing recorded run')
 
