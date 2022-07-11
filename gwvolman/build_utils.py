@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+from packaging import version
 import shutil
 import tempfile
 from urllib.parse import urlparse
@@ -16,7 +17,7 @@ class DockerHelper:
     def __init__(self):
         username = os.environ.get("REGISTRY_USER", "fido")
         password = os.environ.get("REGISTRY_PASS")
-        self.cli = docker.from_env(version='1.28')
+        self.cli = docker.from_env(version="1.28")
         self.cli.login(
             username=username, password=password, registry=DEPLOYMENT.registry_url
         )
@@ -34,6 +35,19 @@ class ImageBuilder:
         if not self._build_context:
             self._build_context = self._create_build_context()
         return self._build_context
+
+    @property
+    def engine(self):
+        # See https://github.com/whole-tale/repo2docker_wholetale/pull/44
+        tag = self.container_config.repo2docker_version.rsplit(":")[-1]
+        r2d_version = version.parse(tag[1:])
+
+        if isinstance(
+            r2d_version,
+            version.LegacyVersion,  # i.e. not something following v{version}
+        ) or r2d_version >= version.Version("1.2dev0"):
+            return "--engine dockercli"
+        return ""
 
     def __init__(self, gc, imageId=None, tale=None):
         if (imageId is None) == (tale is None):
@@ -61,7 +75,9 @@ class ImageBuilder:
 
     def _create_build_context(self):
         temp_dir = tempfile.mkdtemp(dir=os.environ.get("HOSTDIR", "/host") + "/tmp")
-        logging.info("Downloading r2d files to %s (taleId:%s)", temp_dir, self.tale["_id"])
+        logging.info(
+            "Downloading r2d files to %s (taleId:%s)", temp_dir, self.tale["_id"]
+        )
         extra_build_files = self.tale["config"].get("extra_build_files", [])
         workspaceId = self.tale.get("workspaceId")
         if workspaceId:
@@ -148,9 +164,9 @@ class ImageBuilder:
         """
 
         # Extra arguments for r2d
-        extra_args = ''
+        extra_args = ""
         if self.container_config.buildpack == "MatlabBuildPack":
-            extra_args = ' --build-arg FILE_INSTALLATION_KEY={} '.format(
+            extra_args = " --build-arg FILE_INSTALLATION_KEY={} ".format(
                 os.environ.get("MATLAB_FILE_INSTALLATION_KEY")
             )
         elif self.container_config.buildpack == "StataBuildPack":
@@ -160,13 +176,15 @@ class ImageBuilder:
             source_path = _get_stata_license_path()
             with open("/host/" + source_path, "r") as license_file:
                 stata_license = license_file.read()
-                encoded = base64.b64encode(stata_license.encode("ascii")).decode("ascii")
+                encoded = base64.b64encode(stata_license.encode("ascii")).decode(
+                    "ascii"
+                )
                 extra_args = " --build-arg STATA_LICENSE_ENCODED='{}' ".format(encoded)
 
         op = "--no-build" if dry_run else "--no-run"
         target_repo_dir = os.path.join(self.container_config.target_mount, "workspace")
         r2d_cmd = (
-            "jupyter-repo2docker "
+            f"jupyter-repo2docker {self.engine} "
             "--config='/wholetale/repo2docker_config.py' "
             f"--target-repo-dir='{target_repo_dir}' "
             f"--user-id=1000 --user-name={self.container_config.container_user} "
@@ -174,25 +192,21 @@ class ImageBuilder:
             f"--image-name {tag} {build_dir}"
         )
 
-        logging.info('Calling %s', r2d_cmd)
+        logging.info("Calling %s", r2d_cmd)
 
         volumes = {
-            '/var/run/docker.sock': {
-                'bind': '/var/run/docker.sock', 'mode': 'rw'
-            },
-            '/tmp': {
-                'bind': '/host/tmp', 'mode': 'ro'
-            }
+            "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
+            "/tmp": {"bind": "/host/tmp", "mode": "ro"},
         }
 
         container = self.dh.cli.containers.run(
             image=self.container_config.repo2docker_version,
             command=r2d_cmd,
-            environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+            environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
             remove=True,
-            volumes=volumes
+            volumes=volumes,
         )
 
         # Job output must come from stdout/stderr

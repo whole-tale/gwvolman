@@ -232,7 +232,8 @@ def test_r2d_calls(depl, dapicli):
         image_builder = ImageBuilder(gc, tale=tale)
         stata_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
-            command="jupyter-repo2docker --config='/wholetale/repo2docker_config.py'"
+            command="jupyter-repo2docker --engine dockercli"
+            " --config='/wholetale/repo2docker_config.py'"
             " --target-repo-dir='/home/jovyan/work/workspace'"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
             f"  --build-arg STATA_LICENSE_ENCODED='{base64.b64encode(b'blah').decode()}'"
@@ -257,7 +258,8 @@ def test_r2d_calls(depl, dapicli):
         image_builder = ImageBuilder(gc, tale=tale)
         matlab_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
-            command="jupyter-repo2docker --config='/wholetale/repo2docker_config.py'"
+            command="jupyter-repo2docker --engine dockercli"
+            " --config='/wholetale/repo2docker_config.py'"
             " --target-repo-dir='/home/jovyan/work/workspace'"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
             "  --build-arg FILE_INSTALLATION_KEY=fake-key"

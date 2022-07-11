@@ -5,6 +5,7 @@ fusepy==3.0.1
 girder-client==2.4.0
 girder-worker==0.5.0
 redis==3.5.3
+packaging
 pyOpenSSL
 requests
 pyyaml
