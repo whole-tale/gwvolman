@@ -388,13 +388,10 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
             break
         print(line.decode('utf-8').strip())
 
-    try:
+    if task.canceled:
+        ret = {"StatusCode": -123}
+    else:
         ret = container.wait()
-    except docker.errors.NotFound:
-        if task.canceled:
-            ret = {"StatusCode": -123}
-        else:
-            raise
 
     # Shutdown docker stats
     p1.send_signal(signal.SIGTERM)
@@ -419,11 +416,9 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
     try:
         container.remove()
     except docker.errors.NotFound:
-        if task.canceled:
-            return ret
         pass
 
-    if ret['StatusCode'] != 0:
+    if not task.canceled and ret['StatusCode'] != 0:
         raise ValueError('Error executing recorded run')
 
     return ret
