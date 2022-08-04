@@ -662,19 +662,51 @@ def _create_docker_volume(cli, vol_name):
 
 def _get_session(gc, tale=None, version_id=None):
     """Returns the session for a tale or version"""
-    session = {'_id': None}
+    if tale is None and version_id is None:
+        return {"_id": None}
 
-    if tale is not None and tale.get('dataSet') is not None:
-        session = gc.post(
-            '/dm/session', parameters={'taleId': tale['_id']})
-    elif version_id is not None:
-        # Get the dataset for the version
-        dataset = gc.get('/version/{}/dataSet'.format(version_id))
-        if dataset is not None:
-            session = gc.post(
-                '/dm/session', parameters={'dataSet': json.dumps(dataset)})
+    root_data_dir = gc.get(
+        "/folder",
+        parameters={
+            "parentType": "folder",
+            "parentId": tale["dataDirId"],
+            "name": version_id or "current"
+        }
+    )[0]
 
-    return session
+    dataset = []
+    for folder in gc.get(
+        "/folder",
+        parameters={
+            "parentType": "folder",
+            "parentId": root_data_dir["_id"],
+            "limit": 0,
+        },
+    ):
+        dataset.append(
+            {
+                "_modelType": "folder",
+                "itemId": folder["_id"],
+                "mountPath": folder["name"],
+            }
+        )
+
+    for item in gc.get(
+        "/item",
+        parameters={
+            "folderId": root_data_dir["_id"],
+            "limit": 0,
+        },
+    ):
+        dataset.append(
+            {
+                "_modelType": "item",
+                "itemId": item["_id"],
+                "mountPath": item["name"],
+            }
+        )
+
+    return gc.post("/dm/session", parameters={"dataSet": json.dumps(dataset)})
 
 
 def _write_env_json(workspace_dir, image):
