@@ -25,6 +25,7 @@ setup(
         'docker>=2.3.0',
         'requests',
         'markdown',
+        'lxml',
     ],
     packages=find_packages(),
     zip_safe=False
