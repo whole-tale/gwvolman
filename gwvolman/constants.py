@@ -24,7 +24,7 @@ LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
 REPO2DOCKER_VERSION = os.environ.get(
     "REPO2DOCKER_VERSION",
-    "wholetale/repo2docker_wholetale:latest"
+    "wholetale/repo2docker_wholetale:v1.2rc1"
 )
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 
@@ -73,6 +73,7 @@ R2D_FILENAMES = (
     "Dockerfile",
 )
 
+
 class InstanceStatus(object):
     LAUNCHING = 0
     RUNNING = 1
@@ -83,6 +84,7 @@ class TaleStatus(object):
     PREPARING = 0
     READY = 1
     ERROR = 2
+
 
 class RunStatus(object):
     UNKNOWN = 0
