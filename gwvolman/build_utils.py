@@ -14,17 +14,18 @@ from .utils import _get_container_config, DEPLOYMENT, _get_stata_license_path
 
 
 class DockerHelper:
-    def __init__(self):
+    def __init__(self, auth=True):
         username = os.environ.get("REGISTRY_USER", "fido")
         password = os.environ.get("REGISTRY_PASS")
         self.cli = docker.from_env(version="1.28")
-        self.cli.login(
-            username=username, password=password, registry=DEPLOYMENT.registry_url
-        )
         self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
-        self.apicli.login(
-            username=username, password=password, registry=DEPLOYMENT.registry_url
-        )
+        if auth:
+            self.cli.login(
+                username=username, password=password, registry=DEPLOYMENT.registry_url
+            )
+            self.apicli.login(
+                username=username, password=password, registry=DEPLOYMENT.registry_url
+            )
 
 
 class ImageBuilder:
@@ -49,12 +50,12 @@ class ImageBuilder:
             return "--engine dockercli"
         return ""
 
-    def __init__(self, gc, imageId=None, tale=None):
+    def __init__(self, gc, imageId=None, tale=None, auth=True):
         if (imageId is None) == (tale is None):
             raise ValueError("Only one of 'imageId' and 'tale' can be set")
 
         self.gc = gc
-        self.dh = DockerHelper()
+        self.dh = DockerHelper(auth=auth)
         if tale is None:
             tale = {
                 "_id": None,
