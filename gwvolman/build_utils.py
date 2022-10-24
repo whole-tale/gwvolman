@@ -145,6 +145,8 @@ class ImageBuilder:
             self.build_context,
             dry_run=True,
         )
+        if ret["StatusCode"] != 0:
+            raise ValueError(f"Failed to compute a tag {ret=}")
 
         # Remove the temporary directory, cause we want entire workspace for build
         # NOTE: or maybe not? That would avoid bloating image with things we override anyway
