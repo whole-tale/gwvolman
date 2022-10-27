@@ -14,17 +14,18 @@ from .utils import _get_container_config, DEPLOYMENT, _get_stata_license_path
 
 
 class DockerHelper:
-    def __init__(self):
+    def __init__(self, auth=True):
         username = os.environ.get("REGISTRY_USER", "fido")
         password = os.environ.get("REGISTRY_PASS")
         self.cli = docker.from_env(version="1.28")
-        self.cli.login(
-            username=username, password=password, registry=DEPLOYMENT.registry_url
-        )
         self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
-        self.apicli.login(
-            username=username, password=password, registry=DEPLOYMENT.registry_url
-        )
+        if auth:
+            self.cli.login(
+                username=username, password=password, registry=DEPLOYMENT.registry_url
+            )
+            self.apicli.login(
+                username=username, password=password, registry=DEPLOYMENT.registry_url
+            )
 
 
 class ImageBuilder:
@@ -49,12 +50,12 @@ class ImageBuilder:
             return "--engine dockercli"
         return ""
 
-    def __init__(self, gc, imageId=None, tale=None):
+    def __init__(self, gc, imageId=None, tale=None, auth=True):
         if (imageId is None) == (tale is None):
             raise ValueError("Only one of 'imageId' and 'tale' can be set")
 
         self.gc = gc
-        self.dh = DockerHelper()
+        self.dh = DockerHelper(auth=auth)
         if tale is None:
             tale = {
                 "_id": None,
@@ -74,7 +75,8 @@ class ImageBuilder:
             )
 
     def _create_build_context(self):
-        temp_dir = tempfile.mkdtemp(dir=os.environ.get("HOSTDIR", "/host") + "/tmp")
+        tmp_path = os.path.join(os.environ.get("HOSTDIR", "/host"), "tmp")
+        temp_dir = tempfile.mkdtemp(dir=tmp_path)
         logging.info(
             "Downloading r2d files to %s (taleId:%s)", temp_dir, self.tale["_id"]
         )
@@ -144,6 +146,8 @@ class ImageBuilder:
             self.build_context,
             dry_run=True,
         )
+        if ret["StatusCode"] != 0:
+            raise ValueError(f"Failed to compute a tag {ret=}")
 
         # Remove the temporary directory, cause we want entire workspace for build
         # NOTE: or maybe not? That would avoid bloating image with things we override anyway
@@ -173,8 +177,11 @@ class ImageBuilder:
             # License is also needed at build time but can't easily
             # be mounted. Pass it as a build arg
 
-            source_path = _get_stata_license_path()
-            with open("/host/" + source_path, "r") as license_file:
+            source_path = os.path.join(
+                os.environ.get("HOSTDIR", "/host"),
+                _get_stata_license_path()
+            )
+            with open(source_path, "r") as license_file:
                 stata_license = license_file.read()
                 encoded = base64.b64encode(stata_license.encode("ascii")).decode(
                     "ascii"
@@ -196,7 +203,10 @@ class ImageBuilder:
 
         volumes = {
             "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-            "/tmp": {"bind": "/host/tmp", "mode": "ro"},
+            "/tmp": {
+                "bind": os.path.join(os.environ.get("HOSTDIR", "/host"), "tmp"),
+                "mode": "ro"
+            },
         }
 
         container = self.dh.cli.containers.run(

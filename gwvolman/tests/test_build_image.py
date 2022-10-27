@@ -244,7 +244,7 @@ def test_r2d_calls(depl, dapicli):
             remove=True,
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-                "/tmp": {"bind": "/host/tmp", "mode": "ro"},
+                "/tmp": {"bind": "/tmp", "mode": "ro"},
             },
         )
 
@@ -270,7 +270,7 @@ def test_r2d_calls(depl, dapicli):
             remove=True,
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-                "/tmp": {"bind": "/host/tmp", "mode": "ro"},
+                "/tmp": {"bind": "/tmp", "mode": "ro"},
             },
         )
         ret, _ = image_builder.run_r2d(
