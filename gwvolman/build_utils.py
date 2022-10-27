@@ -75,7 +75,8 @@ class ImageBuilder:
             )
 
     def _create_build_context(self):
-        temp_dir = tempfile.mkdtemp(dir=os.environ.get("HOSTDIR", "/host") + "/tmp")
+        tmp_path = os.path.join(os.environ.get("HOSTDIR", "/host"), "tmp")
+        temp_dir = tempfile.mkdtemp(dir=tmp_path)
         logging.info(
             "Downloading r2d files to %s (taleId:%s)", temp_dir, self.tale["_id"]
         )
@@ -176,8 +177,11 @@ class ImageBuilder:
             # License is also needed at build time but can't easily
             # be mounted. Pass it as a build arg
 
-            source_path = _get_stata_license_path()
-            with open("/host/" + source_path, "r") as license_file:
+            source_path = os.path.join(
+                os.environ.get("HOSTDIR", "/host"),
+                _get_stata_license_path()
+            )
+            with open(source_path, "r") as license_file:
                 stata_license = license_file.read()
                 encoded = base64.b64encode(stata_license.encode("ascii")).decode(
                     "ascii"
@@ -199,7 +203,10 @@ class ImageBuilder:
 
         volumes = {
             "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-            "/tmp": {"bind": "/host/tmp", "mode": "ro"},
+            "/tmp": {
+                "bind": os.path.join(os.environ.get("HOSTDIR", "/host"), "tmp"),
+                "mode": "ro"
+            },
         }
 
         container = self.dh.cli.containers.run(
