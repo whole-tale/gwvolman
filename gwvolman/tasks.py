@@ -771,7 +771,9 @@ def recorded_run(self, run_id, tale_id, entrypoint):
         self.job_manager.updateProgress(
             message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
             current=4, forceFlush=True)
-
+    except Exception as exc:
+        logging.error(exc, exc_info=True)
+        raise
     finally:
         # Remove the environment.json
         os.remove(env_json)
