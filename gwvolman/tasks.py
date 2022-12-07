@@ -431,6 +431,7 @@ def publish(self,
     if provider.published and provider.publication_info.get("versionId") == version_id:
         raise ValueError(f"This version of the Tale ({version_id}) has already been published.")
     provider.publish()
+    return provider.publication_info
 
 
 @girder_job(title='Import Tale')
