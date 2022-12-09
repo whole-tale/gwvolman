@@ -1,4 +1,3 @@
-
 # Copyright (c) 2016, Data Exploration Lab
 # Distributed under the terms of the Modified BSD License.
 
@@ -6,12 +5,15 @@
 
 from collections import namedtuple
 import os
+import queue
 import random
 import re
 import requests
 import signal
 import string
 import subprocess
+import time
+import threading
 import uuid
 import logging
 import docker
@@ -343,7 +345,13 @@ def stop_container(container):
 
 
 def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None):
+
+    def logging_worker(log_queue, container):
+        for line in container.logs(stream=True):
+            log_queue.put(line.decode("utf-8").strip(), block=False)
+
     task = task or DummyTask
+    log_queue = queue.Queue()
     print("Starting recorded run")
 
     # Configure container volumes for recorded run
@@ -364,6 +372,11 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
         volumes=volumes
     )
 
+    logging_thread = threading.Thread(
+        target=logging_worker,
+        args=(log_queue, container)
+    )
+
     cmd = [
         HOSTDIR + "/usr/bin/docker",
         "stats",
@@ -382,11 +395,24 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
 
     # Job output must come from stdout/stderr
     container.start()
-    for line in container.logs(stream=True):
-        if task.canceled:
-            stop_container(container)
-            break
-        print(line.decode('utf-8').strip())
+    logging_thread.start()
+
+    try:
+        container = cli.containers.get(container.id)
+        while container.status == "running":
+            while not log_queue.empty():
+                print(log_queue.get_nowait(), flush=True)
+            if task.canceled:
+                stop_container(container)
+                break
+            time.sleep(1)
+            container = cli.containers.get(container.id)
+    except docker.errors.NotFound:
+        pass
+
+    while not log_queue.empty():
+        print(log_queue.get_nowait())
+    logging_thread.join()
 
     if task.canceled:
         ret = {"StatusCode": -123}
