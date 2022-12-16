@@ -226,6 +226,7 @@ class ImageBuilder:
         h = hashlib.md5("R2D output".encode())
         for line in container.logs(stream=True):
             if task.canceled:
+                task.request.chain = None
                 stop_container(container)
                 break
             output = line.decode("utf-8").strip()

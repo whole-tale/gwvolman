@@ -358,6 +358,7 @@ def build_tale_image(task, tale_id, force=False):
     # temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
     ret, _ = image_builder.run_r2d(tag, image_builder.build_context, task=task)
     if task.canceled:
+        task.request.chain = None
         logging.info("Build canceled.")
         return
 
