@@ -41,14 +41,14 @@ class ImageBuilder:
     def engine(self):
         # See https://github.com/whole-tale/repo2docker_wholetale/pull/44
         tag = self.container_config.repo2docker_version.rsplit(":")[-1]
-        r2d_version = version.parse(tag[1:])
-
-        if isinstance(
-            r2d_version,
-            version.LegacyVersion,  # i.e. not something following v{version}
-        ) or r2d_version >= version.Version("1.2dev0"):
-            return "--engine dockercli"
-        return ""
+        try:
+            if version.parse(tag[1:]) < version.Version("1.2dev0"):
+                return ""
+        except version.InvalidVersion:
+            # i.e. not something following v{version} which in our case
+            # will be either "latest" or some specific manual tag
+            pass
+        return "--engine dockercli"
 
     def __init__(self, gc, imageId=None, tale=None, auth=True):
         if (imageId is None) == (tale is None):

@@ -279,6 +279,33 @@ def test_r2d_calls(depl, dapicli):
         )
         mock_container_run.assert_has_calls([matlab_expected_call])
 
+        tale["imageId"] = "jupyter"
+        for r2d_tag, engine in [("latest", "--engine dockercli"), ("v1.0", "")]:
+            r2d = f"wholetale/repo2docker_wholetale:{r2d_tag}"
+            tale["imageInfo"] = {"repo2docker_version": r2d}
+            image_builder = ImageBuilder(gc, tale=tale)
+            expected_call = mock.call(
+                image=r2d,
+                command=f"jupyter-repo2docker {engine}"
+                " --config='/wholetale/repo2docker_config.py'"
+                " --target-repo-dir='/home/jovyan/work/workspace'"
+                " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
+                f"  --image-name some_tag {image_builder.build_context}",
+                environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
+                privileged=True,
+                detach=True,
+                remove=True,
+                volumes={
+                    "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
+                    "/tmp": {"bind": "/tmp", "mode": "ro"},
+                },
+            )
+            ret, _ = image_builder.run_r2d(
+                "some_tag",
+                image_builder.build_context,
+            )
+            mock_container_run.assert_has_calls([expected_call])
+
 
 @mock.patch(
     "gwvolman.utils.Deployment.registry_url",
