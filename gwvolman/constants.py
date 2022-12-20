@@ -92,4 +92,4 @@ class RunStatus(object):
     RUNNING = 2
     COMPLETED = 3
     FAILED = 4
-    CANCELLED = 5
+    CANCELED = 5

@@ -10,7 +10,13 @@ import tempfile
 from urllib.parse import urlparse
 
 from .constants import R2D_FILENAMES
-from .utils import _get_container_config, DEPLOYMENT, _get_stata_license_path
+from .utils import (
+    _get_container_config,
+    DEPLOYMENT,
+    _get_stata_license_path,
+    DummyTask,
+    stop_container
+)
 
 
 class DockerHelper:
@@ -155,17 +161,14 @@ class ImageBuilder:
 
         return f"{registry_netloc}/tale/{env_hash.hexdigest()}:{output_digest}"
 
-    def run_r2d(
-        self,
-        tag,
-        build_dir,
-        dry_run=False,
-    ):
+    def run_r2d(self, tag, build_dir, dry_run=False, task=None):
         """
         Run repo2docker on the workspace using a shared temp directory. Note that
         this uses the "local" provider.  Use the same default user-id and
         user-name as BinderHub
         """
+
+        task = task or DummyTask
 
         # Extra arguments for r2d
         extra_args = ""
@@ -222,13 +225,21 @@ class ImageBuilder:
         # Job output must come from stdout/stderr
         h = hashlib.md5("R2D output".encode())
         for line in container.logs(stream=True):
+            if task.canceled:
+                task.request.chain = None
+                stop_container(container)
+                break
             output = line.decode("utf-8").strip()
             if not output.startswith("Using local repo"):  # contains variable path
                 h.update(output.encode("utf-8"))
             if not dry_run:  # We don't want to see it.
                 print(output)
 
-        ret = container.wait()
+        try:
+            ret = container.wait()
+        except docker.errors.NotFound:
+            ret = {"StatusCode": -123}
+
         if ret["StatusCode"] != 0:
             logging.error("Error building image")
         # Since detach=True, then we need to explicitly check for the

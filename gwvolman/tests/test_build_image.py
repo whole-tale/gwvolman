@@ -308,11 +308,16 @@ def test_r2d_calls(depl, dapicli):
 
 
 @mock.patch(
+    "girder_worker.app.Task.canceled",
+    new_callable=mock.PropertyMock,
+    return_value=False
+)
+@mock.patch(
     "gwvolman.utils.Deployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
-def test_build_image_task(deployment):
+def test_build_image_task(deployment, task):
     from gwvolman.tasks import build_tale_image
     from gwvolman.constants import TaleStatus
 
