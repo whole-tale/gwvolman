@@ -38,7 +38,7 @@ def mock_gc_get(path, parameters=None):
 
 CONTAINER_CONFIG = ContainerConfig(
     buildpack="JupyterBuildPack",
-    repo2docker_version="wholetale/repo2docker_wholetale:v1.2rc1",
+    repo2docker_version="wholetale/repo2docker_wholetale:v1.2rc2",
     image="abc123",
     command="test",
     mem_limit=2,
