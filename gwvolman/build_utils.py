@@ -212,6 +212,7 @@ class ImageBuilder:
             },
         }
 
+        print(f"Using repo2docker {self.container_config.repo2docker_version}")
         container = self.dh.cli.containers.run(
             image=self.container_config.repo2docker_version,
             command=r2d_cmd,
