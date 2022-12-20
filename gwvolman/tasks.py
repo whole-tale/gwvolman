@@ -752,17 +752,8 @@ def recorded_run(self, run_id, tale_id, entrypoint):
         "Computed tag: %s (taleId:%s, versionId:%s)", tag, tale_id, run["runVersionId"]
     )
 
-    work_dir = os.path.join(mountpoint, 'workspace')
-    image = self.girder_client.get('/image/%s' % tale['imageId'])
-    env_json = _write_env_json(work_dir, image)
-    state.env_written = env_json
-
     # Build currently assumes tmp directory, in this case mount the run workspace
     container_config = image_builder.container_config
-    # TODO: What should we use here? Latest? What the tale was built with?
-    # repo2docker_version = REPO2DOCKER_VERSION
-    print(f"Using repo2docker {container_config.repo2docker_version}")
-    work_target = os.path.join(container_config.target_mount, 'workspace')
 
     if self.canceled:
         state.cleanup()
@@ -771,12 +762,14 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     try:
         if not image_builder.cached_image(tag):
             print("Building image for recorded run " + tag)
-            ret, _ = image_builder.run_r2d(tag, work_target, task=self)
+            ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
             if self.canceled:
                 state.cleanup()
                 return
             if ret['StatusCode'] != 0:
                 raise ValueError('Image build failed for recorded run {}'.format(run_id))
+            for line in image_builder.dh.apicli.push(tag, stream=True):
+                print(line.decode('utf-8'))
 
         self.job_manager.updateProgress(
             message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
@@ -810,7 +803,6 @@ class RecordedRunCleaner:
     volume_created = None
     fs_mounted = None
     session_created = None
-    env_written = None
 
     def __init__(self, run, gc):
         self.gc = gc
@@ -822,9 +814,6 @@ class RecordedRunCleaner:
         )
 
     def cleanup(self, canceled=True):
-        if self.env_written:
-            os.remove(self.env_written)
-            self.env_written = None
 
         if self.fs_mounted:
             for suffix in ["data", "workspace"]:
