@@ -356,9 +356,13 @@ def build_tale_image(task, tale_id, force=False):
 
     # Prepare build context
     # temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
-    ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
+    ret, _ = image_builder.run_r2d(tag, image_builder.build_context, task=task)
+    if task.canceled:
+        task.request.chain = None
+        logging.info("Build canceled.")
+        return
 
-    if ret['StatusCode'] != 0:
+    if ret["StatusCode"] != 0:
         # repo2docker build failed
         raise ValueError('Error building tale {}'.format(tale_id))
 
@@ -431,6 +435,7 @@ def publish(self,
     if provider.published and provider.publication_info.get("versionId") == version_id:
         raise ValueError(f"This version of the Tale ({version_id}) has already been published.")
     provider.publish()
+    return provider.publication_info
 
 
 @girder_job(title='Import Tale')
@@ -699,6 +704,7 @@ def _write_env_json(workspace_dir, image):
 def recorded_run(self, run_id, tale_id, entrypoint):
     """Start a recorded run for a tale version"""
     run = self.girder_client.get(f"/run/{run_id}")
+    state = RecordedRunCleaner(run, self.girder_client)
     tale = self.girder_client.get(
         f"/tale/{tale_id}/restore", parameters={"versionId": run["runVersionId"]}
     )
@@ -720,6 +726,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     # Create Docker volume
     vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
     mountpoint = _create_docker_volume(image_builder.dh.cli, vol_name)
+    state.volume_created = image_builder.dh.cli.volumes.get(vol_name)
 
     # Create fuse directories
     _make_fuse_dirs(mountpoint, ['data', 'workspace'])
@@ -727,9 +734,12 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     # Mount data and workspace for the run
     api_key = _get_api_key(self.girder_client)
     session = _get_session(self.girder_client, version_id=run['runVersionId'])
+    state.session_created = session["_id"]
+
     if session['_id'] is not None:
         _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
     _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
+    state.fs_mounted = mountpoint
 
     # Build the image for the run
     self.job_manager.updateProgress(
@@ -742,59 +752,95 @@ def recorded_run(self, run_id, tale_id, entrypoint):
         "Computed tag: %s (taleId:%s, versionId:%s)", tag, tale_id, run["runVersionId"]
     )
 
-    work_dir = os.path.join(mountpoint, 'workspace')
-    image = self.girder_client.get('/image/%s' % tale['imageId'])
-    env_json = _write_env_json(work_dir, image)
-
     # Build currently assumes tmp directory, in this case mount the run workspace
     container_config = image_builder.container_config
-    # TODO: What should we use here? Latest? What the tale was built with?
-    # repo2docker_version = REPO2DOCKER_VERSION
-    print(f"Using repo2docker {container_config.repo2docker_version}")
-    work_target = os.path.join(container_config.target_mount, 'workspace')
+
+    if self.canceled:
+        state.cleanup()
+        return
 
     try:
         if not image_builder.cached_image(tag):
             print("Building image for recorded run " + tag)
-            ret, _ = image_builder.run_r2d(tag, work_target)
+            ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
+            if self.canceled:
+                state.cleanup()
+                return
             if ret['StatusCode'] != 0:
                 raise ValueError('Image build failed for recorded run {}'.format(run_id))
+            for line in image_builder.dh.apicli.push(tag, stream=True):
+                print(line.decode('utf-8'))
 
         self.job_manager.updateProgress(
             message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
             current=3, forceFlush=True)
 
         set_run_status(run, RunStatus.RUNNING)
-        _recorded_run(image_builder.dh.cli, mountpoint, container_config, tag, entrypoint)
+        _recorded_run(
+            image_builder.dh.cli,
+            mountpoint,
+            container_config,
+            tag,
+            entrypoint,
+            task=self
+        )
+        if self.canceled:
+            state.cleanup()
+            return
 
         set_run_status(run, RunStatus.COMPLETED)
         self.job_manager.updateProgress(
             message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
             current=4, forceFlush=True)
-
+    except Exception as exc:
+        logging.error(exc, exc_info=True)
+        raise
     finally:
-        # Remove the environment.json
-        os.remove(env_json)
+        state.cleanup(False)
 
-        # TODO: _cleanup_volumes
-        for suffix in ['data', 'workspace']:
-            dest = os.path.join(mountpoint, suffix)
-            logging.info("Unmounting %s", dest)
-            subprocess.call("umount %s" % dest, shell=True)
 
-        # Delete the session
-        try:
-            self.girder_client.delete('/dm/session/{}'.format(session['_id']))
-        except Exception as e:
-            logging.error("Unable to remove session. %s", e)
+class RecordedRunCleaner:
+    volume_created = None
+    fs_mounted = None
+    session_created = None
 
-        # Delete the Docker volume
-        try:
-            volume = image_builder.dh.cli.volumes.get(vol_name)
+    def __init__(self, run, gc):
+        self.gc = gc
+        self.run = run
+
+    def set_run_status(self, status):
+        self.gc.patch(
+            "/run/{_id}/status".format(**self.run), parameters={'status': status}
+        )
+
+    def cleanup(self, canceled=True):
+
+        if self.fs_mounted:
+            for suffix in ["data", "workspace"]:
+                dest = os.path.join(self.fs_mounted, suffix)
+                logging.info("Unmounting %s", dest)
+                subprocess.call("umount %s" % dest, shell=True)
+            self.fs_mounted = None
+
+        if self.session_created:
+            # Delete the session
+            try:
+                self.gc.delete('/dm/session/{}'.format(self.session_created))
+            except Exception as e:
+                logging.error("Unable to remove session. %s", e)
+            self.session_created = None
+
+        if self.volume_created:
+            volume = self.volume_created
+            # Delete the Docker volume
             try:
                 logging.info("Removing volume: %s", volume.id)
                 volume.remove()
             except Exception as e:
                 logging.error("Unable to remove volume [%s]: %s", volume.id, e)
-        except docker.errors.NotFound:
-            logging.info("Volume not present [%s].", vol_name)
+            except docker.errors.NotFound:
+                logging.info("Volume not present [%s].", volume.id)
+            self.volume_created = None
+
+        if canceled:
+            self.set_run_status(RunStatus.CANCELED)

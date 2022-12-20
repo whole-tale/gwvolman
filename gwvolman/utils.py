@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2016, Data Exploration Lab
 # Distributed under the terms of the Modified BSD License.
 
@@ -6,11 +5,15 @@
 
 from collections import namedtuple
 import os
+import queue
 import random
 import re
+import requests
 import signal
 import string
 import subprocess
+import time
+import threading
 import uuid
 import logging
 import docker
@@ -319,7 +322,36 @@ def _get_container_volumes(mountpoint, container_config, directories):
     return volumes
 
 
-def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
+class DummyTask:
+    canceled = False
+
+
+def stop_container(container):
+    try:
+        container.stop()
+    except requests.exceptions.ReadTimeout:
+        tries = 10
+        while tries > 0:
+            container.reload()
+            if container.status == "exited":
+                break
+        if container.status != "exited":
+            logging.error(f"Unable to stop container: {container.id}")
+    except docker.errors.NotFound:
+        logging.warning(f"Container {container.id} was already gone.")
+    except docker.errors.DockerException as dex:
+        logging.error(dex)
+        raise
+
+
+def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None):
+
+    def logging_worker(log_queue, container):
+        for line in container.logs(stream=True):
+            log_queue.put(line.decode("utf-8").strip(), block=False)
+
+    task = task or DummyTask
+    log_queue = queue.Queue()
     print("Starting recorded run")
 
     # Configure container volumes for recorded run
@@ -340,6 +372,11 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
         volumes=volumes
     )
 
+    logging_thread = threading.Thread(
+        target=logging_worker,
+        args=(log_queue, container)
+    )
+
     cmd = [
         HOSTDIR + "/usr/bin/docker",
         "stats",
@@ -358,10 +395,30 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
 
     # Job output must come from stdout/stderr
     container.start()
-    for line in container.logs(stream=True):
-        print(line.decode('utf-8').strip())
+    logging_thread.start()
 
-    ret = container.wait()
+    try:
+        container = cli.containers.get(container.id)
+        while container.status == "running":
+            while not log_queue.empty():
+                print(log_queue.get_nowait(), flush=True)
+            if task.canceled:
+                stop_container(container)
+                break
+            time.sleep(1)
+            container = cli.containers.get(container.id)
+    except docker.errors.NotFound:
+        pass
+
+    while not log_queue.empty():
+        print(log_queue.get_nowait())
+    logging_thread.join()
+
+    if task.canceled:
+        ret = {"StatusCode": -123}
+    else:
+        ret = container.wait()
+
     # Shutdown docker stats
     p1.send_signal(signal.SIGTERM)
     dstats_fp.close()
@@ -382,8 +439,12 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint):
             for line in infp.readlines():
                 outfp.write(re.sub(r"\x1b\[2J\x1b\[H", "", line))
     os.remove(dstats_tmppath)
-    container.remove()
-    if ret['StatusCode'] != 0:
+    try:
+        container.remove()
+    except docker.errors.NotFound:
+        pass
+
+    if not task.canceled and ret['StatusCode'] != 0:
         raise ValueError('Error executing recorded run')
 
     return ret

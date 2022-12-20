@@ -24,7 +24,7 @@ LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
 REPO2DOCKER_VERSION = os.environ.get(
     "REPO2DOCKER_VERSION",
-    "wholetale/repo2docker_wholetale:v1.2rc1"
+    "wholetale/repo2docker_wholetale:v1.2rc2"
 )
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 
@@ -92,4 +92,4 @@ class RunStatus(object):
     RUNNING = 2
     COMPLETED = 3
     FAILED = 4
-    CANCELLED = 5
+    CANCELED = 5

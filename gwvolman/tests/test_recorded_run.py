@@ -38,7 +38,7 @@ def mock_gc_get(path, parameters=None):
 
 CONTAINER_CONFIG = ContainerConfig(
     buildpack="JupyterBuildPack",
-    repo2docker_version="wholetale/repo2docker_wholetale:v1.2rc1",
+    repo2docker_version="wholetale/repo2docker_wholetale:v1.2rc2",
     image="abc123",
     command="test",
     mem_limit=2,
@@ -122,12 +122,15 @@ def test_recorded_run(
     # This should succeed
     image_builder.return_value.run_r2d.return_value = ({"StatusCode": 0}, "")
     image_builder.return_value.container_config.target_mount = "/work"
-    image_builder.return_value.dh.cli.containers.create.return_value.wait.return_value = \
+    image_builder.return_value.dh.cli.containers.get.return_value.wait.return_value = \
         {"StatusCode": 0}
     image_builder.return_value.dh.cli.containers.create.return_value.id = \
         "container_id"
+    image_builder.return_value.dh.cli.containers.get.return_value.id = \
+        "container_id"
     image_builder.return_value.get_tag.return_value = \
         "registry.test.wholetale.org/123abc/1624994605"
+
     try:
         with mock.patch(
             'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
@@ -166,7 +169,7 @@ def test_recorded_run(
     )
 
     # Test execution failure
-    image_builder.return_value.dh.cli.containers.create.return_value.wait.side_effect = \
+    image_builder.return_value.dh.cli.containers.get.return_value.wait.side_effect = \
         ValueError("foo")
 
     with pytest.raises(ValueError):

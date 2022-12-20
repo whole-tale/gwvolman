@@ -10,21 +10,28 @@ import tempfile
 from urllib.parse import urlparse
 
 from .constants import R2D_FILENAMES
-from .utils import _get_container_config, DEPLOYMENT, _get_stata_license_path
+from .utils import (
+    _get_container_config,
+    DEPLOYMENT,
+    _get_stata_license_path,
+    DummyTask,
+    stop_container
+)
 
 
 class DockerHelper:
-    def __init__(self):
+    def __init__(self, auth=True):
         username = os.environ.get("REGISTRY_USER", "fido")
         password = os.environ.get("REGISTRY_PASS")
         self.cli = docker.from_env(version="1.28")
-        self.cli.login(
-            username=username, password=password, registry=DEPLOYMENT.registry_url
-        )
         self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
-        self.apicli.login(
-            username=username, password=password, registry=DEPLOYMENT.registry_url
-        )
+        if auth:
+            self.cli.login(
+                username=username, password=password, registry=DEPLOYMENT.registry_url
+            )
+            self.apicli.login(
+                username=username, password=password, registry=DEPLOYMENT.registry_url
+            )
 
 
 class ImageBuilder:
@@ -40,21 +47,21 @@ class ImageBuilder:
     def engine(self):
         # See https://github.com/whole-tale/repo2docker_wholetale/pull/44
         tag = self.container_config.repo2docker_version.rsplit(":")[-1]
-        r2d_version = version.parse(tag[1:])
+        try:
+            if version.parse(tag[1:]) < version.Version("1.2dev0"):
+                return ""
+        except version.InvalidVersion:
+            # i.e. not something following v{version} which in our case
+            # will be either "latest" or some specific manual tag
+            pass
+        return "--engine dockercli"
 
-        if isinstance(
-            r2d_version,
-            version.LegacyVersion,  # i.e. not something following v{version}
-        ) or r2d_version >= version.Version("1.2dev0"):
-            return "--engine dockercli"
-        return ""
-
-    def __init__(self, gc, imageId=None, tale=None):
+    def __init__(self, gc, imageId=None, tale=None, auth=True):
         if (imageId is None) == (tale is None):
             raise ValueError("Only one of 'imageId' and 'tale' can be set")
 
         self.gc = gc
-        self.dh = DockerHelper()
+        self.dh = DockerHelper(auth=auth)
         if tale is None:
             tale = {
                 "_id": None,
@@ -74,7 +81,8 @@ class ImageBuilder:
             )
 
     def _create_build_context(self):
-        temp_dir = tempfile.mkdtemp(dir=os.environ.get("HOSTDIR", "/host") + "/tmp")
+        tmp_path = os.path.join(os.environ.get("HOSTDIR", "/host"), "tmp")
+        temp_dir = tempfile.mkdtemp(dir=tmp_path)
         logging.info(
             "Downloading r2d files to %s (taleId:%s)", temp_dir, self.tale["_id"]
         )
@@ -144,6 +152,8 @@ class ImageBuilder:
             self.build_context,
             dry_run=True,
         )
+        if ret["StatusCode"] != 0:
+            raise ValueError(f"Failed to compute a tag {ret=}")
 
         # Remove the temporary directory, cause we want entire workspace for build
         # NOTE: or maybe not? That would avoid bloating image with things we override anyway
@@ -151,17 +161,14 @@ class ImageBuilder:
 
         return f"{registry_netloc}/tale/{env_hash.hexdigest()}:{output_digest}"
 
-    def run_r2d(
-        self,
-        tag,
-        build_dir,
-        dry_run=False,
-    ):
+    def run_r2d(self, tag, build_dir, dry_run=False, task=None):
         """
         Run repo2docker on the workspace using a shared temp directory. Note that
         this uses the "local" provider.  Use the same default user-id and
         user-name as BinderHub
         """
+
+        task = task or DummyTask
 
         # Extra arguments for r2d
         extra_args = ""
@@ -173,8 +180,11 @@ class ImageBuilder:
             # License is also needed at build time but can't easily
             # be mounted. Pass it as a build arg
 
-            source_path = _get_stata_license_path()
-            with open("/host/" + source_path, "r") as license_file:
+            source_path = os.path.join(
+                os.environ.get("HOSTDIR", "/host"),
+                _get_stata_license_path()
+            )
+            with open(source_path, "r") as license_file:
                 stata_license = license_file.read()
                 encoded = base64.b64encode(stata_license.encode("ascii")).decode(
                     "ascii"
@@ -196,9 +206,13 @@ class ImageBuilder:
 
         volumes = {
             "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-            "/tmp": {"bind": "/host/tmp", "mode": "ro"},
+            "/tmp": {
+                "bind": os.path.join(os.environ.get("HOSTDIR", "/host"), "tmp"),
+                "mode": "ro"
+            },
         }
 
+        print(f"Using repo2docker {self.container_config.repo2docker_version}")
         container = self.dh.cli.containers.run(
             image=self.container_config.repo2docker_version,
             command=r2d_cmd,
@@ -212,13 +226,21 @@ class ImageBuilder:
         # Job output must come from stdout/stderr
         h = hashlib.md5("R2D output".encode())
         for line in container.logs(stream=True):
+            if task.canceled:
+                task.request.chain = None
+                stop_container(container)
+                break
             output = line.decode("utf-8").strip()
             if not output.startswith("Using local repo"):  # contains variable path
                 h.update(output.encode("utf-8"))
             if not dry_run:  # We don't want to see it.
                 print(output)
 
-        ret = container.wait()
+        try:
+            ret = container.wait()
+        except docker.errors.NotFound:
+            ret = {"StatusCode": -123}
+
         if ret["StatusCode"] != 0:
             logging.error("Error building image")
         # Since detach=True, then we need to explicitly check for the
