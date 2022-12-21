@@ -182,7 +182,7 @@ class ImageBuilder:
 
             source_path = os.path.join(
                 os.environ.get("HOSTDIR", "/host"),
-                _get_stata_license_path()
+                _get_stata_license_path()[1:]  # it's absolute
             )
             with open(source_path, "r") as license_file:
                 stata_license = license_file.read()
