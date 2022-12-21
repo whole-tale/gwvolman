@@ -176,7 +176,7 @@ class ImageBuilder:
             extra_args = " --build-arg FILE_INSTALLATION_KEY={} ".format(
                 os.environ.get("MATLAB_FILE_INSTALLATION_KEY")
             )
-        elif self.container_config.buildpack == "StataBuildPack":
+        elif self.container_config.buildpack == "StataBuildPack" and not dry_run:
             # License is also needed at build time but can't easily
             # be mounted. Pass it as a build arg
 
