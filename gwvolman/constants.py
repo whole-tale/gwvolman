@@ -24,7 +24,7 @@ LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
 REPO2DOCKER_VERSION = os.environ.get(
     "REPO2DOCKER_VERSION",
-    "wholetale/repo2docker_wholetale:v1.2"
+    "wholetale/repo2docker_wholetale:latest"
 )
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 

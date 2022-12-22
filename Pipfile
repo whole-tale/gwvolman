@@ -19,7 +19,7 @@ girder-client = "==2.4.0"
 girder-worker = "==0.5.0"
 redis = "==3.5.3"
 requests = "*"
-girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "v1.2"}
+girderfs = {git = "https://github.com/whole-tale/girderfs",ref = "master"}
 pyOpenSSL = "*"
 python-dateutil = "*"
 PyYAML = "*"

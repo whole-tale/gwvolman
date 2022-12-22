@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "0f96ef9f62e090610c1cca36eacf99a2868f6647944a1007560d615ff9c32160"
+            "sha256": "5b51cc43e15249a314f423d41bafb5462c2df037c735d17a9a641735afb2f9e5"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -323,7 +323,7 @@
                 "sha256:0f7569a4a6ff151958b64304071d370daa3243d15941a7beedf0c9fe5105603e",
                 "sha256:a851e51367fb93e9e1361732c1d60dab63eff98712e503ea7d92e6eccb109b4f"
             ],
-            "markers": "python_version >= '3.6' and python_version < '4.0'",
+            "markers": "python_version >= '3.6' and python_version < '4'",
             "version": "==2.2.1"
         },
         "docker": {
@@ -450,7 +450,7 @@
         },
         "girderfs": {
             "git": "https://github.com/whole-tale/girderfs",
-            "ref": "abdaa09aee8f384c94cfd0ec082e91128d6898c7"
+            "ref": "0b3d13867934f5f3c1abfc60c8c89d789dff7061"
         },
         "idna": {
             "hashes": [
@@ -473,7 +473,7 @@
                 "sha256:32811e7b81deee2063ea6d2e94f8819a86d1f3811e49d23623a41fa832bef03f",
                 "sha256:8400e90141bf792bce2634df533dc57e3bee19ea120a87bebcd3da89a58ad73f"
             ],
-            "markers": "python_version < '4.0' and python_full_version >= '3.6.2'",
+            "markers": "python_version < '4' and python_full_version >= '3.6.2'",
             "version": "==1.1.0"
         },
         "isodate": {
