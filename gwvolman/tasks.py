@@ -1,10 +1,12 @@
 """A set of WT related Girder tasks."""
 from datetime import datetime, timedelta
+import re
 import os
 import socket
 import json
 import time
 import docker
+import shutil
 import subprocess
 from docker.errors import DockerException
 import girder_client
@@ -68,7 +70,7 @@ def create_volume(self, instance_id):
     _mount_bind(mountpoint, 'home', user)
 
     if ENABLE_WORKSPACES:
-        _mount_bind(mountpoint, 'workspace', tale)
+        _mount_overlayfs(mountpoint, 'workspace', tale)
         _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
         _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=True)
 
@@ -274,6 +276,8 @@ def remove_volume(self, instanceId):
     for suffix in MOUNTPOINTS:
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
+        if suffix == "workspace":
+            _umount_overlayfs(dest)
         subprocess.call("umount %s" % dest, shell=True)
 
     logging.info("Unmounting licenses")
@@ -622,6 +626,47 @@ def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=Fals
     logging.info("Calling: %s", cmd)
     subprocess.check_call(cmd, shell=True)
     print(f"Mounted {fs_type} {directory}")
+
+
+def _mount_overlayfs(mountpoint, res_type, obj):
+    if res_type == "workspace":
+        lower_dir = f"{VOLUMES_ROOT}/workspaces/{obj['_id'][0]}/{obj['_id']}"
+    else:
+        raise ValueError(f"Unknown bind type {res_type}")
+
+    upper_dir = f"{lower_dir}_upper"
+    work_dir = f"{lower_dir}_work"
+
+    options = (
+        f"lowerdir={lower_dir},upperdir={upper_dir},workdir={work_dir}"
+        ",index=off,xino=off,redirect_dir=off,metacopy=off"
+    )
+    os.makedirs(HOSTDIR + upper_dir)
+    os.makedirs(HOSTDIR + work_dir)
+    cmd = f'mount -t overlay overlay -o "{options}" "{mountpoint}/{res_type}"'
+    logging.info("Calling: %s", cmd)
+    subprocess.check_call(cmd, shell=True)
+    os.chown(HOSTDIR + f"{mountpoint}/{res_type}", DEFAULT_USER, DEFAULT_GROUP)
+    print(f"Mounted {lower_dir} to {mountpoint}/{res_type}")
+
+
+def _umount_overlayfs(mountpoint):
+    # Get required paths
+    mount_details = subprocess.check_output(f"mount | grep {mountpoint}", shell=True).decode()
+    lowerdir = re.search("lowerdir=(.+?),", mount_details).group(1)
+    upperdir = re.search("upperdir=(.+?),", mount_details).group(1)
+    workdir = re.search("workdir=(.+?),", mount_details).group(1)
+    # Umount overlayfs
+    subprocess.check_call(f"umount {mountpoint}", shell=True)
+    overlay_output = subprocess.check_output(
+        f"overlay merge --lowerdir={HOSTDIR + lowerdir} --upperdir={HOSTDIR + upperdir}",
+        shell=True
+    ).decode()
+    sync_script = re.search("The script (.+?) is created.", overlay_output).group(1)
+    subprocess.check_call(f"./{sync_script}", shell=True)
+    os.remove(sync_script)
+    shutil.rmtree(f"{HOSTDIR + upperdir}", ignore_errors=True)
+    shutil.rmtree(f"{HOSTDIR + workdir}", ignore_errors=True)
 
 
 def _make_fuse_dirs(mountpoint, directories):
