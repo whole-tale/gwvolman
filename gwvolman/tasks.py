@@ -68,7 +68,8 @@ def create_volume(self, instance_id):
     _mount_bind(mountpoint, 'home', user)
 
     if ENABLE_WORKSPACES:
-        _mount_bind(mountpoint, 'workspace', tale)
+        # _mount_bind(mountpoint, 'workspace', tale)
+        _mount_girderfs(mountpoint, 'workspace', 'wt_work', tale['_id'], api_key)
         _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
         _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=True)
 
@@ -738,7 +739,8 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     if session['_id'] is not None:
         _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
-    _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
+    # _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
+    _mount_girderfs(mountpoint, 'workspace', 'wt_run', run["_id"], api_key)
     state.fs_mounted = mountpoint
 
     # Build the image for the run
