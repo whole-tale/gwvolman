@@ -661,9 +661,9 @@ def _mount_overlayfs(mountpoint, res_type, obj):
 def _umount_overlayfs(mountpoint, sync=False, rm_upper=False):
     # Get required paths
     mount_details = subprocess.check_output(f"mount | grep {mountpoint}", shell=True).decode()
-    lowerdir = re.search("lowerdir=(.+?),", mount_details).group(1)
-    upperdir = re.search("upperdir=(.+?),", mount_details).group(1)
-    workdir = re.search("workdir=(.+?),", mount_details).group(1)
+    lowerdir = re.search("lowerdir=(.+?)[,)]", mount_details).group(1)
+    upperdir = re.search("upperdir=(.+?)[,)]", mount_details).group(1)
+    workdir = re.search("workdir=(.+?)[,)]", mount_details).group(1)
     # Umount overlayfs
     subprocess.check_call(f"umount {mountpoint}", shell=True)
     if sync:
