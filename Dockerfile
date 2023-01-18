@@ -36,6 +36,13 @@ RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -l
    chmod +x /usr/local/lib/container_mount.so && \
    echo "/usr/local/lib/container_mount.so" > /etc/ld.so.preload
 
+RUN cd /tmp && \
+   git clone https://github.com/whole-tale/overlayfs-tools && \
+   cd overlayfs-tools && \
+   make && \
+   mv overlay /usr/bin && \
+   rm -rf overlayfs-tools
+
 RUN useradd -g 100 -G 100 -u 1000 -s /bin/bash wtuser
 
 RUN girder-worker-config set celery backend redis://redis/ && \
