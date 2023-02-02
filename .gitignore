@@ -1,2 +1,3 @@
 gwvolman.egg-info/
 *.pyc
+*venv*

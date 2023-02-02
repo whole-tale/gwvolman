@@ -4,8 +4,8 @@ import os
 import json
 import time
 import docker
+import shutil
 import subprocess
-from docker.errors import DockerException
 import girder_client
 
 import logging
@@ -26,7 +26,7 @@ from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, TaleStatus, \
+    MOUNTPOINTS, VOLUMES_ROOT, TaleStatus, \
     RunStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
@@ -35,7 +35,12 @@ UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
 RECORDED_RUN_STEP_TOTAL = 4
-VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
+
+
+def _create_mount_point(vol_name):
+    mountpoint = os.path.join(VOLUMES_ROOT, "mountpoints", vol_name)
+    _safe_mkdir(mountpoint)
+    return mountpoint
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -52,7 +57,7 @@ def create_volume(self, instance_id):
         message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
         current=1, forceFlush=True)
 
-    mountpoint = _create_docker_volume(cli, vol_name)
+    mountpoint = _create_mount_point(vol_name)
 
     _make_fuse_dirs(mountpoint, MOUNTPOINTS)
 
@@ -272,10 +277,10 @@ def remove_volume(self, instanceId):
     for suffix in MOUNTPOINTS:
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
-        subprocess.call("umount %s" % dest, shell=True)
+        subprocess.call("sudo umount %s" % dest, shell=True)
 
     logging.info("Unmounting licenses")
-    subprocess.call("umount /licenses", shell=True)
+    subprocess.call("sudo umount /licenses", shell=True)
 
     try:
         self.girder_client.delete('/dm/session/{sessionId}'.format(**instance))
@@ -601,7 +606,7 @@ def _mount_bind(mountpoint, res_type, obj):
         res_type = "workspace"
     else:
         raise ValueError(f"Unknown bind type {res_type}")
-    cmd = f"mount --bind {source_path} {mountpoint}/{res_type}"
+    cmd = f"sudo mount --bind {source_path} {mountpoint}/{res_type}"
     logging.info("Calling: %s", cmd)
     subprocess.check_call(cmd, shell=True)
     print(f"Mounted {source_path} to {mountpoint}/{res_type}")
@@ -625,26 +630,6 @@ def _make_fuse_dirs(mountpoint, directories):
     """Create fuse directories"""
     for suffix in directories:
         _safe_mkdir(os.path.join(mountpoint, suffix))
-
-
-def _create_docker_volume(cli, vol_name):
-    """Creates a Docker volume with the specified name"""
-
-    try:
-        volume = cli.volumes.create(name=vol_name, driver='local')
-    except DockerException as dex:
-        logging.error(f"Error creating volume {vol_name} using local driver")
-        logging.exception(dex)
-
-    logging.info(f"Volume: {volume.name} created")
-    mountpoint = volume.attrs['Mountpoint']
-    logging.info(f"Mountpoint: {mountpoint}")
-
-    os.chown(mountpoint, DEFAULT_USER, DEFAULT_GROUP)
-    for root, dirs, files in os.walk(mountpoint):
-        for obj in dirs + files:
-            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
-    return mountpoint
 
 
 def _get_session(gc, tale=None, version_id=None):
@@ -707,8 +692,8 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     # Create Docker volume
     vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
-    mountpoint = _create_docker_volume(image_builder.dh.cli, vol_name)
-    state.volume_created = image_builder.dh.cli.volumes.get(vol_name)
+    mountpoint = _create_mount_point(vol_name)
+    state.volume_created = mountpoint
 
     # Create fuse directories
     _make_fuse_dirs(mountpoint, ['data', 'workspace'])
@@ -801,7 +786,7 @@ class RecordedRunCleaner:
             for suffix in ["data", "workspace"]:
                 dest = os.path.join(self.fs_mounted, suffix)
                 logging.info("Unmounting %s", dest)
-                subprocess.call("umount %s" % dest, shell=True)
+                subprocess.call("sudo umount %s" % dest, shell=True)
             self.fs_mounted = None
 
         if self.session_created:
@@ -813,15 +798,7 @@ class RecordedRunCleaner:
             self.session_created = None
 
         if self.volume_created:
-            volume = self.volume_created
-            # Delete the Docker volume
-            try:
-                logging.info("Removing volume: %s", volume.id)
-                volume.remove()
-            except Exception as e:
-                logging.error("Unable to remove volume [%s]: %s", volume.id, e)
-            except docker.errors.NotFound:
-                logging.info("Volume not present [%s].", volume.id)
+            shutil.rmtree(self.volume_created, ignore_errors=True)
             self.volume_created = None
 
         if canceled:
