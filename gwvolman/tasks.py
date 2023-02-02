@@ -1,7 +1,6 @@
 """A set of WT related Girder tasks."""
 from datetime import datetime, timedelta
 import os
-import socket
 import json
 import time
 import docker
@@ -19,7 +18,6 @@ from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .build_utils import ImageBuilder
 from .utils import \
-    HOSTDIR, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _recorded_run, DEPLOYMENT
@@ -63,14 +61,14 @@ def create_volume(self, instance_id):
     session = _get_session(self.girder_client, tale=tale)
 
     if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=False)
 
     _mount_bind(mountpoint, 'home', user)
 
     if ENABLE_WORKSPACES:
         _mount_bind(mountpoint, 'workspace', tale)
-        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
-        _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=False)
+        _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=False)
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
@@ -355,7 +353,6 @@ def build_tale_image(task, tale_id, force=False):
     print("Forcing build.")
 
     # Prepare build context
-    # temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
     ret, _ = image_builder.run_r2d(tag, image_builder.build_context, task=task)
     if task.canceled:
         task.request.chain = None
@@ -626,13 +623,8 @@ def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=Fals
 
 def _make_fuse_dirs(mountpoint, directories):
     """Create fuse directories"""
-
-    # FUSE is silly and needs to have mirror inside container
     for suffix in directories:
-        directory = os.path.join(mountpoint, suffix)
-        _safe_mkdir(HOSTDIR + directory)
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
+        _safe_mkdir(os.path.join(mountpoint, suffix))
 
 
 def _create_docker_volume(cli, vol_name):
@@ -648,20 +640,10 @@ def _create_docker_volume(cli, vol_name):
     mountpoint = volume.attrs['Mountpoint']
     logging.info(f"Mountpoint: {mountpoint}")
 
-    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
-    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
+    os.chown(mountpoint, DEFAULT_USER, DEFAULT_GROUP)
+    for root, dirs, files in os.walk(mountpoint):
         for obj in dirs + files:
             os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
-
-    # Before calling girderfs and "escaping" container, we need to make
-    # sure that shared objects we use are available on the host
-    # TODO: this assumes overlayfs
-    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
-    if 'overlay /usr/local' not in mounts:
-        cont = cli.containers.get(socket.gethostname())
-        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
-        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
-                        shell=True)
     return mountpoint
 
 
@@ -687,8 +669,8 @@ def _write_env_json(workspace_dir, image):
     # mean that the user's r2d config needs to be there too (e.g, apt.txt).
     # So for now, write to root of workspace.
 
-    env_json = os.path.join(f"{HOSTDIR}{workspace_dir}", 'environment.json')
-    # dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
+    env_json = os.path.join(workspace_dir, 'environment.json')
+    # dot_dir = f"{workspace_dir}/.wholetale/"
     # _safe_mkdir(dot_dir)
     # os.chown(dot_dir, DEFAULT_USER, DEFAULT_GROUP)
     # env_json = os.path.join(dot_dir, 'environment.json')
@@ -737,7 +719,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     state.session_created = session["_id"]
 
     if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=False)
     _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
     state.fs_mounted = mountpoint
 

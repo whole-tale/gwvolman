@@ -71,7 +71,7 @@ CPR_RUN_CALL = mock.call(
             'bind': '/var/run/docker.sock', 'mode': 'rw'
         },
         '/tmp': {
-            'bind': '/host/tmp', 'mode': 'ro'
+            'bind': '/tmp', 'mode': 'ro'
         },
         '/path/to/mountpoint/data': {
             'bind': '/work/data', 'mode': 'rw'
@@ -150,7 +150,7 @@ def test_recorded_run(
         [
             mock.call(
                 [
-                    "/host/usr/bin/docker",
+                    "/usr/bin/docker",
                     "stats",
                     "--format",
                     '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
@@ -195,4 +195,4 @@ def test_write_env_json():
     with mock.patch('builtins.open', mock.mock_open()):
         env_json = _write_env_json(workspace_dir, mock_image)
 
-        assert env_json == '/host/path/to/mountpoint/workspace/environment.json'
+        assert env_json == '/path/to/mountpoint/workspace/environment.json'

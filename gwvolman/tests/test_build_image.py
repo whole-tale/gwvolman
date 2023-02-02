@@ -126,7 +126,6 @@ def docker_run_r2d_container(**kwargs):
     return MockContainer()
 
 
-@mock.patch.dict(os.environ, {"HOSTDIR": "/"})
 @mock.patch("docker.APIClient")
 @mock.patch(
     "gwvolman.utils.Deployment.registry_url",
@@ -186,7 +185,7 @@ def test_image_builder(depl, dapicli):
 
 
 @mock.patch.dict(
-    os.environ, {"HOSTDIR": "/", "MATLAB_FILE_INSTALLATION_KEY": "fake-key"}
+    os.environ, {"MATLAB_FILE_INSTALLATION_KEY": "fake-key"}
 )
 @mock.patch("docker.APIClient")
 @mock.patch(

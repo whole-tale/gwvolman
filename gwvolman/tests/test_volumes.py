@@ -88,11 +88,11 @@ def test_create_volume(mbind, mgfs, mfd, cdv, gs, gak, volumes, info, nu):
     ])
     mgfs.assert_has_calls([
         mock.call('/path/to/mountpoint/', 'data', 'wt_dms', 'session1',
-                  'apikey1', hostns=True),
+                  'apikey1', hostns=False),
         mock.call('/path/to/mountpoint/', 'versions', 'wt_versions', 'tale1',
-                  'apikey1', hostns=True),
+                  'apikey1', hostns=False),
         mock.call('/path/to/mountpoint/', 'runs', 'wt_runs', 'tale1', 'apikey1',
-                  hostns=True)
+                  hostns=False)
         ], any_order=False)
 
 
@@ -111,19 +111,13 @@ def test_mount_girderfs(spcc):
         ], any_order=False)
 
 
-@mock.patch("os.makedirs", return_value=True)
 @mock.patch("os.mkdir", return_value=True)
-def test_make_fuse_dirs(mkdir, makedirs):
+def test_make_fuse_dirs(mkdir):
 
     with mock.patch('os.path.isdir', return_value=True):
         _make_fuse_dirs('/path/to/mountpoint', ['dir1'])
 
-    mkdir.assert_has_calls([mock.call('/host/path/to/mountpoint/dir1')], any_order=False)
-
-    with mock.patch('os.path.isdir', return_value=False):
-        _make_fuse_dirs('/path/to/mountpoint', ['dir2'])
-
-    makedirs.assert_has_calls([mock.call('/path/to/mountpoint/dir2')], any_order=False)
+    mkdir.assert_has_calls([mock.call('/path/to/mountpoint/dir1')], any_order=False)
 
 
 @mock.patch("builtins.open", mock.mock_open(read_data="overlay"))
@@ -139,7 +133,7 @@ def test_create_docker_volume(cli, chown):
         mountpoint = _create_docker_volume(cli, 'vol1')
         assert mountpoint == '/var/lib/docker/volumes/vol1'
     chown.assert_has_calls([
-        mock.call('/host/var/lib/docker/volumes/vol1', 1000, 100),
+        mock.call('/var/lib/docker/volumes/vol1', 1000, 100),
         mock.call('/var/lib/docker/volumes/vol1', 1000, 100),
         mock.call('/var/lib/docker/volumes/', 1000, 100)
     ])

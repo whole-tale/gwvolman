@@ -23,7 +23,6 @@ import dateutil.relativedelta as rel
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
-HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
 TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "websecure")
@@ -378,13 +377,13 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
     )
 
     cmd = [
-        HOSTDIR + "/usr/bin/docker",
+        "/usr/bin/docker",   # ensure it's in container...
         "stats",
         "--format",
         '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
         container.id
     ]
-    workspace_path = os.path.join(HOSTDIR + mountpoint, "workspace")
+    workspace_path = os.path.join(mountpoint, "workspace")
     # Setup docker stats logging via a subprocesses
     dstats_tmppath = os.path.join(workspace_path, ".docker_stats.tmp")
     dstats_fp = open(dstats_tmppath, "w")
