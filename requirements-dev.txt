@@ -1,0 +1,6 @@
+pytest
+pytest-cov
+httmock
+mock
+flake8
+codecov
