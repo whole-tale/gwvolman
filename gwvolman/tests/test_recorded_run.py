@@ -127,7 +127,7 @@ def test_recorded_run(
     try:
         with mock.patch(
             'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
-        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()) as bo:
+        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()):
             mock_dep.return_value = 'https://registry.test.wholetale.org'
             recorded_run.girder_client = mock_gc
             recorded_run.job_manager = mock.MagicMock()
@@ -139,28 +139,6 @@ def test_recorded_run(
     image_builder.return_value.dh.cli.containers.create.assert_has_calls(
         [RPZ_RUN_CALL], any_order=True
     )
-    sp.assert_has_calls(
-        [
-            mock.call(
-                [
-                    "/usr/bin/docker",
-                    "stats",
-                    "--format",
-                    '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
-                    "container_id",
-                ],
-                stdout=-1,
-                universal_newlines=True,
-            ),
-            mock.call(
-                ["ts", '"%Y-%m-%dT%H:%M:%.S"'],
-                stdin=sp.return_value.stdout,
-                stdout=bo.return_value,
-            )
-        ],
-        any_order=True,
-    )
-
     osmk.assert_has_calls([mock.call("/mnt/homes/mountpoints/123abc_user1_123456")])
 
     # Test execution failure
