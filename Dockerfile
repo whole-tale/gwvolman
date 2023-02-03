@@ -26,16 +26,16 @@ RUN apt-get update -qqy && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN useradd -g 1000 -G 1000 -u 1000 -m -s /bin/bash wtuser
+RUN groupadd -g 1000 wtgroup && useradd -g 1000 -G 1000 -u 1000 -m -s /bin/bash wtuser
 RUN echo "source /home/wtuser/venv/bin/activate" >> /etc/bash.bashrc
 RUN echo "wtuser ALL=(ALL)    NOPASSWD: /usr/bin/mount, /usr/bin/umount" >> /etc/sudoers
 
 USER wtuser
 WORKDIR /gwvolman
 
-COPY --chown=wtuser:1000 requirements.txt /gwvolman/requirements.txt
-COPY --chown=wtuser:1000 setup.py /gwvolman/setup.py
-COPY --chown=wtuser:1000 gwvolman /gwvolman/gwvolman
+COPY --chown=wtuser:wtgroup requirements.txt /gwvolman/requirements.txt
+COPY --chown=wtuser:wtgroup setup.py /gwvolman/setup.py
+COPY --chown=wtuser:wtgroup gwvolman /gwvolman/gwvolman
 
 RUN python3 -m venv /home/wtuser/venv
 RUN . /home/wtuser/venv/bin/activate \
