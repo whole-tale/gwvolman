@@ -9,9 +9,7 @@ import queue
 import random
 import re
 import requests
-import signal
 import string
-import subprocess
 import time
 import threading
 import uuid
@@ -21,9 +19,9 @@ import datetime
 import dateutil.relativedelta as rel
 
 from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
+from .lib.stats_collector import DockerStatsCollectorThread
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
-HOSTDIR = os.environ.get("HOSTDIR", "/host")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
 DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
 TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "websecure")
@@ -377,24 +375,13 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
         args=(log_queue, container)
     )
 
-    cmd = [
-        HOSTDIR + "/usr/bin/docker",
-        "stats",
-        "--format",
-        '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
-        container.id
-    ]
-    workspace_path = os.path.join(HOSTDIR + mountpoint, "workspace")
-    # Setup docker stats logging via a subprocesses
-    dstats_tmppath = os.path.join(workspace_path, ".docker_stats.tmp")
-    dstats_fp = open(dstats_tmppath, "w")
-    p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
-    # use ts for nice timestamps
-    p2 = subprocess.Popen(["ts", '"%Y-%m-%dT%H:%M:%.S"'], stdin=p1.stdout, stdout=dstats_fp)
-    p1.stdout.close()
+    workspace_path = os.path.join(mountpoint, "workspace")
+    dstats_tmppath = os.path.join(workspace_path, ".docker_stats")
+    stats_thread = DockerStatsCollectorThread(container, dstats_tmppath)
 
     # Job output must come from stdout/stderr
     container.start()
+    stats_thread.start()
     logging_thread.start()
 
     try:
@@ -410,6 +397,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
     except docker.errors.NotFound:
         pass
 
+    stats_thread.join()
     while not log_queue.empty():
         print(log_queue.get_nowait())
     logging_thread.join()
@@ -419,12 +407,6 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
     else:
         ret = container.wait()
 
-    # Shutdown docker stats
-    p1.send_signal(signal.SIGTERM)
-    dstats_fp.close()
-    p2.wait()
-    p1.wait()
-
     # Dump run std{out,err} and entrypoint used.
     with open(os.path.join(workspace_path, ".stdout"), "wb") as fp:
         fp.write(container.logs(stdout=True, stderr=False))
@@ -432,13 +414,6 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
         fp.write(container.logs(stdout=False, stderr=True))
     with open(os.path.join(workspace_path, ".entrypoint"), "w") as fp:
         fp.write(entrypoint)
-    # Remove 'clear screen' special chars from docker stats output
-    # and save it as new file
-    with open(dstats_tmppath, "r") as infp:
-        with open(dstats_tmppath[:-4], "w") as outfp:
-            for line in infp.readlines():
-                outfp.write(re.sub(r"\x1b\[2J\x1b\[H", "", line))
-    os.remove(dstats_tmppath)
     try:
         container.remove()
     except docker.errors.NotFound:

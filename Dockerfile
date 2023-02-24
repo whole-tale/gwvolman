@@ -6,9 +6,11 @@ RUN apt-get update -qqy && \
     build-essential \
     vim \
     git \
+    gosu \
     wget \
     python3 \
     python3-pip \
+    python3-venv \
     fuse \
     davfs2 \
     libffi-dev \
@@ -18,44 +20,43 @@ RUN apt-get update -qqy && \
     zlib1g-dev \
     libfuse-dev \
     moreutils \
+    sudo \
     libpython3-dev && \
   apt-get -qqy clean all && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY requirements.txt /gwvolman/requirements.txt
-COPY setup.py /gwvolman/setup.py
-COPY gwvolman /gwvolman/gwvolman
+RUN groupadd -g 1000 wtgroup && useradd -g 1000 -G 1000 -u 1000 -m -s /bin/bash wtuser
+RUN echo "source /home/wtuser/venv/bin/activate" >> /etc/bash.bashrc
+RUN echo "wtuser ALL=(ALL)    NOPASSWD: /usr/bin/mount, /usr/bin/umount" >> /etc/sudoers
 
+USER wtuser
 WORKDIR /gwvolman
-RUN LDFLAGS="-Wl,-rpath='/usr/local/lib',--enable-new-dtags $LDFLAGS" pip3 install --no-cache-dir -r requirements.txt -e . && rm -rf /tmp/*
 
-COPY mount.c /tmp/mount.c
-RUN gcc -Wall -fPIC -shared -o /usr/local/lib/container_mount.so /tmp/mount.c -ldl -D_FILE_OFFSET_BITS=64 && \
-   rm  /tmp/mount.c && \
-   chmod +x /usr/local/lib/container_mount.so && \
-   echo "/usr/local/lib/container_mount.so" > /etc/ld.so.preload
+COPY --chown=wtuser:wtgroup requirements.txt /gwvolman/requirements.txt
+COPY --chown=wtuser:wtgroup setup.py /gwvolman/setup.py
+COPY --chown=wtuser:wtgroup gwvolman /gwvolman/gwvolman
 
-RUN useradd -g 100 -G 100 -u 1000 -s /bin/bash wtuser
+RUN python3 -m venv /home/wtuser/venv
+RUN . /home/wtuser/venv/bin/activate \
+  && pip install -U setuptools wheel \
+  && pip install --no-cache-dir -r requirements.txt -e . \
+  && rm -rf /tmp/*
 
-RUN girder-worker-config set celery backend redis://redis/ && \
-  girder-worker-config set celery broker redis://redis/ && \
-  girder-worker-config set girder_worker tmp_root /tmp
-
-ENV C_FORCE_ROOT=1
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
 # Temporary fix for kombu
 RUN sed \
   -e 's/return decode(data/&.decode("utf-8")/' \
-  -i /usr/local/lib/python3.8/dist-packages/kombu/serialization.py
+  -i /home/wtuser/venv/lib/python3.8/site-packages/kombu/serialization.py
 
 # Temporary fix for girder_utils (chain tasks and kwargs)
 RUN sed \
   -e "/'kwargs':/ s/task_kwargs/json.dumps(&)/" \
-  -i /usr/local/lib/python3.8/dist-packages/girder_worker/context/nongirder_context.py
+  -i /home/wtuser/venv/lib/python3.8/site-packages/girder_worker/context/nongirder_context.py
 
+USER root
 # https://github.com/whole-tale/gwvolman/issues/51
 # https://github.com/whole-tale/wt_home_dirs/issues/18
 RUN echo "use_locks 0" >> /etc/davfs2/davfs2.conf && \

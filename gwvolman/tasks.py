@@ -1,12 +1,11 @@
 """A set of WT related Girder tasks."""
 from datetime import datetime, timedelta
 import os
-import socket
 import json
 import time
 import docker
+import shutil
 import subprocess
-from docker.errors import DockerException
 import girder_client
 
 import logging
@@ -19,7 +18,6 @@ from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
 from .build_utils import ImageBuilder
 from .utils import \
-    HOSTDIR, \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _recorded_run, DEPLOYMENT
@@ -28,7 +26,7 @@ from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    DEFAULT_USER, DEFAULT_GROUP, MOUNTPOINTS, TaleStatus, \
+    MOUNTPOINTS, VOLUMES_ROOT, TaleStatus, \
     RunStatus
 
 CREATE_VOLUME_STEP_TOTAL = 2
@@ -37,7 +35,12 @@ UPDATE_CONTAINER_STEP_TOTAL = 2
 BUILD_TALE_IMAGE_STEP_TOTAL = 2
 IMPORT_TALE_STEP_TOTAL = 2
 RECORDED_RUN_STEP_TOTAL = 4
-VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
+
+
+def _create_mount_point(vol_name):
+    mountpoint = os.path.join(VOLUMES_ROOT, "mountpoints", vol_name)
+    _safe_mkdir(mountpoint)
+    return mountpoint
 
 
 @girder_job(title='Create Tale Data Volume')
@@ -54,7 +57,7 @@ def create_volume(self, instance_id):
         message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
         current=1, forceFlush=True)
 
-    mountpoint = _create_docker_volume(cli, vol_name)
+    mountpoint = _create_mount_point(vol_name)
 
     _make_fuse_dirs(mountpoint, MOUNTPOINTS)
 
@@ -63,14 +66,14 @@ def create_volume(self, instance_id):
     session = _get_session(self.girder_client, tale=tale)
 
     if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=False)
 
     _mount_bind(mountpoint, 'home', user)
 
     if ENABLE_WORKSPACES:
         _mount_bind(mountpoint, 'workspace', tale)
-        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=True)
-        _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=False)
+        _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=False)
 
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
@@ -274,10 +277,10 @@ def remove_volume(self, instanceId):
     for suffix in MOUNTPOINTS:
         dest = os.path.join(containerInfo['mountPoint'], suffix)
         logging.info("Unmounting %s", dest)
-        subprocess.call("umount %s" % dest, shell=True)
+        subprocess.call("sudo umount %s" % dest, shell=True)
 
     logging.info("Unmounting licenses")
-    subprocess.call("umount /licenses", shell=True)
+    subprocess.call("sudo umount /licenses", shell=True)
 
     try:
         self.girder_client.delete('/dm/session/{sessionId}'.format(**instance))
@@ -355,7 +358,6 @@ def build_tale_image(task, tale_id, force=False):
     print("Forcing build.")
 
     # Prepare build context
-    # temp_dir = tempfile.mkdtemp(dir=HOSTDIR + "/tmp")
     ret, _ = image_builder.run_r2d(tag, image_builder.build_context, task=task)
     if task.canceled:
         task.request.chain = None
@@ -604,7 +606,7 @@ def _mount_bind(mountpoint, res_type, obj):
         res_type = "workspace"
     else:
         raise ValueError(f"Unknown bind type {res_type}")
-    cmd = f"mount --bind {source_path} {mountpoint}/{res_type}"
+    cmd = f"sudo mount --bind {source_path} {mountpoint}/{res_type}"
     logging.info("Calling: %s", cmd)
     subprocess.check_call(cmd, shell=True)
     print(f"Mounted {source_path} to {mountpoint}/{res_type}")
@@ -626,43 +628,8 @@ def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=Fals
 
 def _make_fuse_dirs(mountpoint, directories):
     """Create fuse directories"""
-
-    # FUSE is silly and needs to have mirror inside container
     for suffix in directories:
-        directory = os.path.join(mountpoint, suffix)
-        _safe_mkdir(HOSTDIR + directory)
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
-
-
-def _create_docker_volume(cli, vol_name):
-    """Creates a Docker volume with the specified name"""
-
-    try:
-        volume = cli.volumes.create(name=vol_name, driver='local')
-    except DockerException as dex:
-        logging.error(f"Error creating volume {vol_name} using local driver")
-        logging.exception(dex)
-
-    logging.info(f"Volume: {volume.name} created")
-    mountpoint = volume.attrs['Mountpoint']
-    logging.info(f"Mountpoint: {mountpoint}")
-
-    os.chown(HOSTDIR + mountpoint, DEFAULT_USER, DEFAULT_GROUP)
-    for root, dirs, files in os.walk(HOSTDIR + mountpoint):
-        for obj in dirs + files:
-            os.chown(os.path.join(root, obj), DEFAULT_USER, DEFAULT_GROUP)
-
-    # Before calling girderfs and "escaping" container, we need to make
-    # sure that shared objects we use are available on the host
-    # TODO: this assumes overlayfs
-    mounts = ''.join(open(HOSTDIR + '/proc/1/mounts').readlines())
-    if 'overlay /usr/local' not in mounts:
-        cont = cli.containers.get(socket.gethostname())
-        libdir = cont.attrs['GraphDriver']['Data']['MergedDir']
-        subprocess.call('mount --bind {}/usr/local /usr/local'.format(libdir),
-                        shell=True)
-    return mountpoint
+        _safe_mkdir(os.path.join(mountpoint, suffix))
 
 
 def _get_session(gc, tale=None, version_id=None):
@@ -687,8 +654,8 @@ def _write_env_json(workspace_dir, image):
     # mean that the user's r2d config needs to be there too (e.g, apt.txt).
     # So for now, write to root of workspace.
 
-    env_json = os.path.join(f"{HOSTDIR}{workspace_dir}", 'environment.json')
-    # dot_dir = f"{HOSTDIR}{workspace_dir}/.wholetale/"
+    env_json = os.path.join(workspace_dir, 'environment.json')
+    # dot_dir = f"{workspace_dir}/.wholetale/"
     # _safe_mkdir(dot_dir)
     # os.chown(dot_dir, DEFAULT_USER, DEFAULT_GROUP)
     # env_json = os.path.join(dot_dir, 'environment.json')
@@ -725,8 +692,8 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     # Create Docker volume
     vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
-    mountpoint = _create_docker_volume(image_builder.dh.cli, vol_name)
-    state.volume_created = image_builder.dh.cli.volumes.get(vol_name)
+    mountpoint = _create_mount_point(vol_name)
+    state.volume_created = mountpoint
 
     # Create fuse directories
     _make_fuse_dirs(mountpoint, ['data', 'workspace'])
@@ -737,7 +704,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     state.session_created = session["_id"]
 
     if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=True)
+        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=False)
     _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
     state.fs_mounted = mountpoint
 
@@ -819,7 +786,7 @@ class RecordedRunCleaner:
             for suffix in ["data", "workspace"]:
                 dest = os.path.join(self.fs_mounted, suffix)
                 logging.info("Unmounting %s", dest)
-                subprocess.call("umount %s" % dest, shell=True)
+                subprocess.call("sudo umount %s" % dest, shell=True)
             self.fs_mounted = None
 
         if self.session_created:
@@ -831,15 +798,7 @@ class RecordedRunCleaner:
             self.session_created = None
 
         if self.volume_created:
-            volume = self.volume_created
-            # Delete the Docker volume
-            try:
-                logging.info("Removing volume: %s", volume.id)
-                volume.remove()
-            except Exception as e:
-                logging.error("Unable to remove volume [%s]: %s", volume.id, e)
-            except docker.errors.NotFound:
-                logging.info("Volume not present [%s].", volume.id)
+            shutil.rmtree(self.volume_created, ignore_errors=True)
             self.volume_created = None
 
         if canceled:

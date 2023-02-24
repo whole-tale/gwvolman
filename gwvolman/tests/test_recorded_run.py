@@ -1,19 +1,14 @@
 from girder_client import GirderClient
 import mock
+import os
 import pytest
 
 from gwvolman.utils import ContainerConfig
 from gwvolman.tasks import recorded_run, _write_env_json
-from gwvolman.constants import RunStatus
+from gwvolman.constants import RunStatus, VOLUMES_ROOT
 
 
-class MockVolume:
-    @property
-    def id(self):
-        return "abc"
-
-    def remove(self):
-        return True
+_mount_point = os.path.join(VOLUMES_ROOT, "mountpoints", "123abc_user1_123456")
 
 
 def mock_gc_patch(path, parameters=None):
@@ -56,8 +51,8 @@ RPZ_RUN_CALL = mock.call(
     command="sh entrypoint.sh",
     detach=True,
     volumes={
-        '/path/to/mountpoint/data': {'bind': '/work/data', 'mode': 'rw'},
-        '/path/to/mountpoint/workspace': {'bind': '/work/workspace', 'mode': 'rw'}
+        os.path.join(_mount_point, "data"): {'bind': '/work/data', 'mode': 'rw'},
+        os.path.join(_mount_point, "workspace"): {'bind': '/work/workspace', 'mode': 'rw'}
     }
 )
 CPR_RUN_CALL = mock.call(
@@ -71,12 +66,12 @@ CPR_RUN_CALL = mock.call(
             'bind': '/var/run/docker.sock', 'mode': 'rw'
         },
         '/tmp': {
-            'bind': '/host/tmp', 'mode': 'ro'
+            'bind': '/tmp', 'mode': 'ro'
         },
-        '/path/to/mountpoint/data': {
+        os.path.join(_mount_point, "data"): {
             'bind': '/work/data', 'mode': 'rw'
         },
-        '/path/to/mountpoint/workspace': {
+        os.path.join(_mount_point, "workspace"): {
             'bind': '/work/workspace', 'mode': 'rw'
         }
     }
@@ -84,16 +79,16 @@ CPR_RUN_CALL = mock.call(
 
 
 @mock.patch("time.time", return_value=1624994605)
-@mock.patch("docker.client.DockerClient.volumes")
+@mock.patch("gwvolman.tasks.new_user", return_value="123456")
 @mock.patch("docker.client.DockerClient.containers")
 @mock.patch("subprocess.Popen")
 @mock.patch("subprocess.check_call")
 @mock.patch("os.remove", return_value=True)
+@mock.patch("os.mkdir", return_value=True)
 @mock.patch("gwvolman.tasks._get_container_config", return_value=CONTAINER_CONFIG)
 @mock.patch("gwvolman.tasks._get_api_key", return_value="key123")
 @mock.patch("gwvolman.tasks._write_env_json", return_value="/path/to/environment.json")
 @mock.patch("gwvolman.tasks._get_session", return_value={"_id": None})
-@mock.patch("gwvolman.tasks._create_docker_volume", return_value="/path/to/mountpoint/")
 @mock.patch("gwvolman.tasks._make_fuse_dirs", return_value=True)
 @mock.patch("gwvolman.tasks._mount_girderfs", return_value=True)
 @mock.patch("gwvolman.tasks.ImageBuilder")
@@ -101,23 +96,21 @@ def test_recorded_run(
     image_builder,
     mg,
     mfd,
-    cdv,
     gs,
     wej,
     gak,
     gcc,
+    osmk,
     osr,
     spcc,
     sp,
     containers,
-    volumes,
+    nu,
     time
 ):
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
     mock_gc.patch = mock_gc_patch
-
-    volumes.get.return_value = MockVolume()
 
     # This should succeed
     image_builder.return_value.run_r2d.return_value = ({"StatusCode": 0}, "")
@@ -134,7 +127,7 @@ def test_recorded_run(
     try:
         with mock.patch(
             'gwvolman.utils.Deployment.registry_url', new_callable=mock.PropertyMock
-        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()) as bo:
+        ) as mock_dep, mock.patch('builtins.open', mock.mock_open()):
             mock_dep.return_value = 'https://registry.test.wholetale.org'
             recorded_run.girder_client = mock_gc
             recorded_run.job_manager = mock.MagicMock()
@@ -146,27 +139,7 @@ def test_recorded_run(
     image_builder.return_value.dh.cli.containers.create.assert_has_calls(
         [RPZ_RUN_CALL], any_order=True
     )
-    sp.assert_has_calls(
-        [
-            mock.call(
-                [
-                    "/host/usr/bin/docker",
-                    "stats",
-                    "--format",
-                    '"{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}"',
-                    "container_id",
-                ],
-                stdout=-1,
-                universal_newlines=True,
-            ),
-            mock.call(
-                ["ts", '"%Y-%m-%dT%H:%M:%.S"'],
-                stdin=sp.return_value.stdout,
-                stdout=bo.return_value,
-            )
-        ],
-        any_order=True,
-    )
+    osmk.assert_has_calls([mock.call("/mnt/homes/mountpoints/123abc_user1_123456")])
 
     # Test execution failure
     image_builder.return_value.dh.cli.containers.get.return_value.wait.side_effect = \
@@ -195,4 +168,4 @@ def test_write_env_json():
     with mock.patch('builtins.open', mock.mock_open()):
         env_json = _write_env_json(workspace_dir, mock_image)
 
-        assert env_json == '/host/path/to/mountpoint/workspace/environment.json'
+        assert env_json == '/path/to/mountpoint/workspace/environment.json'

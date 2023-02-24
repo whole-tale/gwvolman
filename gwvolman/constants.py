@@ -27,6 +27,7 @@ REPO2DOCKER_VERSION = os.environ.get(
     "wholetale/repo2docker_wholetale:latest"
 )
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
+VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
 
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"

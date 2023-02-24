@@ -5,26 +5,7 @@ import os
 os.environ['GIRDER_API_URL'] = 'https://girder.dev.wholetale.org/api/v1'
 
 from gwvolman.tasks import create_volume, _mount_girderfs, \
-    _make_fuse_dirs, _create_docker_volume, _get_session # noqa
-
-
-class MockVolume:
-    @property
-    def id(self):
-        return "abc"
-
-    @property
-    def name(self):
-        return "vol1"
-
-    def remove(self):
-        return True
-
-    @property
-    def attrs(self):
-        return {
-            'Mountpoint': '/var/lib/docker/volumes/vol1'
-        }
+    _make_fuse_dirs, _get_session # noqa
 
 
 def mock_gc_post(path, parameters=None):
@@ -47,15 +28,14 @@ def mock_gc_get(path, parameters=None):
 
 
 @mock.patch("gwvolman.tasks.new_user", return_value="123456")
+@mock.patch("os.mkdir", return_value=None)
 @mock.patch("docker.client.DockerClient.info", return_value={'Swarm': {'NodeID': 'node1'}})
-@mock.patch("docker.client.DockerClient.volumes")
 @mock.patch("gwvolman.tasks._get_api_key", return_value="apikey1")
 @mock.patch("gwvolman.tasks._get_session", return_value={"_id": "session1"})
-@mock.patch("gwvolman.tasks._create_docker_volume", return_value="/path/to/mountpoint/")
 @mock.patch("gwvolman.tasks._make_fuse_dirs", return_value=True)
 @mock.patch("gwvolman.tasks._mount_girderfs", return_value=True)
 @mock.patch("gwvolman.tasks._mount_bind", return_value=True)
-def test_create_volume(mbind, mgfs, mfd, cdv, gs, gak, volumes, info, nu):
+def test_create_volume(mbind, mgfs, mfd, gs, gak, info, osmk, nu):
 
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
@@ -64,35 +44,39 @@ def test_create_volume(mbind, mgfs, mfd, cdv, gs, gak, volumes, info, nu):
     create_volume.girder_client = mock_gc
     create_volume.job_manager = mock.MagicMock()
 
-    volumes.get.return_value = MockVolume()
+    mount_point = "/mnt/homes/mountpoints/tale1_user1_123456"
 
     try:
         ret = create_volume('instance1')
 
         expected = {
             'nodeId': 'node1',
-            'mountPoint': '/path/to/mountpoint/',
-            'volumeName': 'tale1_user1_123456',
+            'mountPoint': mount_point,
             'sessionId': 'session1',
             'instanceId': 'instance1',
             'taleId': "tale1",
+            'volumeName': 'tale1_user1_123456',
         }
 
         assert ret == expected
     except ValueError:
         assert False
 
+    osmk.assert_has_calls([
+        mock.call("/mnt/homes/mountpoints/tale1_user1_123456")
+    ])
+
     mbind.assert_has_calls([
-        mock.call('/path/to/mountpoint/', 'home', {'_id': 'ghi567', 'login': 'user1'}),
-        mock.call('/path/to/mountpoint/', 'workspace', {'_id': 'tale1'}),
+        mock.call(mount_point, 'home', {'_id': 'ghi567', 'login': 'user1'}),
+        mock.call(mount_point, 'workspace', {'_id': 'tale1'}),
     ])
     mgfs.assert_has_calls([
-        mock.call('/path/to/mountpoint/', 'data', 'wt_dms', 'session1',
-                  'apikey1', hostns=True),
-        mock.call('/path/to/mountpoint/', 'versions', 'wt_versions', 'tale1',
-                  'apikey1', hostns=True),
-        mock.call('/path/to/mountpoint/', 'runs', 'wt_runs', 'tale1', 'apikey1',
-                  hostns=True)
+        mock.call(mount_point, 'data', 'wt_dms', 'session1',
+                  'apikey1', hostns=False),
+        mock.call(mount_point, 'versions', 'wt_versions', 'tale1',
+                  'apikey1', hostns=False),
+        mock.call(mount_point, 'runs', 'wt_runs', 'tale1', 'apikey1',
+                  hostns=False)
         ], any_order=False)
 
 
@@ -111,38 +95,13 @@ def test_mount_girderfs(spcc):
         ], any_order=False)
 
 
-@mock.patch("os.makedirs", return_value=True)
 @mock.patch("os.mkdir", return_value=True)
-def test_make_fuse_dirs(mkdir, makedirs):
+def test_make_fuse_dirs(mkdir):
 
     with mock.patch('os.path.isdir', return_value=True):
         _make_fuse_dirs('/path/to/mountpoint', ['dir1'])
 
-    mkdir.assert_has_calls([mock.call('/host/path/to/mountpoint/dir1')], any_order=False)
-
-    with mock.patch('os.path.isdir', return_value=False):
-        _make_fuse_dirs('/path/to/mountpoint', ['dir2'])
-
-    makedirs.assert_has_calls([mock.call('/path/to/mountpoint/dir2')], any_order=False)
-
-
-@mock.patch("builtins.open", mock.mock_open(read_data="overlay"))
-@mock.patch("os.chown", return_value=True)
-@mock.patch("docker.client.DockerClient")
-def test_create_docker_volume(cli, chown):
-
-    cli.volumes.create.return_value = MockVolume()
-
-    with mock.patch('os.walk') as mock_walk:
-        mock_walk.return_value = [('/var/lib/docker/volumes', ('vol1',), ('',))]
-
-        mountpoint = _create_docker_volume(cli, 'vol1')
-        assert mountpoint == '/var/lib/docker/volumes/vol1'
-    chown.assert_has_calls([
-        mock.call('/host/var/lib/docker/volumes/vol1', 1000, 100),
-        mock.call('/var/lib/docker/volumes/vol1', 1000, 100),
-        mock.call('/var/lib/docker/volumes/', 1000, 100)
-    ])
+    mkdir.assert_has_calls([mock.call('/path/to/mountpoint/dir1')], any_order=False)
 
 
 def test_get_session():
