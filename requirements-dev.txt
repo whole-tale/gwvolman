@@ -1,5 +1,6 @@
 pytest
 pytest-cov
+pytest-celery
 httmock
 mock
 flake8
