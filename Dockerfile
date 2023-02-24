@@ -46,15 +46,10 @@ RUN . /home/wtuser/venv/bin/activate \
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
-# Temporary fix for kombu
-RUN sed \
-  -e 's/return decode(data/&.decode("utf-8")/' \
-  -i /home/wtuser/venv/lib/python3.8/site-packages/kombu/serialization.py
-
 # Temporary fix for girder_utils (chain tasks and kwargs)
 RUN sed \
-  -e "/'kwargs':/ s/task_kwargs/json.dumps(&)/" \
-  -i /home/wtuser/venv/lib/python3.8/site-packages/girder_worker/context/nongirder_context.py
+  -e "/serializer/ s/girder_io/json/" \
+  -i /home/wtuser/venv/lib/python3.8/site-packages/girder_worker/task.py
 
 USER root
 # https://github.com/whole-tale/gwvolman/issues/51
