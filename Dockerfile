@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:jammy
 
 RUN apt-get update -qqy && \
   apt-get install -qy software-properties-common python3-software-properties && \
@@ -49,7 +49,7 @@ ENV LANG=C.UTF-8
 # Temporary fix for girder_utils (chain tasks and kwargs)
 RUN sed \
   -e "/serializer/ s/girder_io/json/" \
-  -i /home/wtuser/venv/lib/python3.8/site-packages/girder_worker/task.py
+  -i /home/wtuser/venv/lib/python3.10/site-packages/girder_worker/task.py
 
 USER root
 # https://github.com/whole-tale/gwvolman/issues/51

@@ -11,8 +11,6 @@ and publishing jobs.
  
 `lib/`: Contains publishing logic 
   
-`lib/dataone`: DataONE related publishing code
-
 
 ### Running Unit Tests
 

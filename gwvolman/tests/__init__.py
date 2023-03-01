@@ -1,6 +1,5 @@
 # A number of common/shared structures for testing
 import copy
-import httmock
 import json
 import os
 
@@ -360,24 +359,3 @@ def mock_gc_get(path, parameters=None):
         return tale
     else:
         raise RuntimeError
-
-
-@httmock.urlmatch(
-    scheme="https",
-    netloc="^cn-stage-2.test.dataone.org$",
-    path="^/cn/v2/formats$",
-    method="GET",
-)
-def mock_dataone_formats(url, request):
-    resp_fname = os.path.join(os.path.dirname(__file__), "d1formats_resp.xml")
-    with open(resp_fname, "r") as fp:
-        response = fp.read()
-    return httmock.response(
-        status_code=200,
-        content=response,
-        headers={"Connection": "Close", "Content-Type": "text/xml"},
-        reason=None,
-        elapsed=5,
-        request=request,
-        stream=False,
-    )
