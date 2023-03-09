@@ -4,6 +4,7 @@ RUN apt-get update -qqy && \
   apt-get install -qy software-properties-common python3-software-properties && \
   DEBIAN_FRONTEND=noninteractive apt-get -qy install \
     build-essential \
+    tini \
     vim \
     git \
     gosu \
@@ -63,4 +64,4 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 COPY scheduler-entrypoint.sh /scheduler-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 RUN chmod +x /scheduler-entrypoint.sh
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/docker-entrypoint.sh"]
