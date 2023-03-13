@@ -22,7 +22,6 @@ from .utils import \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _recorded_run, DEPLOYMENT
 
-from .lib.dataone.publish import DataONEPublishProvider
 from .lib.zenodo import ZenodoPublishProvider
 
 from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
@@ -413,16 +412,7 @@ def publish(self,
     """
 
     provider_name = token["provider"].lower()
-    if provider_name.startswith("dataone"):
-        provider = DataONEPublishProvider(
-            self.girder_client,
-            tale_id,
-            token,
-            version_id,
-            job_manager=self.job_manager,
-            dataone_node=repository,
-        )
-    elif provider_name == "zenodo":
+    if provider_name == "zenodo":
         provider = ZenodoPublishProvider(
             self.girder_client,
             tale_id,
