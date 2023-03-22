@@ -733,12 +733,26 @@ def recorded_run(self, run_id, tale_id, entrypoint):
             current=3, forceFlush=True)
 
         set_run_status(run, RunStatus.RUNNING)
+        container_name = f"rrun-{new_user(8)}"
+
+        self.girder_client.addMetadataToFolder(
+            run["_id"],
+            {
+                "container_name": container_name,
+                "volume_created": state.volume_created,
+                "fs_mounted": state.fs_mounted,
+                "session_created": state.session_created,
+                "node_id": image_builder.dh.cli.info()["Swarm"]["NodeID"],
+            }
+        )
+
         _recorded_run(
             image_builder.dh.cli,
             mountpoint,
             container_config,
             tag,
             entrypoint,
+            container_name,
             task=self
         )
         if self.canceled:
@@ -754,6 +768,30 @@ def recorded_run(self, run_id, tale_id, entrypoint):
         raise
     finally:
         state.cleanup(False)
+
+
+@app.task()
+def check_on_run(run_state):
+    cli = docker.from_env(version='1.28')
+    try:
+        container = cli.containers.get(run_state["container_name"])
+        return container.status == "running"
+    except docker.errors.NotFound:
+        return False
+
+
+@girder_job(title='Clean failed Recorded Run')
+@app.task(bind=True)
+def cleanup_run(self, run_id):
+    run = self.girder_client.get(f"/run/{run_id}")
+    state = RecordedRunCleaner(run, self.girder_client)
+    state.volume_created = run["meta"].get("volume_created")
+    state.fs_mounted = run["meta"].get("fs_mounted")
+    state.session_created = run["meta"].get("session_created")
+    state.cleanup(canceled=False)
+    state.set_run_status(RunStatus.FAILED)
+    if (job_id := run["meta"]["jobId"]):
+        self.girder_client.put(f"/job/{job_id}", parameters={"status": 4})
 
 
 class RecordedRunCleaner:

@@ -342,7 +342,7 @@ def stop_container(container):
         raise
 
 
-def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None):
+def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task=None):
 
     def logging_worker(log_queue, container):
         for line in container.logs(stream=True):
@@ -367,6 +367,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, task=None)
         image=tag,
         command=run_cmd,
         detach=True,
+        name=name,
         volumes=volumes
     )
 

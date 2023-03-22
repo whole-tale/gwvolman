@@ -53,7 +53,8 @@ RPZ_RUN_CALL = mock.call(
     volumes={
         os.path.join(_mount_point, "data"): {'bind': '/work/data', 'mode': 'rw'},
         os.path.join(_mount_point, "workspace"): {'bind': '/work/workspace', 'mode': 'rw'}
-    }
+    },
+    name="rrun-123456",
 )
 CPR_RUN_CALL = mock.call(
     image='wholetale/wt-cpr:latest',
