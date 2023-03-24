@@ -20,7 +20,7 @@ from .build_utils import ImageBuilder
 from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _recorded_run, DEPLOYMENT
+    _recorded_run, DEPLOYMENT, stop_container
 
 from .lib.zenodo import ZenodoPublishProvider
 
@@ -788,6 +788,7 @@ def cleanup_run(self, run_id):
     state.volume_created = run["meta"].get("volume_created")
     state.fs_mounted = run["meta"].get("fs_mounted")
     state.session_created = run["meta"].get("session_created")
+    state.container_name = run["meta"].get("container_name")
     state.cleanup(canceled=False)
     state.set_run_status(RunStatus.FAILED)
     if (job_id := run["meta"]["jobId"]):
@@ -798,10 +799,12 @@ class RecordedRunCleaner:
     volume_created = None
     fs_mounted = None
     session_created = None
+    container_name = None
 
     def __init__(self, run, gc):
         self.gc = gc
         self.run = run
+        self.docker_cli = docker.from_env(version='1.28')
 
     def set_run_status(self, status):
         self.gc.patch(
@@ -809,6 +812,9 @@ class RecordedRunCleaner:
         )
 
     def cleanup(self, canceled=True):
+        if self.container_name:
+            container = self.docker_cli.containers.get(self.container_name)
+            stop_container(container)
 
         if self.fs_mounted:
             for suffix in ["data", "workspace"]:
