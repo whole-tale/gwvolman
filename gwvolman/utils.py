@@ -19,7 +19,7 @@ import docker
 import datetime
 import dateutil.relativedelta as rel
 
-from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
+from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, VOLUMES_ROOT
 from .lib.stats_collector import DockerStatsCollectorThread
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
@@ -244,7 +244,7 @@ def _launch_container(volume_info, container_config):
     #                        target=container_config.target_mount)
     # ]
 
-    source_mount = volume_info["mountPoint"]
+    source_mount = os.path.join(VOLUMES_ROOT, "mountpoints", volume_info["volumeName"])
     mounts = []
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
     for source in volumes:
@@ -338,7 +338,7 @@ class DummyTask:
     canceled = False
 
 
-def stop_container(container):
+def stop_container(container: docker.models.containers.Container):
     try:
         container.stop()
     except requests.exceptions.ReadTimeout:

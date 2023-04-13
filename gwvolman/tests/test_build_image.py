@@ -189,9 +189,7 @@ def test_image_builder(dtmp, depl, dapicli):
         )
 
 
-@mock.patch.dict(
-    os.environ, {"MATLAB_FILE_INSTALLATION_KEY": "fake-key"}
-)
+@mock.patch.dict(os.environ, {"MATLAB_FILE_INSTALLATION_KEY": "fake-key"})
 @mock.patch("docker.APIClient")
 @mock.patch(
     "gwvolman.utils.Deployment.registry_url",
@@ -227,9 +225,7 @@ def test_r2d_calls(dtmp, depl, dapicli):
         image_builder = ImageBuilder(gc, tale=tale)
         with pytest.raises(ValueError) as ex:
             image_builder.pull_r2d()
-        assert ex.match(
-            f"Requested r2d image '{REPO2DOCKER_VERSION}' not found."
-        )
+        assert ex.match(f"Requested r2d image '{REPO2DOCKER_VERSION}' not found.")
 
     with mock.patch("docker.from_env") as dcli:
         mock_container_run = mock.MagicMock(wraps=docker_run_r2d_container)
@@ -307,8 +303,14 @@ def test_r2d_calls(dtmp, depl, dapicli):
                 detach=True,
                 remove=True,
                 volumes={
-                    "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-                    f"/tmp/{subdir}": {"bind": image_builder.build_context, "mode": "ro"},
+                    "/var/run/docker.sock": {
+                        "bind": "/var/run/docker.sock",
+                        "mode": "rw",
+                    },
+                    f"/tmp/{subdir}": {
+                        "bind": image_builder.build_context,
+                        "mode": "ro",
+                    },
                 },
             )
             ret, _ = image_builder.run_r2d(
@@ -320,7 +322,7 @@ def test_r2d_calls(dtmp, depl, dapicli):
 @mock.patch(
     "girder_worker.app.Task.canceled",
     new_callable=mock.PropertyMock,
-    return_value=False
+    return_value=False,
 )
 @mock.patch(
     "gwvolman.utils.Deployment.registry_url",
