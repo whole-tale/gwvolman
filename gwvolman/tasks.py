@@ -270,12 +270,15 @@ def shutdown_container(self, instanceId):
 @app.task(bind=True)
 def remove_volume(self, instanceId):
     """Unmount WT-fs and remove mountpoint."""
+    logging.info("Stopping FS container for instance %s", instanceId)
     user, instance = _get_user_and_instance(self.girder_client, instanceId)
 
     if 'containerInfo' not in instance:
+        logging.warning("No containerInfo for instance %s", instanceId)
         return
     containerInfo = instance["containerInfo"]  # VALIDATE
     FSContainer.stop_container(containerInfo["fscontainerId"])
+    logging.info("FS container %s stopped", containerInfo["fscontainerId"])
 
 
 @girder_job(title='Build Tale Image')
