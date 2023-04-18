@@ -79,10 +79,11 @@ class Deployment(object):
     def tmpdir_mount(self):
         """str: Path to the temporary directory used by gwvolman."""
         if self._tmpdir_mount is None:
-            c = self.docker_client.containers.get("celery_worker")
+            service = self.docker_client.services.get("wt_celery_worker")
             tmpdir = tempfile.gettempdir()
+            mounts = service.attrs["Spec"]["TaskTemplate"]["ContainerSpec"]["Mounts"]
             self._tmpdir_mount = next(
-                (_["Source"] for _ in c.attrs["Mounts"] if _["Destination"] == tmpdir),
+                (_["Source"] for _ in mounts if _["Target"] == tmpdir),
                 "/tmp"
             )
         return self._tmpdir_mount

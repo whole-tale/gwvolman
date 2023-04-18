@@ -13,18 +13,24 @@ def deployment():
 
 def test_tmpdir_mount(deployment):
     with mock.patch.object(deployment, "docker_client") as mock_docker_client:
-        mock_docker_client.containers.get.return_value = mock.Mock()
-        mock_docker_client.containers.get.return_value.attrs = {
-            "Mounts": [
-                {
-                    "Destination": "/tmp",
-                    "Source": "/blah/tmp",
-                    "Type": "bind",
-                    "Mode": "rw",
-                    "RW": True,
-                    "Propagation": "rprivate",
+        mock_docker_client.services.get.return_value = mock.Mock()
+        mock_docker_client.services.get.return_value.attrs = {
+            "Spec": {
+                "TaskTemplate": {
+                    "ContainerSpec": {
+                        "Mounts": [
+                            {
+                                "Target": "/tmp",
+                                "Source": "/blah/tmp",
+                                "Type": "bind",
+                                "Mode": "rw",
+                                "RW": True,
+                                "Propagation": "rprivate",
+                            }
+                        ]
+                    }
                 }
-            ]
+            }
         }
         assert deployment.tmpdir_mount == "/blah/tmp"
 
