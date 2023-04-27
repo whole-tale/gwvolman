@@ -4,7 +4,7 @@ import time
 import docker
 import requests
 
-from .constants import VOLUMES_ROOT
+from .constants import GIRDERFS_IMAGE, VOLUMES_ROOT
 from .utils import stop_container
 
 
@@ -15,7 +15,7 @@ class FSContainer(object):
         # Create container for handling FUSE mounts
         print("Creating WT Filesystem container...")
         fscontainer = cli.containers.run(
-            image="wholetale/girderfs",
+            image=GIRDERFS_IMAGE,
             name=name,
             detach=True,
             labels={"traefik.enable": "false"},
