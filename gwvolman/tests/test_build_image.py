@@ -132,7 +132,12 @@ def docker_run_r2d_container(**kwargs):
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
-def test_image_builder(depl, dapicli):
+@mock.patch(
+    "gwvolman.utils.Deployment.tmpdir_mount",
+    new_callable=mock.PropertyMock,
+    return_value="/tmp",
+)
+def test_image_builder(dtmp, depl, dapicli):
     gc = mock.MagicMock(spec=GirderClient)
     gc.get = mock_gc_get
     gc.listItem = mock_gc_listItem
@@ -193,7 +198,12 @@ def test_image_builder(depl, dapicli):
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
-def test_r2d_calls(depl, dapicli):
+@mock.patch(
+    "gwvolman.utils.Deployment.tmpdir_mount",
+    new_callable=mock.PropertyMock,
+    return_value="/tmp",
+)
+def test_r2d_calls(dtmp, depl, dapicli):
     gc = mock.MagicMock(spec=GirderClient)
     gc.get = mock_gc_get
     gc.listItem = mock_gc_listItem
@@ -229,6 +239,7 @@ def test_r2d_calls(depl, dapicli):
         # Stata
         tale["imageId"] = "stata"
         image_builder = ImageBuilder(gc, tale=tale)
+        subdir = os.path.basename(image_builder.build_context)
         stata_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --engine dockercli"
@@ -243,18 +254,19 @@ def test_r2d_calls(depl, dapicli):
             remove=True,
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-                "/tmp": {"bind": "/tmp", "mode": "ro"},
+                f"/tmp/{subdir}": {"bind": image_builder.build_context, "mode": "ro"},
             },
         )
 
         mock_open = mock.mock_open(read_data="blah")
         with mock.patch("builtins.open", mock_open):
-            ret, _ = image_builder.run_r2d("some_tag", image_builder.build_context)
+            ret, _ = image_builder.run_r2d("some_tag")
         mock_container_run.assert_has_calls([stata_expected_call])
 
         # Matlab
         tale["imageId"] = "matlab"
         image_builder = ImageBuilder(gc, tale=tale)
+        subdir = os.path.basename(image_builder.build_context)
         matlab_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --engine dockercli"
@@ -269,12 +281,11 @@ def test_r2d_calls(depl, dapicli):
             remove=True,
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-                "/tmp": {"bind": "/tmp", "mode": "ro"},
+                f"/tmp/{subdir}": {"bind": image_builder.build_context, "mode": "ro"},
             },
         )
         ret, _ = image_builder.run_r2d(
             "some_tag",
-            image_builder.build_context,
         )
         mock_container_run.assert_has_calls([matlab_expected_call])
 
@@ -283,6 +294,7 @@ def test_r2d_calls(depl, dapicli):
             r2d = f"wholetale/repo2docker_wholetale:{r2d_tag}"
             tale["imageInfo"] = {"repo2docker_version": r2d}
             image_builder = ImageBuilder(gc, tale=tale)
+            subdir = os.path.basename(image_builder.build_context)
             expected_call = mock.call(
                 image=r2d,
                 command=f"jupyter-repo2docker {engine}"
@@ -296,12 +308,11 @@ def test_r2d_calls(depl, dapicli):
                 remove=True,
                 volumes={
                     "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-                    "/tmp": {"bind": "/tmp", "mode": "ro"},
+                    f"/tmp/{subdir}": {"bind": image_builder.build_context, "mode": "ro"},
                 },
             )
             ret, _ = image_builder.run_r2d(
                 "some_tag",
-                image_builder.build_context,
             )
             mock_container_run.assert_has_calls([expected_call])
 
@@ -316,7 +327,12 @@ def test_r2d_calls(depl, dapicli):
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
-def test_build_image_task(deployment, task):
+@mock.patch(
+    "gwvolman.utils.Deployment.tmpdir_mount",
+    new_callable=mock.PropertyMock,
+    return_value="/tmp",
+)
+def test_build_image_task(dtmpdir, drurl, task):
     from gwvolman.tasks import build_tale_image
     from gwvolman.constants import TaleStatus
 

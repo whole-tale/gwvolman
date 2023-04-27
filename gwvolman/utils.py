@@ -11,6 +11,7 @@ import re
 import requests
 import string
 import time
+import tempfile
 import threading
 import uuid
 import logging
@@ -69,9 +70,22 @@ class Deployment(object):
     _girder_url = None
     _registry_url = None
     _traefik_network = None
+    _tmpdir_mount = None
 
     def __init__(self):
         self.docker_client = docker.from_env(version='1.28')
+
+    @property
+    def tmpdir_mount(self):
+        """str: Path to the temporary directory used by gwvolman."""
+        if self._tmpdir_mount is None:
+            c = self.docker_client.containers.get("celery_worker")
+            tmpdir = tempfile.gettempdir()
+            self._tmpdir_mount = next(
+                (_["Source"] for _ in c.attrs["Mounts"] if _["Destination"] == tmpdir),
+                "/tmp"
+            )
+        return self._tmpdir_mount
 
     @property
     def traefik_network(self):

@@ -148,7 +148,6 @@ class ImageBuilder:
         registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
         ret, output_digest = self.run_r2d(
             f"{registry_netloc}/placeholder_env/placeholder_dockerfile",
-            self.build_context,
             dry_run=True,
         )
         if ret["StatusCode"] != 0:
@@ -160,7 +159,7 @@ class ImageBuilder:
 
         return f"{registry_netloc}/tale/{env_hash.hexdigest()}:{output_digest}"
 
-    def run_r2d(self, tag, build_dir, dry_run=False, task=None):
+    def run_r2d(self, tag, dry_run=False, task=None):
         """
         Run repo2docker on the workspace using a shared temp directory. Note that
         this uses the "local" provider.  Use the same default user-id and
@@ -193,14 +192,17 @@ class ImageBuilder:
             f"--target-repo-dir='{target_repo_dir}' "
             f"--user-id=1000 --user-name={self.container_config.container_user} "
             f"--no-clean {op} --debug {extra_args} "
-            f"--image-name {tag} {build_dir}"
+            f"--image-name {tag} {self.build_context}"
         )
+
+        r2d_context_dir = os.path.relpath(self.build_context, tempfile.gettempdir())
+        host_r2d_context_dir = os.path.join(DEPLOYMENT.tmpdir_mount, r2d_context_dir)
 
         logging.info("Calling %s", r2d_cmd)
 
         volumes = {
             "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
-            "/tmp": {"bind": "/tmp", "mode": "ro"},
+            host_r2d_context_dir: {"bind": self.build_context, "mode": "ro"},
         }
 
         print(f"Using repo2docker {self.container_config.repo2docker_version}")

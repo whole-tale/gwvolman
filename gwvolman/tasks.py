@@ -357,7 +357,7 @@ def build_tale_image(task, tale_id, force=False):
     print("Forcing build.")
 
     # Prepare build context
-    ret, _ = image_builder.run_r2d(tag, image_builder.build_context, task=task)
+    ret, _ = image_builder.run_r2d(tag, task=task)
     if task.canceled:
         task.request.chain = None
         logging.info("Build canceled.")
@@ -574,7 +574,7 @@ def rebuild_image_cache(self):
         )
 
         start = time.time()
-        ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
+        ret, _ = image_builder.run_r2d(tag)
 
         elapsed = int(time.time() - start)
         if ret["StatusCode"] != 0:
@@ -719,7 +719,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
     try:
         if not image_builder.cached_image(tag):
             print("Building image for recorded run " + tag)
-            ret, _ = image_builder.run_r2d(tag, image_builder.build_context)
+            ret, _ = image_builder.run_r2d(tag)
             if self.canceled:
                 state.cleanup()
                 return
