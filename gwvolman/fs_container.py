@@ -1,5 +1,6 @@
 # Description: Context manager for changing the current working directory
 
+import logging
 import time
 import docker
 import requests
@@ -71,5 +72,16 @@ class FSContainer(object):
             container = cli.containers.get(name)
         except docker.errors.NotFound:
             return
-        requests.delete(f"http://{container.name}:8888/")
+        resp = requests.delete(f"http://{container.name}:8888/")
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError:
+            # log error from resp with traceback and continue
+            logging.warning(
+                f"Failed to shutdown WT Filesystem container {name} "
+                f"with status code {resp.status_code}"
+            )
+            logging.warning(resp.text)
+            pass
+
         stop_container(container)
