@@ -19,7 +19,7 @@ import docker
 import datetime
 import dateutil.relativedelta as rel
 
-from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION
+from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, VOLUMES_ROOT
 from .lib.stats_collector import DockerStatsCollectorThread
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
@@ -79,10 +79,11 @@ class Deployment(object):
     def tmpdir_mount(self):
         """str: Path to the temporary directory used by gwvolman."""
         if self._tmpdir_mount is None:
-            c = self.docker_client.containers.get("celery_worker")
+            service = self.docker_client.services.get("wt_celery_worker")
             tmpdir = tempfile.gettempdir()
+            mounts = service.attrs["Spec"]["TaskTemplate"]["ContainerSpec"]["Mounts"]
             self._tmpdir_mount = next(
-                (_["Source"] for _ in c.attrs["Mounts"] if _["Destination"] == tmpdir),
+                (_["Source"] for _ in mounts if _["Target"] == tmpdir),
                 "/tmp"
             )
         return self._tmpdir_mount
@@ -244,7 +245,7 @@ def _launch_container(volume_info, container_config):
     #                        target=container_config.target_mount)
     # ]
 
-    source_mount = volume_info["mountPoint"]
+    source_mount = os.path.join(VOLUMES_ROOT, "mountpoints", volume_info["volumeName"])
     mounts = []
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
     for source in volumes:
@@ -338,7 +339,7 @@ class DummyTask:
     canceled = False
 
 
-def stop_container(container):
+def stop_container(container: docker.models.containers.Container):
     try:
         container.stop()
     except requests.exceptions.ReadTimeout:

@@ -64,10 +64,10 @@ TALE = {
             "@type": "schema:Person",
             "schema:email": "thelen@nceas.ucsb.edu",
             "schema:familyName": "T",
-            "schema:givenName": "Thomas"
+            "schema:givenName": "Thomas",
         },
         "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
-        "schema:name": "empty"
+        "schema:name": "empty",
     },
 }
 
@@ -93,7 +93,7 @@ TALE_NO_DESC = {
             "doi: 10.5065/D6862DM8."
         )
     ],
-    "description": '',
+    "description": "",
     "dct:hasVersion": {
         "@id": "https://data.wholetale.org/api/v1/folder/603152b34ac3a96578dda45d",
         "@type": "wt:TaleVersion",
@@ -102,10 +102,10 @@ TALE_NO_DESC = {
             "@type": "schema:Person",
             "schema:email": "thelen@nceas.ucsb.edu",
             "schema:familyName": "T",
-            "schema:givenName": "Thomas"
+            "schema:givenName": "Thomas",
         },
         "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
-        "schema:name": "empty"
+        "schema:name": "empty",
     },
 }
 
@@ -163,10 +163,10 @@ PUBLISHED_TALE = {
             "@type": "schema:Person",
             "schema:email": "thelen@nceas.ucsb.edu",
             "schema:familyName": "T",
-            "schema:givenName": "Thomas"
+            "schema:givenName": "Thomas",
         },
         "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
-        "schema:name": "empty"
+        "schema:name": "empty",
     },
     "folderId": "5cfd57fca18691e5d1feeda8",
     "format": 7,
@@ -184,8 +184,9 @@ PUBLISHED_TALE = {
             "pid": "doi:10.5072/zenodo.670350",
             "repository": "sandbox.zenodo.org",
             "repository_id": "670350",
-            "uri": "https://sandbox.zenodo.org/record/670350"
-        }],
+            "uri": "https://sandbox.zenodo.org/record/670350",
+        }
+    ],
     "title": "Example Tale: Mapping Estimated Water Usage",
     "updated": "2019-10-08T17:44:29.523000+00:00",
 }
@@ -238,10 +239,10 @@ PARENT_TALE = {
             "@type": "schema:Person",
             "schema:email": "thelen@nceas.ucsb.edu",
             "schema:familyName": "T",
-            "schema:givenName": "Thomas"
+            "schema:givenName": "Thomas",
         },
         "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
-        "schema:name": "empty"
+        "schema:name": "empty",
     },
     "folderId": "5cfd57fca18691e5d1feeda8",
     "format": 7,
@@ -306,10 +307,10 @@ COPIED_TALE = {
             "@type": "schema:Person",
             "schema:email": "thelen@nceas.ucsb.edu",
             "schema:familyName": "T",
-            "schema:givenName": "Thomas"
+            "schema:givenName": "Thomas",
         },
         "schema:dateModified": "2021-02-20T18:19:31.012000+00:00",
-        "schema:name": "empty"
+        "schema:name": "empty",
     },
     "folderId": "5cfd57fca18691e5d1feeda8",
     "format": 7,

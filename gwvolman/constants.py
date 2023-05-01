@@ -26,6 +26,10 @@ REPO2DOCKER_VERSION = os.environ.get(
     "REPO2DOCKER_VERSION",
     "wholetale/repo2docker_wholetale:latest"
 )
+GIRDERFS_IMAGE = os.environ.get(
+    "GIRDERFS_IMAGE",
+    "wholetale/girderfs:latest"
+)
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
 

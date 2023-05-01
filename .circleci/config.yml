@@ -1,4 +1,6 @@
 version: 2.1
+orbs:
+  codecov: codecov/codecov@3
 
 jobs: # A basic unit of work in a run
   build: # runs not using Workflows must have a `build` job as entry point 
@@ -29,6 +31,4 @@ jobs: # A basic unit of work in a run
       - run:
           name: Display coverage reports
           command: coverage report
-      - run:
-          name: Uploading Coverage Results
-          command: codecov
+      - codecov/upload

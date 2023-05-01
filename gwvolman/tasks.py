@@ -4,15 +4,10 @@ import os
 import json
 import time
 import docker
-import shutil
-import subprocess
+from urllib.parse import urlparse
 import girder_client
 
 import logging
-try:
-    from urlparse import urlparse
-except ImportError:
-    from urllib.parse import urlparse
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
@@ -21,12 +16,12 @@ from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
     _recorded_run, DEPLOYMENT, stop_container
+from .fs_container import FSContainer
 
 from .lib.zenodo import ZenodoPublishProvider
 
-from .constants import GIRDER_API_URL, InstanceStatus, ENABLE_WORKSPACES, \
-    MOUNTPOINTS, VOLUMES_ROOT, TaleStatus, \
-    RunStatus
+from .constants import GIRDER_API_URL, InstanceStatus, \
+    TaleStatus, RunStatus, VOLUMES_ROOT
 
 CREATE_VOLUME_STEP_TOTAL = 2
 LAUNCH_CONTAINER_STEP_TOTAL = 2
@@ -36,12 +31,6 @@ IMPORT_TALE_STEP_TOTAL = 2
 RECORDED_RUN_STEP_TOTAL = 4
 
 
-def _create_mount_point(vol_name):
-    mountpoint = os.path.join(VOLUMES_ROOT, "mountpoints", vol_name)
-    _safe_mkdir(mountpoint)
-    return mountpoint
-
-
 @girder_job(title='Create Tale Data Volume')
 @app.task(bind=True)
 def create_volume(self, instance_id):
@@ -49,41 +38,57 @@ def create_volume(self, instance_id):
     user, instance = _get_user_and_instance(self.girder_client, instance_id)
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
 
-    vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
-    cli = docker.from_env(version='1.28')
-
     self.job_manager.updateProgress(
         message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
         current=1, forceFlush=True)
 
-    mountpoint = _create_mount_point(vol_name)
-
-    _make_fuse_dirs(mountpoint, MOUNTPOINTS)
-
-    api_key = _get_api_key(self.girder_client)
-
-    session = _get_session(self.girder_client, tale=tale)
-
-    if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=False)
-
-    _mount_bind(mountpoint, 'home', user)
-
-    if ENABLE_WORKSPACES:
-        _mount_bind(mountpoint, 'workspace', tale)
-        _mount_girderfs(mountpoint, 'versions', 'wt_versions', tale['_id'], api_key, hostns=False)
-        _mount_girderfs(mountpoint, 'runs', 'wt_runs', tale['_id'], api_key, hostns=False)
-
+    vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
+    fs_sidecar = FSContainer.start_container(vol_name)
+    payload = {
+        "mounts": [
+            {
+                "type": "data",
+                "protocol": "girderfs",
+                "location": "data",
+            },
+            {
+                "type": "home",
+                "protocol": "bind",
+                "location": "home",
+            },
+            {
+                "type": "workspace",
+                "protocol": "bind",
+                "location": "workspace",
+            },
+            {
+                "type": "versions",
+                "protocol": "girderfs",
+                "location": "versions",
+            },
+            {
+                "type": "runs",
+                "protocol": "girderfs",
+                "location": "runs",
+            },
+        ],
+        "taleId": tale["_id"],
+        "userId": user["_id"],
+        "girderApiUrl": GIRDER_API_URL,
+        "girderApiKey": _get_api_key(self.girder_client),
+        "root": vol_name,
+    }
+    FSContainer.mount(fs_sidecar, payload)
     self.job_manager.updateProgress(
         message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
         current=CREATE_VOLUME_STEP_TOTAL, forceFlush=True)
     print("WT Filesystem created successfully.")
 
+    cli = docker.from_env()
     return dict(
         nodeId=cli.info()['Swarm']['NodeID'],
-        mountPoint=mountpoint,
+        fscontainerId=fs_sidecar.id,
         volumeName=vol_name,
-        sessionId=session["_id"],
         instanceId=instance_id,
         taleId=tale["_id"],
     )
@@ -265,39 +270,15 @@ def shutdown_container(self, instanceId):
 @app.task(bind=True)
 def remove_volume(self, instanceId):
     """Unmount WT-fs and remove mountpoint."""
+    logging.info("Stopping FS container for instance %s", instanceId)
     user, instance = _get_user_and_instance(self.girder_client, instanceId)
 
     if 'containerInfo' not in instance:
+        logging.warning("No containerInfo for instance %s", instanceId)
         return
-    containerInfo = instance['containerInfo']  # VALIDATE
-
-    cli = docker.from_env(version='1.28')
-    # TODO: _remove_volumes()
-    for suffix in MOUNTPOINTS:
-        dest = os.path.join(containerInfo['mountPoint'], suffix)
-        logging.info("Unmounting %s", dest)
-        subprocess.call("sudo umount %s" % dest, shell=True)
-
-    logging.info("Unmounting licenses")
-    subprocess.call("sudo umount /licenses", shell=True)
-
-    try:
-        self.girder_client.delete('/dm/session/{sessionId}'.format(**instance))
-    except Exception as e:
-        logging.error("Unable to remove session. %s", e)
-        pass
-
-    try:
-        volume = cli.volumes.get(containerInfo['volumeName'])
-    except docker.errors.NotFound:
-        logging.info("Volume not present [%s].", containerInfo['volumeName'])
-        return
-    try:
-        logging.info("Removing volume: %s", volume.id)
-        volume.remove()
-    except Exception as e:
-        logging.error("Unable to remove volume [%s]: %s", volume.id, e)
-        pass
+    containerInfo = instance["containerInfo"]  # VALIDATE
+    FSContainer.stop_container(containerInfo["fscontainerId"])
+    logging.info("FS container %s stopped", containerInfo["fscontainerId"])
 
 
 @girder_job(title='Build Tale Image')
@@ -583,60 +564,10 @@ def rebuild_image_cache(self):
             logging.info("Build time: %i seconds", elapsed)
 
 
-def _mount_bind(mountpoint, res_type, obj):
-    if res_type == "home":
-        source_path = f"{VOLUMES_ROOT}/homes/{obj['login'][0]}/{obj['login']}"
-    elif res_type == "workspace":
-        source_path = f"{VOLUMES_ROOT}/workspaces/{obj['_id'][0]}/{obj['_id']}"
-    elif res_type == "run":
-        source_path = (
-            f"{VOLUMES_ROOT}/runs/{obj['taleId'][0:2]}/{obj['taleId']}/"
-            f"{obj['runId']}/workspace"
-        )
-        res_type = "workspace"
-    else:
-        raise ValueError(f"Unknown bind type {res_type}")
-    cmd = f"sudo mount --bind {source_path} {mountpoint}/{res_type}"
-    logging.info("Calling: %s", cmd)
-    subprocess.check_call(cmd, shell=True)
-    print(f"Mounted {source_path} to {mountpoint}/{res_type}")
-
-
-def _mount_girderfs(mountpoint, directory, fs_type, obj_id, api_key, hostns=False):
-
-    hostns_flag = '--hostns' if hostns else ''
-
-    """Mount a girderfs directory given a type and id"""
-    cmd = (
-        f"girderfs {hostns_flag} -c {fs_type} --api-url {GIRDER_API_URL} --api-key {api_key}"
-        f" {os.path.join(mountpoint, directory)} {obj_id}"
-    )
-    logging.info("Calling: %s", cmd)
-    subprocess.check_call(cmd, shell=True)
-    print(f"Mounted {fs_type} {directory}")
-
-
 def _make_fuse_dirs(mountpoint, directories):
     """Create fuse directories"""
     for suffix in directories:
         _safe_mkdir(os.path.join(mountpoint, suffix))
-
-
-def _get_session(gc, tale=None, version_id=None):
-    """Returns the session for a tale or version"""
-    session = {'_id': None}
-
-    if tale is not None and tale.get('dataSet') is not None:
-        session = gc.post(
-            '/dm/session', parameters={'taleId': tale['_id']})
-    elif version_id is not None:
-        # Get the dataset for the version
-        dataset = gc.get('/version/{}/dataSet'.format(version_id))
-        if dataset is not None:
-            session = gc.post(
-                '/dm/session', parameters={'dataSet': json.dumps(dataset)})
-
-    return session
 
 
 def _write_env_json(workspace_dir, image):
@@ -682,21 +613,29 @@ def recorded_run(self, run_id, tale_id, entrypoint):
 
     # Create Docker volume
     vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
-    mountpoint = _create_mount_point(vol_name)
-    state.volume_created = mountpoint
-
-    # Create fuse directories
-    _make_fuse_dirs(mountpoint, ['data', 'workspace'])
-
-    # Mount data and workspace for the run
-    api_key = _get_api_key(self.girder_client)
-    session = _get_session(self.girder_client, version_id=run['runVersionId'])
-    state.session_created = session["_id"]
-
-    if session['_id'] is not None:
-        _mount_girderfs(mountpoint, 'data', 'wt_dms', session['_id'], api_key, hostns=False)
-    _mount_bind(mountpoint, "run", {"runId": run["_id"], "taleId": tale["_id"]})
-    state.fs_mounted = mountpoint
+    fs_sidecar = FSContainer.start_container(vol_name)
+    payload = {
+        "mounts": [
+            {
+                "type": "data",
+                "protocol": "girderfs",
+                "location": "data",
+            },
+            {
+                "type": "run",
+                "protocol": "bind",
+                "location": "workspace",
+            },
+        ],
+        "girderApiUrl": GIRDER_API_URL,
+        "girderApiKey": _get_api_key(self.girder_client),
+        "root": vol_name,
+        "taleId": tale["_id"],
+        "runId": run["_id"],
+        "userId": user["_id"],
+    }
+    FSContainer.mount(fs_sidecar, payload)
+    state.volume_created = vol_name
 
     # Build the image for the run
     self.job_manager.updateProgress(
@@ -740,11 +679,11 @@ def recorded_run(self, run_id, tale_id, entrypoint):
             {
                 "container_name": container_name,
                 "volume_created": state.volume_created,
-                "fs_mounted": state.fs_mounted,
-                "session_created": state.session_created,
                 "node_id": image_builder.dh.cli.info()["Swarm"]["NodeID"],
             }
         )
+
+        mountpoint = os.path.join(VOLUMES_ROOT, "mountpoints", state.volume_created)
 
         _recorded_run(
             image_builder.dh.cli,
@@ -786,8 +725,6 @@ def cleanup_run(self, run_id):
     run = self.girder_client.get(f"/run/{run_id}")
     state = RecordedRunCleaner(run, self.girder_client)
     state.volume_created = run["meta"].get("volume_created")
-    state.fs_mounted = run["meta"].get("fs_mounted")
-    state.session_created = run["meta"].get("session_created")
     state.container_name = run["meta"].get("container_name")
     state.cleanup(canceled=False)
     state.set_run_status(RunStatus.FAILED)
@@ -797,8 +734,6 @@ def cleanup_run(self, run_id):
 
 class RecordedRunCleaner:
     volume_created = None
-    fs_mounted = None
-    session_created = None
     container_name = None
 
     def __init__(self, run, gc):
@@ -816,23 +751,8 @@ class RecordedRunCleaner:
             container = self.docker_cli.containers.get(self.container_name)
             stop_container(container)
 
-        if self.fs_mounted:
-            for suffix in ["data", "workspace"]:
-                dest = os.path.join(self.fs_mounted, suffix)
-                logging.info("Unmounting %s", dest)
-                subprocess.call("sudo umount %s" % dest, shell=True)
-            self.fs_mounted = None
-
-        if self.session_created:
-            # Delete the session
-            try:
-                self.gc.delete('/dm/session/{}'.format(self.session_created))
-            except Exception as e:
-                logging.error("Unable to remove session. %s", e)
-            self.session_created = None
-
         if self.volume_created:
-            shutil.rmtree(self.volume_created, ignore_errors=True)
+            FSContainer.stop_container(self.volume_created)
             self.volume_created = None
 
         if canceled:

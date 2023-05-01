@@ -4,4 +4,3 @@ pytest-celery
 httmock
 mock
 flake8
-codecov
