@@ -116,7 +116,7 @@ def test_recorded_run(
     ) as mock_dep, mock.patch("builtins.open", mock.mock_open()), mock.patch(
         "docker.from_env", return_value=mock.MagicMock()
     ) as mock_docker, mock.patch(
-        "requests.post", return_value=mock.MagicMock()
+        "requests.Session.post", return_value=mock.MagicMock()
     ) as mock_post, mock.patch(
         "requests.delete", return_value=mock.MagicMock()
     ) as mock_delete:
@@ -167,7 +167,7 @@ def test_recorded_run(
         ) as mock_dep, mock.patch("builtins.open", mock.mock_open()), mock.patch(
             "docker.from_env", return_value=mock.MagicMock()
         ) as mock_docker, mock.patch(
-            "requests.post", return_value=mock.MagicMock()
+            "requests.Session.post", return_value=mock.MagicMock()
         ) as mock_post, mock.patch(
             "requests.delete", return_value=mock.MagicMock()
         ) as mock_delete:
