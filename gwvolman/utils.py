@@ -383,7 +383,8 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task
         command=run_cmd,
         detach=True,
         name=name,
-        volumes=volumes
+        volumes=volumes,
+        working_dir=os.path.join(container_config.target_mount, "workspace"),
     )
 
     logging_thread = threading.Thread(

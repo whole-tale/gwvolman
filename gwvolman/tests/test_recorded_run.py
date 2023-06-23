@@ -58,6 +58,7 @@ RPZ_RUN_CALL = mock.call(
         },
     },
     name="rrun-123456",
+    working_dir="/work/workspace",
 )
 CPR_RUN_CALL = mock.call(
     image="wholetale/wt-cpr:latest",
