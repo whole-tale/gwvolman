@@ -4,9 +4,16 @@ import logging
 import time
 import docker
 import requests
+from requests.adapters import HTTPAdapter, Retry
 
 from .constants import GIRDERFS_IMAGE, VOLUMES_ROOT
 from .utils import stop_container
+
+
+retries = Retry(
+    connect=5,
+    backoff_factor=0.5,
+)
 
 
 class FSContainer(object):
@@ -57,12 +64,14 @@ class FSContainer(object):
     def mount(container, payload):
         # send payload to fscontainer using requests
         print("Sending payload to WT Filesystem container...")
-        response = requests.post(
-            f"http://{container.name}:8888/",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        response.raise_for_status()
+        with requests.Session() as session:
+            session.mount("http://", HTTPAdapter(max_retries=retries))
+            response = session.post(
+                f"http://{container.name}:8888/",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
 
     @staticmethod
     def stop_container(name):

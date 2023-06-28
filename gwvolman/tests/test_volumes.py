@@ -41,7 +41,7 @@ def test_create_volume(gak, info, osmk, nu):
     create_volume.job_manager = mock.MagicMock()
 
     with mock.patch("docker.from_env") as mock_docker, mock.patch(
-        "requests.post"
+        "requests.Session.post"
     ) as mock_post:
         mock_docker.return_value = mock.MagicMock()
         # mock docker info
