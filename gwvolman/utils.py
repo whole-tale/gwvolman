@@ -215,7 +215,7 @@ def _get_container_config(gc, tale):
     return container_config
 
 
-def _launch_container(volume_info, container_config):
+def _launch_container(volume_info, container_config, gc):
 
     token = uuid.uuid4().hex
     # command
@@ -244,6 +244,10 @@ def _launch_container(volume_info, container_config):
     #     docker.types.Mount(type='volume', source=volumeName, no_copy=True,
     #                        target=container_config.target_mount)
     # ]
+
+    # inject Girder token into the container
+    environment = container_config.environment or []
+    environment += [f"GIRDER_TOKEN={gc.token}", f"GIRDER_API_URL={gc.urlBase}"]
 
     source_mount = os.path.join(VOLUMES_ROOT, "mountpoints", volume_info["volumeName"])
     mounts = []
@@ -281,13 +285,12 @@ def _launch_container(volume_info, container_config):
                 '-csp.headers.customresponseheaders.Content-Security-Policy'
             ): csp,
             f"{traefik_loadbalancer_prefix}.passhostheader": 'true',
-            f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
             'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
             'traefik.docker.network': DEPLOYMENT.traefik_network,
             'wholetale.instanceId': volume_info["instanceId"],
             'wholetale.taleId': volume_info["taleId"],
         },
-        env=container_config.environment,
+        env=environment,
         mode=docker.types.ServiceMode('replicated', replicas=1),
         networks=[DEPLOYMENT.traefik_network],
         name=host,

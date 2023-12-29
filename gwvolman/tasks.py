@@ -124,7 +124,7 @@ def launch_container(self, service_info):
             time.sleep(5)
 
     container_config = _get_container_config(self.girder_client, tale)
-    service, attrs = _launch_container(service_info, container_config)
+    service, attrs = _launch_container(service_info, container_config, self.girder_client)
     print(
         f"Started a container using volume: {service_info['volumeName']} "
         f"on node: {service_info['nodeId']}"
