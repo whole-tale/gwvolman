@@ -2,16 +2,14 @@
 
 set -e
 . /home/wtuser/venv/bin/activate
-girder-worker-config set celery backend redis://redis/
-girder-worker-config set celery broker redis://redis/
+girder-worker-config set celery backend ${CELERY_BACKEND:-redis://redis/}
+girder-worker-config set celery broker ${CELERY_BROKER:-redis://redis/}
 girder-worker-config set girder_worker tmp_root /tmp
 
-if [[ -n $DEV ]] ; then
+if [[ -n "$DEV" ]] ; then
   python3 -m pip install -e /girderfs
   python3 -m pip install -r /gwvolman/requirements.txt -e /gwvolman
 fi
-
-IFS=: read GOSU_UID GOSU_GID DOCKER_GROUP <<<"${GOSU_USER}"
 
 # If GOSU_CHOWN environment variable set, recursively chown all specified directories
 # to match the user:group set in GOSU_USER environment variable.
@@ -25,6 +23,7 @@ fi
 # If GOSU_USER environment variable set to something other than 0:0 (root:root),
 # become user:group set within and exec command passed in args
 if [ "$GOSU_USER" != "0:0" ]; then
+    IFS=: read GOSU_UID GOSU_GID DOCKER_GROUP <<<"${GOSU_USER}"
     groupadd -g $DOCKER_GROUP docker
     gpasswd -a wtuser docker
     usermod -g $GOSU_GID wtuser
