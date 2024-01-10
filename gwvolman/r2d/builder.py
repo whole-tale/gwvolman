@@ -5,17 +5,18 @@ import json
 import logging
 import os
 from packaging import version
+import requests
 import shutil
 import tempfile
 from urllib.parse import urlparse
 
-from .constants import R2D_FILENAMES
-from .utils import (
+from ..constants import R2D_FILENAMES
+from ..utils import (
     _get_container_config,
     DEPLOYMENT,
     _get_stata_license_path,
     DummyTask,
-    stop_container
+    stop_container,
 )
 
 
@@ -212,7 +213,7 @@ class ImageBuilder:
             environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
-            remove=True,
+            remove=False,
             volumes=volumes,
         )
 
@@ -233,6 +234,7 @@ class ImageBuilder:
             ret = container.wait()
         except docker.errors.NotFound:
             ret = {"StatusCode": -123}
+        container.remove()
 
         if ret["StatusCode"] != 0:
             logging.error("Error building image")
@@ -240,12 +242,62 @@ class ImageBuilder:
         # container exit code
         return ret, h.hexdigest()
 
+    def push_image(self, image):
+        """Push image to the registry"""
+        repository, tag = image.split(":", 1)
+        for line in self.dh.apicli.push(repository, tag=tag, stream=True, decode=True):
+            print(line)
+
     def __del__(self):
         if self._build_context is not None:
             shutil.rmtree(self._build_context, ignore_errors=True)
 
-    def cached_image(self, tag):
+    def cached_image(self, image):
+        """Check if image exists in the registry"""
+        _, full_name = image.split("/", 1)
+        name, tag = full_name.split(":", 1)
         try:
-            return self.dh.apicli.inspect_distribution(tag)
-        except docker.errors.NotFound:
-            pass
+            with requests.Session() as session:
+                session.auth = (
+                    os.environ.get("REGISTRY_USER", "fido"),
+                    os.environ.get("REGISTRY_PASS"),
+                )
+                base_url = (
+                    urlparse(DEPLOYMENT.registry_url)._replace(path="/v2/").geturl()
+                )
+
+                req = session.get(base_url)
+                req.raise_for_status()
+
+                req = session.get(
+                    f"{base_url}{name}/manifests/{tag}",
+                    headers={
+                        "Accept": "application/vnd.docker.distribution.manifest.v2+json"
+                    },
+                )
+                req.raise_for_status()
+                manifest = req.json()
+                content_digest = req.headers["Docker-Content-Digest"]
+
+                config_digest = manifest["config"]["digest"]
+
+                req = session.get(
+                    f"{base_url}{name}/blobs/{config_digest}",
+                    headers={"Accept": manifest["config"]["mediaType"]},
+                )
+                req.raise_for_status()
+                config = req.json()
+
+                return {
+                    "name": f"{urlparse(base_url).netloc}/{name}",
+                    "tag": tag,
+                    "digest": content_digest,
+                    "created": config["created"],
+                    "labels": config["config"]["Labels"],
+                    "architecture": config["architecture"],
+                    "os": config["os"],
+                }
+        except requests.exceptions.HTTPError as err:
+            if err.response.status_code == 404:
+                return
+            raise
