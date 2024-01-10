@@ -11,11 +11,11 @@ import logging
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
-from .r2d.builder import ImageBuilder
+from .r2d import DockerImageBuilder, ImageBuilder
 from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
-    _recorded_run, DEPLOYMENT, stop_container
+    _recorded_run, stop_container
 from .fs_container import FSContainer
 
 from .lib.zenodo import ZenodoPublishProvider
@@ -596,7 +596,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
         f"/tale/{tale_id}/restore", parameters={"versionId": run["runVersionId"]}
     )
     user = self.girder_client.get('/user/me')
-    image_builder = ImageBuilder(self.girder_client, tale=tale)
+    image_builder = DockerImageBuilder(self.girder_client, tale=tale)
 
     def set_run_status(run, status):
         self.girder_client.patch(

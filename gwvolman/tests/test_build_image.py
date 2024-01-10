@@ -160,7 +160,7 @@ def test_image_builder(dtmp, depl, dapicli):
         dcli.return_value.containers.run = docker_run_r2d_container
         dcli.return_value.services.get = docker_services_get
 
-        from gwvolman.r2d.builder import ImageBuilder
+        from gwvolman.r2d import ImageBuilder
 
         with pytest.raises(ValueError) as ex:
             image_builder = ImageBuilder(gc)
@@ -221,7 +221,7 @@ def test_r2d_calls(dtmp, depl, dapicli):
         },
     }
 
-    from gwvolman.r2d.builder import ImageBuilder
+    from gwvolman.r2d import ImageBuilder
     from gwvolman.constants import REPO2DOCKER_VERSION
 
     with mock.patch("docker.from_env") as dcli:
