@@ -11,7 +11,7 @@ import logging
 from girder_worker.utils import girder_job
 from girder_worker.app import app
 # from girder_worker.plugins.docker.executor import _pull_image
-from .build_utils import ImageBuilder
+from .r2d.builder import ImageBuilder
 from .utils import \
     new_user, _safe_mkdir, _get_api_key, \
     _get_container_config, _launch_container, _get_user_and_instance, \
@@ -330,7 +330,7 @@ def build_tale_image(task, tale_id, force=False):
             forceFlush=True
         )
         return {
-            'image_digest': f"{tag}@{image['Descriptor']['digest']}",
+            'image_digest': f"{image['name']}:{image['tag']}@{image['digest']}",
             'repo2docker_version': image_builder.container_config.repo2docker_version,
             'last_build': last_build_time
         }
@@ -346,25 +346,24 @@ def build_tale_image(task, tale_id, force=False):
 
     if ret["StatusCode"] != 0:
         # repo2docker build failed
+        print(ret)
         raise ValueError('Error building tale {}'.format(tale_id))
 
-    for line in image_builder.dh.apicli.push(tag, stream=True):
-        print(line.decode('utf-8'))
+    # Push the image to the registry
+    image_builder.push_image(tag)
 
     # Get the built image digest
-    image = image_builder.dh.cli.images.get(tag)
-    digest = next((_ for _ in image.attrs['RepoDigests']
-                   if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+    image = image_builder.cached_image(tag)
 
     task.job_manager.updateProgress(
         message='Image build succeeded', total=BUILD_TALE_IMAGE_STEP_TOTAL,
         current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
 
-    logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
+    logging.info(f"Successfully built image {image['name']}:{image['tag']} ({image['digest']})")
 
     # Image digest used by updateBuildStatus handler
     return {
-        'image_digest': digest,
+        'image_digest': image["digest"],
         'repo2docker_version': image_builder.container_config.repo2docker_version,
         'last_build': build_time
     }
@@ -664,8 +663,7 @@ def recorded_run(self, run_id, tale_id, entrypoint):
                 return
             if ret['StatusCode'] != 0:
                 raise ValueError('Image build failed for recorded run {}'.format(run_id))
-            for line in image_builder.dh.apicli.push(tag, stream=True):
-                print(line.decode('utf-8'))
+            image_builder.push_image(tag)
 
         self.job_manager.updateProgress(
             message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
