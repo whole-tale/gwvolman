@@ -87,7 +87,7 @@ CPR_RUN_CALL = mock.call(
 @mock.patch("gwvolman.tasks._get_container_config", return_value=CONTAINER_CONFIG)
 @mock.patch("gwvolman.tasks._get_api_key", return_value="key123")
 @mock.patch("gwvolman.tasks._write_env_json", return_value="/path/to/environment.json")
-@mock.patch("gwvolman.tasks.ImageBuilder")
+@mock.patch("gwvolman.tasks.DockerImageBuilder")
 @mock.patch(
     "girder_worker.app.Task.canceled",
     new_callable=mock.PropertyMock,
