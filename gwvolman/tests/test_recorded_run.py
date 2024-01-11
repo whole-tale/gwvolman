@@ -113,7 +113,7 @@ def test_recorded_run(
     )
 
     with mock.patch(
-        "gwvolman.utils.Deployment.registry_url", new_callable=mock.PropertyMock
+        "gwvolman.utils.DockerDeployment.registry_url", new_callable=mock.PropertyMock
     ) as mock_dep, mock.patch("builtins.open", mock.mock_open()), mock.patch(
         "docker.from_env", return_value=mock.MagicMock()
     ) as mock_docker, mock.patch(
@@ -164,7 +164,7 @@ def test_recorded_run(
 
     with pytest.raises(ValueError):
         with mock.patch(
-            "gwvolman.utils.Deployment.registry_url", new_callable=mock.PropertyMock
+            "gwvolman.utils.DockerDeployment.registry_url", new_callable=mock.PropertyMock
         ) as mock_dep, mock.patch("builtins.open", mock.mock_open()), mock.patch(
             "docker.from_env", return_value=mock.MagicMock()
         ) as mock_docker, mock.patch(

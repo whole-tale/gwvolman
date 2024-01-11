@@ -1,7 +1,8 @@
 import os
 from .docker import DockerImageBuilder  # noqa
+from .kaniko import KanikoImageBuilder  # noqa
 
-if os.environ.get("ENVIRONMENT", "docker") == "docker":
-    ImageBuilder = DockerImageBuilder
+if os.environ.get("DEPLOYMENT", "docker") == "k8s":
+    ImageBuilder = KanikoImageBuilder
 else:
-    raise NotImplementedError("Only docker is supported")
+    ImageBuilder = DockerImageBuilder

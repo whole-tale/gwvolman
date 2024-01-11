@@ -58,8 +58,16 @@ def size_notation_to_bytes(size):
         return int(val) * SIZE_TABLE[suffix.lower()]
     raise ValueError
 
+class K8SDeployment(object):
+    """Container for WT-specific k8s stack deployment configuration."""
+    dashboard_url = f"https://dashboard.{DOMAIN}"
+    girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
+    registry_url = f"https://registry.{DOMAIN}"
+    traefik_network = None
+    tmpdir_mount = "/tmp"
 
-class Deployment(object):
+
+class DockerDeployment(object):
     """Container for WT-specific docker stack deployment configuration.
 
     This class allows to read and store configuration of services in a WT
@@ -137,7 +145,10 @@ class Deployment(object):
             return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
 
 
-DEPLOYMENT = Deployment()
+if os.environ.get("DEPLOYMENT", "docker") == "k8s":
+    DEPLOYMENT = K8SDeployment()
+else:
+    DEPLOYMENT = DockerDeployment()
 
 
 def sample_with_replacement(a, size):
