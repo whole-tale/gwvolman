@@ -363,7 +363,7 @@ def build_tale_image(task, tale_id, force=False):
 
     # Image digest used by updateBuildStatus handler
     return {
-        'image_digest': image["digest"],
+        'image_digest': f"{image['name']}:{image['tag']}@{image['digest']}",
         'repo2docker_version': image_builder.container_config.repo2docker_version,
         'last_build': build_time
     }

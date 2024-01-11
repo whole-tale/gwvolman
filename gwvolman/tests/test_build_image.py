@@ -132,12 +132,12 @@ def docker_run_r2d_container(**kwargs):
 
 @mock.patch("docker.APIClient")
 @mock.patch(
-    "gwvolman.utils.Deployment.registry_url",
+    "gwvolman.utils.DockerDeployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.tmpdir_mount",
+    "gwvolman.utils.DockerDeployment.tmpdir_mount",
     new_callable=mock.PropertyMock,
     return_value="/tmp",
 )
@@ -196,12 +196,12 @@ def test_image_builder(dtmp, depl, dapicli):
 @mock.patch.dict(os.environ, {"MATLAB_FILE_INSTALLATION_KEY": "fake-key"})
 @mock.patch("docker.APIClient")
 @mock.patch(
-    "gwvolman.utils.Deployment.registry_url",
+    "gwvolman.utils.DockerDeployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.tmpdir_mount",
+    "gwvolman.utils.DockerDeployment.tmpdir_mount",
     new_callable=mock.PropertyMock,
     return_value="/tmp",
 )
@@ -243,11 +243,11 @@ def test_r2d_calls(dtmp, depl, dapicli):
         stata_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --engine dockercli"
-            " --config='/wholetale/repo2docker_config.py'"
-            " --target-repo-dir='/home/jovyan/work/workspace'"
+            " --config=/wholetale/repo2docker_config.py"
+            " --target-repo-dir=/home/jovyan/work/workspace"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
-            f"  --build-arg STATA_LICENSE_ENCODED='{base64.b64encode(b'blah').decode()}'"
-            f"  --image-name some_tag {image_builder.build_context}",
+            f" --build-arg STATA_LICENSE_ENCODED='{base64.b64encode(b'blah').decode()}'"
+            f" --image-name=some_tag {image_builder.build_context}",
             environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
@@ -270,11 +270,11 @@ def test_r2d_calls(dtmp, depl, dapicli):
         matlab_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --engine dockercli"
-            " --config='/wholetale/repo2docker_config.py'"
-            " --target-repo-dir='/home/jovyan/work/workspace'"
+            " --config=/wholetale/repo2docker_config.py"
+            " --target-repo-dir=/home/jovyan/work/workspace"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
-            "  --build-arg FILE_INSTALLATION_KEY=fake-key"
-            f"  --image-name some_tag {image_builder.build_context}",
+            " --build-arg FILE_INSTALLATION_KEY=fake-key"
+            f" --image-name=some_tag {image_builder.build_context}",
             environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
@@ -298,10 +298,10 @@ def test_r2d_calls(dtmp, depl, dapicli):
             expected_call = mock.call(
                 image=r2d,
                 command=f"jupyter-repo2docker {engine}"
-                " --config='/wholetale/repo2docker_config.py'"
-                " --target-repo-dir='/home/jovyan/work/workspace'"
+                " --config=/wholetale/repo2docker_config.py"
+                " --target-repo-dir=/home/jovyan/work/workspace"
                 " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
-                f"  --image-name some_tag {image_builder.build_context}",
+                f" --image-name=some_tag {image_builder.build_context}",
                 environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
                 privileged=True,
                 detach=True,
@@ -329,12 +329,12 @@ def test_r2d_calls(dtmp, depl, dapicli):
     return_value=False,
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.registry_url",
+    "gwvolman.utils.DockerDeployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.tmpdir_mount",
+    "gwvolman.utils.DockerDeployment.tmpdir_mount",
     new_callable=mock.PropertyMock,
     return_value="/tmp",
 )

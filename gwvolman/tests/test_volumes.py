@@ -4,7 +4,7 @@ import os
 
 os.environ["GIRDER_API_URL"] = "https://girder.dev.wholetale.org/api/v1"
 
-from gwvolman.tasks import create_volume
+from gwvolman.tasks import create_volume  # noqa: E402
 
 
 def mock_gc_post(path, parameters=None):

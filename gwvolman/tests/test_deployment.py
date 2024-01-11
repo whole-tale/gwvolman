@@ -3,7 +3,7 @@
 import mock
 import pytest
 
-from gwvolman.utils import Deployment
+from gwvolman.utils import DockerDeployment as Deployment
 
 
 @pytest.fixture
