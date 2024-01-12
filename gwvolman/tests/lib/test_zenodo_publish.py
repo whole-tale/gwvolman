@@ -460,7 +460,7 @@ def test_zenodo_publish():
         mock_other_request,
     ):
         with mock.patch(
-            "gwvolman.tasks.ZenodoPublishProvider.publish_version", lambda x, y: None
+            "gwvolman.tasks_base.ZenodoPublishProvider.publish_version", lambda x, y: None
         ):
             publish(
                 "already_published",

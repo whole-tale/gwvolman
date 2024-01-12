@@ -373,7 +373,7 @@ def test_build_image_task(dtmpdir, drurl, task):
             build_tale_image(tale["_id"], force=False)
         assert ex.match("Cannot build image. Tale preparing for more than 5 minutes.")
 
-    with mock.patch("gwvolman.tasks.ImageBuilder") as image_builder:
+    with mock.patch("gwvolman.tasks_base.ImageBuilder") as image_builder:
         gc.get.side_effect = [
             {"_id": "id", "status": TaleStatus.READY, "imageInfo": {}},
         ]

@@ -4,7 +4,7 @@ import os
 import pytest
 
 from gwvolman.utils import ContainerConfig
-from gwvolman.tasks import recorded_run, _write_env_json
+from gwvolman.tasks import recorded_run
 from gwvolman.constants import RunStatus, VOLUMES_ROOT
 
 
@@ -77,24 +77,22 @@ CPR_RUN_CALL = mock.call(
     },
 )
 
-
 @mock.patch("time.time", return_value=1624994605)
-@mock.patch("gwvolman.tasks.new_user", return_value="123456")
+@mock.patch("gwvolman.tasks_docker.new_user", return_value="123456")
 @mock.patch("docker.client.DockerClient.containers")
 @mock.patch("subprocess.Popen")
 @mock.patch("subprocess.check_call")
 @mock.patch("os.remove", return_value=True)
-@mock.patch("gwvolman.tasks._get_container_config", return_value=CONTAINER_CONFIG)
-@mock.patch("gwvolman.tasks._get_api_key", return_value="key123")
-@mock.patch("gwvolman.tasks._write_env_json", return_value="/path/to/environment.json")
-@mock.patch("gwvolman.tasks.DockerImageBuilder")
+@mock.patch("gwvolman.tasks_docker._get_container_config", return_value=CONTAINER_CONFIG)
+@mock.patch("gwvolman.tasks_docker._get_api_key", return_value="key123")
+@mock.patch("gwvolman.tasks_docker.DockerImageBuilder")
 @mock.patch(
     "girder_worker.app.Task.canceled",
     new_callable=mock.PropertyMock,
     return_value=False,
 )
 def test_recorded_run(
-    task, image_builder, wej, gak, gcc, osr, spcc, sp, containers, nu, time
+    task, image_builder, gak, gcc, osr, spcc, sp, containers, nu, time
 ):
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
@@ -189,14 +187,3 @@ def test_recorded_run(
     image_builder.return_value.dh.cli.containers.create.assert_has_calls(
         [RPZ_RUN_CALL], any_order=True
     )
-
-
-def test_write_env_json():
-    mock_image = {"_id": "image1", "name": "Mock Image"}
-
-    workspace_dir = "/path/to/mountpoint/workspace"
-
-    with mock.patch("builtins.open", mock.mock_open()):
-        env_json = _write_env_json(workspace_dir, mock_image)
-
-        assert env_json == "/path/to/mountpoint/workspace/environment.json"
