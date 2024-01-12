@@ -26,12 +26,12 @@ def mock_gc_get(path, parameters=None):
         return {}
 
 
-@mock.patch("gwvolman.tasks.new_user", return_value="123456")
+@mock.patch("gwvolman.tasks_docker.new_user", return_value="123456")
 @mock.patch("os.mkdir", return_value=None)
 @mock.patch(
     "docker.client.DockerClient.info", return_value={"Swarm": {"NodeID": "node1"}}
 )
-@mock.patch("gwvolman.tasks._get_api_key", return_value="apikey1")
+@mock.patch("gwvolman.tasks_docker._get_api_key", return_value="apikey1")
 def test_create_volume(gak, info, osmk, nu):
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
