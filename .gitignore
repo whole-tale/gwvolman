@@ -1,3 +1,8 @@
 gwvolman.egg-info/
 *.pyc
 *venv*
+.coverage
+Testing
+build/
+dist/
+pip-wheel-metadata/
