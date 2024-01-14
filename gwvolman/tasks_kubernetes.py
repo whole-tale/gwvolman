@@ -220,10 +220,10 @@ class KubernetesTasks(TasksBase):
                 f" -c wt_dms /data {session['_id']}"
             )
         else:
-            # TODO FIX ME
             template_params["mountDms"] = (
                 "passthrough-fuse -o allow_other "
-                f"--girder-url={girder_api_url}/folder/65a2bb61daf804db8f389c98/listing --token={task.girder_client.token} "
+                f"--girder-url={girder_api_url}/tale/{tale['_id']}/listing "
+                f"--token={task.girder_client.token} "
                 "/data"
             )
 
@@ -286,3 +286,6 @@ class KubernetesTasks(TasksBase):
             api.delete_namespaced_ingress(
                 name=ingress.metadata.name, namespace=self.deployment.namespace
             )
+
+    def _create_session(task, tale):
+        raise NotImplementedError()
