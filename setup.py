@@ -27,6 +27,7 @@ setup(
         "requests",
         "markdown",
         "lxml",
+        "pystache",
     ],
     packages=find_packages(),
     zip_safe=False,

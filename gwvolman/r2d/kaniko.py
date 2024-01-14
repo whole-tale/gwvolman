@@ -34,7 +34,7 @@ def get_pod_logs(api_instance, pod_name, container_name, state):
         )
         for line in pod_logs:
             output = line.decode("utf-8").strip()
-            if not output.startswith("Using local repo"):
+            if not (output.startswith("Using local repo") or output.startswith("[Repo2Docker]")):
                 state["state"].update(output.encode("utf-8"))
             if not state["dry_run"]:
                 print(output, end="\n")

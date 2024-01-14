@@ -58,6 +58,7 @@ def size_notation_to_bytes(size):
         return int(val) * SIZE_TABLE[suffix.lower()]
     raise ValueError
 
+
 class K8SDeployment(object):
     """Container for WT-specific k8s stack deployment configuration."""
     dashboard_url = f"https://dashboard.{DOMAIN}"
@@ -65,6 +66,8 @@ class K8SDeployment(object):
     registry_url = f"https://registry.{DOMAIN}"
     traefik_network = None
     tmpdir_mount = "/tmp"
+    namespace = "wt"
+    mounter_image = "wholetale/girderfs:latest"
 
 
 class DockerDeployment(object):
@@ -158,7 +161,7 @@ def sample_with_replacement(a, size):
 
 def new_user(size):
     """Get a random path."""
-    return sample_with_replacement(string.ascii_letters + string.digits, size)
+    return sample_with_replacement(string.ascii_letters, size)
 
 
 def _safe_mkdir(dest):
