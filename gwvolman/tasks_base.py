@@ -18,7 +18,7 @@ class TasksBase:
     def create_volume(self, task, instance_id: str):
         raise NotImplementedError()
 
-    def launch_container(self, task, service_info: str):
+    def launch_container(self, task, service_info):
         raise NotImplementedError()
 
     def update_container(self, task, instanceId, digest=None):
@@ -68,6 +68,10 @@ class TasksBase:
         build_time = int(time.time())
 
         # Check if image already exists
+        print("Checking if image exists...")
+        print(f"Forced build: {force}")
+        print(f"Last build time: {last_build_time}")
+        print(f"image_builder.cached_image(tag): {image_builder.cached_image(tag)}")
         if not force and (image := image_builder.cached_image(tag)):
             print('Cached image exists for this Tale. Skipping build.')
             task.job_manager.updateProgress(
