@@ -399,6 +399,8 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task
         image=tag,
         command=run_cmd,
         detach=True,
+        read_only=False,
+        network_disabled=True,
         name=name,
         volumes=volumes,
         working_dir=os.path.join(container_config.target_mount, "workspace"),

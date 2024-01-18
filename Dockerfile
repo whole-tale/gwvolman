@@ -14,6 +14,7 @@ RUN apt-get update -qqy && \
     python3-venv \
     fuse \
     davfs2 \
+    libmagic1 \
     libffi-dev \
     libssl-dev \
     libjpeg-dev \
