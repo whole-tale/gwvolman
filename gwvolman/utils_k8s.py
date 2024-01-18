@@ -114,6 +114,7 @@ def tale_deployment(params):
                         }
                     ),
                     spec=client.V1PodSpec(
+                        image_pull_secrets=[client.V1LocalObjectReference(name="local-registry-secret")],
                         containers=[
                             client.V1Container(
                                 name="instance",
@@ -196,7 +197,6 @@ def tale_deployment(params):
                                 ],
                             ),
                         ],
-                        image_pull_secrets=[client.V1LocalObjectReference(name="local-registry-secret")],
                         volumes=[
                             client.V1Volume(
                                 name=params["claimName"],
