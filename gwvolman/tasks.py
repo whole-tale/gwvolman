@@ -19,8 +19,8 @@ tasks = TasksFactory(os.environ.get("DEPLOYMENT", "docker")).getTasksInstance()
 
 @girder_job(title="Create Tale Data Volume")
 @app.task(bind=True)
-def create_volume(task, instance_id):
-    return tasks.create_volume(task, instance_id)
+def create_volume(task, instance_id, mounts=None):
+    return tasks.create_volume(task, instance_id, mounts=mounts)
 
 
 @girder_job(title="Spawn Instance")

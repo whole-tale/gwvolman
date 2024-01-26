@@ -30,7 +30,7 @@ class KubernetesTasks(TasksBase):
     def _claim_from_volume(volume_name):
         return f"claim-{volume_name}"
 
-    def create_volume(self, task, instance_id: str):
+    def create_volume(self, task, instance_id: str, mounts=None):
         user, instance = _get_user_and_instance(task.girder_client, instance_id)
         tale = task.girder_client.get("/tale/{taleId}".format(**instance))
 
@@ -43,20 +43,10 @@ class KubernetesTasks(TasksBase):
 
         vol_name = "_".join((tale["_id"], user["login"], new_user(6)))
 
-        # We don't need to create a PVC for now...
-        # _k8s_create_from_file(
-        #    self.deployment.namespace,
-        #    "templates/tale-volume-claim.yaml",
-        #    {
-        #        "claimName": self._claim_from_volume(vol_name),
-        #        "instanceId": instance["_id"],
-        #        "volumeSize": "1Gi",
-        #    },
-        # )
-
         return {
             "nodeId": None,
             "fscontainerId": None,
+            "mounts": mounts,
             "volumeName": vol_name,
             "instanceId": instance["_id"],
             "taleId": tale["_id"],
@@ -191,12 +181,14 @@ class KubernetesTasks(TasksBase):
             "deploymentName": deployment_name,
             "host": host,
             "domain": DOMAIN,
+            "ingressClass": K8SDeployment.ingress_class,
             "deploymentNamespace": self.deployment.namespace,
             "claimName": "girder-data",  # TODO pass from deployment
             "girderApiUrl": girder_api_url,
             "mounterImage": self.deployment.mounter_image,
             "instanceId": instanceId,
             "girderToken": task.girder_client.token,
+            "girderFSMountType": K8SDeployment.girderfs_mount_type,
             "homeSubPath": f"homes/{user['login'][0]}/{user['login']}",
             "workspaceSubPath": f"workspaces/{tale['_id'][0]}/{tale['_id']}",
         }
@@ -213,19 +205,31 @@ class KubernetesTasks(TasksBase):
             }
         )
 
+        # girderfsDef
+        template_params["girderfsDef"] = {
+            "mounts": payload["mounts"],
+            "girderApiUrl": girder_api_url,
+            "girderToken": task.girder_client.token,
+            "taleId": tale["_id"],
+            "userId": user["_id"],
+            "mountType": K8SDeployment.girderfs_mount_type,
+            "root": "/",
+        }
         if DMS_ENABLED:
             session = self._create_session(task, tale)
-            template_params["mountDms"] = (
-                f"girderfs --api-url {girder_api_url} --token {task.girder_client.token}"
-                f" -c wt_dms /data {session['_id']}"
-            )
-        else:
-            template_params["mountDms"] = (
-                "passthrough-fuse -o allow_other "
-                f"--girder-url={girder_api_url}/tale/{tale['_id']}/listing "
-                f"--token={task.girder_client.token} "
-                "/data"
-            )
+            template_params["girderfsDef"]["sessionId"] = session["_id"]
+
+            # template_params["mountDms"] = (
+            #     f"girderfs --api-url {girder_api_url} --token {task.girder_client.token}"
+            #     f" -c wt_dms /data {session['_id']}"
+            # )
+        # else:
+        # template_params["mountDms"] = (
+        #     "passthrough-fuse -o allow_other "
+        #     f"--girder-url={girder_api_url}/tale/{tale['_id']}/listing "
+        #     f"--token={task.girder_client.token} "
+        #     "/data"
+        # )
 
         # create deployment and service
         tale_deployment(template_params)
