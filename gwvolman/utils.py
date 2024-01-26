@@ -19,33 +19,54 @@ import docker
 import datetime
 import dateutil.relativedelta as rel
 
-from .constants import LICENSE_PATH, MOUNTPOINTS, REPO2DOCKER_VERSION, VOLUMES_ROOT
+from .constants import (
+    LICENSE_PATH,
+    MOUNTPOINTS,
+    REPO2DOCKER_VERSION,
+    VOLUMES_ROOT,
+    GIRDERFS_IMAGE,
+)
 from .lib.stats_collector import DockerStatsCollectorThread
 
 DOCKER_URL = os.environ.get("DOCKER_URL", "unix://var/run/docker.sock")
 MAX_FILE_SIZE = os.environ.get("MAX_FILE_SIZE", 200)
-DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
+DOMAIN = os.environ.get("DOMAIN", "dev.wholetale.org")
 TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "websecure")
-REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
-REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
+REGISTRY_USER = os.environ.get("REGISTRY_USER", "fido")
+REGISTRY_PASS = os.environ.get("REGISTRY_PASS")
 MOUNTS = {}
 RETRIES = 5
-container_name_pattern = re.compile(r'tmp\.([^.]+)\.(.+)\Z')
+container_name_pattern = re.compile(r"tmp\.([^.]+)\.(.+)\Z")
 
-PooledContainer = namedtuple('PooledContainer', ['id', 'path', 'host'])
-ContainerConfig = namedtuple('ContainerConfig', [
-    'buildpack', 'repo2docker_version',
-    'image', 'command', 'mem_limit', 'cpu_shares',
-    'container_port', 'container_user', 'target_mount',
-    'url_path', 'environment', 'csp'
-])
+PooledContainer = namedtuple("PooledContainer", ["id", "path", "host"])
+ContainerConfig = namedtuple(
+    "ContainerConfig",
+    [
+        "buildpack",
+        "repo2docker_version",
+        "image",
+        "command",
+        "mem_limit",
+        "cpu_shares",
+        "container_port",
+        "container_user",
+        "target_mount",
+        "url_path",
+        "environment",
+        "csp",
+    ],
+)
 
 SIZE_NOTATION_RE = re.compile(r"^(\d+)([kmg]?b?)$", re.IGNORECASE)
 SIZE_TABLE = {
-    '': 1, 'b': 1,
-    'k': 1024, 'kb': 1024,
-    'm': 1024 ** 2, 'mb': 1024 ** 2,
-    'g': 1024 ** 3, 'gb': 1024 ** 3
+    "": 1,
+    "b": 1,
+    "k": 1024,
+    "kb": 1024,
+    "m": 1024**2,
+    "mb": 1024**2,
+    "g": 1024**3,
+    "gb": 1024**3,
 }
 
 
@@ -61,13 +82,16 @@ def size_notation_to_bytes(size):
 
 class K8SDeployment(object):
     """Container for WT-specific k8s stack deployment configuration."""
+
     dashboard_url = f"https://dashboard.{DOMAIN}"
     girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
     registry_url = f"https://registry.{DOMAIN}"
     traefik_network = None
     tmpdir_mount = "/tmp"
     namespace = "wt"
-    mounter_image = "wholetale/girderfs:latest"
+    girderfs_mount_type = os.environ.get("GIRDERFS_MOUNT_TYPE", "direct")
+    ingress_class = os.environ.get("INGRESS_CLASS", "traefik")
+    mounter_image = GIRDERFS_IMAGE
 
 
 class DockerDeployment(object):
@@ -84,7 +108,7 @@ class DockerDeployment(object):
     _tmpdir_mount = None
 
     def __init__(self):
-        self.docker_client = docker.from_env(version='1.28')
+        self.docker_client = docker.from_env(version="1.28")
 
     @property
     def tmpdir_mount(self):
@@ -94,8 +118,7 @@ class DockerDeployment(object):
             tmpdir = tempfile.gettempdir()
             mounts = service.attrs["Spec"]["TaskTemplate"]["ContainerSpec"]["Mounts"]
             self._tmpdir_mount = next(
-                (_["Source"] for _ in mounts if _["Target"] == tmpdir),
-                "/tmp"
+                (_["Source"] for _ in mounts if _["Target"] == tmpdir), "/tmp"
             )
         return self._tmpdir_mount
 
@@ -104,32 +127,33 @@ class DockerDeployment(object):
         """str: Name of the overlay network used by traefik for ingress."""
         if self._traefik_network is None:
             try:
-                service = self.docker_client.services.get('wt_dashboard')
-                self._traefik_network = \
-                    service.attrs['Spec']['Labels']['traefik.docker.network']
+                service = self.docker_client.services.get("wt_dashboard")
+                self._traefik_network = service.attrs["Spec"]["Labels"][
+                    "traefik.docker.network"
+                ]
             except docker.errors.APIError:
-                self._traefik_network = 'wt_traefik-net'  # Default...
+                self._traefik_network = "wt_traefik-net"  # Default...
         return self._traefik_network
 
     @property
     def dashboard_url(self):
         """str: Dashboard's public url."""
         if self._dashboard_url is None:
-            self._dashboard_url = self.get_host_from_traefik_rule('wt_dashboard')
+            self._dashboard_url = self.get_host_from_traefik_rule("wt_dashboard")
         return self._dashboard_url
 
     @property
     def girder_url(self):
         """str: Girder's public url."""
         if self._girder_url is None:
-            self._girder_url = self.get_host_from_traefik_rule('wt_girder')
+            self._girder_url = self.get_host_from_traefik_rule("wt_girder")
         return self._girder_url
 
     @property
     def registry_url(self):
         """str: Docker Registry's public url."""
         if self._registry_url is None:
-            self._registry_url = self.get_host_from_traefik_rule('wt_registry')
+            self._registry_url = self.get_host_from_traefik_rule("wt_registry")
         return self._registry_url
 
     def get_host_from_traefik_rule(self, service_name):
@@ -139,13 +163,15 @@ class DockerDeployment(object):
         """
         try:
             service = self.docker_client.services.get(service_name)
-            ns = service.attrs['Spec']['Labels']['com.docker.stack.namespace']
-            router = service_name.replace('%s_' % ns,  '')
-            rule = service.attrs['Spec']['Labels']['traefik.http.routers.%s.rule' % router]
-            host = re.search(r'Host\(`(.+)`\)', rule).group(1)
-            return 'https://' + host
+            ns = service.attrs["Spec"]["Labels"]["com.docker.stack.namespace"]
+            router = service_name.replace("%s_" % ns, "")
+            rule = service.attrs["Spec"]["Labels"][
+                "traefik.http.routers.%s.rule" % router
+            ]
+            host = re.search(r"Host\(`(.+)`\)", rule).group(1)
+            return "https://" + host
         except docker.errors.APIError:
-            return '{}://{}.{}'.format("https", service_name[3:], DOMAIN)
+            return "{}://{}.{}".format("https", service_name[3:], DOMAIN)
 
 
 if os.environ.get("DEPLOYMENT", "docker") == "k8s":
@@ -176,22 +202,21 @@ def _safe_mkdir(dest):
 
 def _get_api_key(gc):
     api_key = None
-    for key in gc.get('/api_key'):
-        if key['name'] == 'tmpnb' and key['active']:
-            api_key = key['key']
+    for key in gc.get("/api_key"):
+        if key["name"] == "tmpnb" and key["active"]:
+            api_key = key["key"]
 
     if api_key is None:
-        api_key = gc.post('/api_key',
-                          data={'name': 'tmpnb', 'active': True})['key']
+        api_key = gc.post("/api_key", data={"name": "tmpnb", "active": True})["key"]
     return api_key
 
 
 def _get_user_and_instance(girder_client, instanceId):
-    user = girder_client.get('/user/me')
+    user = girder_client.get("/user/me")
     if user is None:
         logging.warn("Bad gider token")
         raise ValueError
-    instance = girder_client.get('/instance/' + instanceId)
+    instance = girder_client.get("/instance/" + instanceId)
     return user, instance
 
 
@@ -199,59 +224,60 @@ def _get_container_config(gc, tale):
     if tale is None:
         container_config = {}  # settings['container_config']
     else:
-        image = gc.get('/image/%s' % tale['imageId'])
-        tale_config = image['config'] or {}
-        if tale.get('config'):
-            tale_config.update(tale['config'])
+        image = gc.get("/image/%s" % tale["imageId"])
+        tale_config = image["config"] or {}
+        if tale.get("config"):
+            tale_config.update(tale["config"])
 
         image_info = tale.get("imageInfo", {})
         digest = image_info.get("digest")
         repo2docker_version = image_info.get("repo2docker_version", REPO2DOCKER_VERSION)
 
         try:
-            mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
+            mem_limit = size_notation_to_bytes(tale_config.get("memLimit", "2g"))
         except (ValueError, TypeError):
-            mem_limit = 2 * 1024 ** 3
+            mem_limit = 2 * 1024**3
         container_config = ContainerConfig(
             buildpack=tale_config.get("buildpack"),
             repo2docker_version=repo2docker_version,
-            command=tale_config.get('command'),
-            container_port=tale_config.get('port'),
-            container_user=tale_config.get('user'),
-            cpu_shares=tale_config.get('cpuShares'),
-            environment=tale_config.get('environment'),
+            command=tale_config.get("command"),
+            container_port=tale_config.get("port"),
+            container_user=tale_config.get("user"),
+            cpu_shares=tale_config.get("cpuShares"),
+            environment=tale_config.get("environment"),
             image=digest,
             mem_limit=mem_limit,
-            target_mount=tale_config.get('targetMount'),
-            url_path=tale_config.get('urlPath'),
-            csp=tale_config.get('csp')
+            target_mount=tale_config.get("targetMount"),
+            url_path=tale_config.get("urlPath"),
+            csp=tale_config.get("csp"),
         )
     return container_config
 
 
 def _launch_container(volume_info, container_config, gc):
-
     token = uuid.uuid4().hex
     # command
     if container_config.command:
-        rendered_command = \
-            container_config.command.format(
-                base_path='', port=container_config.container_port,
-                ip='0.0.0.0', token=token)
+        rendered_command = container_config.command.format(
+            base_path="",
+            port=container_config.container_port,
+            ip="0.0.0.0",
+            token=token,
+        )
     else:
         rendered_command = None
 
     if container_config.url_path:
-        rendered_url_path = \
-            container_config.url_path.format(token=token)
+        rendered_url_path = container_config.url_path.format(token=token)
     else:
-        rendered_url_path = ''
+        rendered_url_path = ""
 
-    logging.info('config = ' + str(container_config))
-    logging.info('command = ' + str(rendered_command))
-    cli = docker.from_env(version='1.28')
-    cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
-              registry=DEPLOYMENT.registry_url)
+    logging.info("config = " + str(container_config))
+    logging.info("command = " + str(rendered_command))
+    cli = docker.from_env(version="1.28")
+    cli.login(
+        username=REGISTRY_USER, password=REGISTRY_PASS, registry=DEPLOYMENT.registry_url
+    )
     # Fails with: 'starting container failed: error setting
     #              label on mount source ...: read-only file system'
     # mounts = [
@@ -268,7 +294,9 @@ def _launch_container(volume_info, container_config, gc):
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
     for source in volumes:
         mounts.append(
-            docker.types.Mount(type='bind', source=source, target=volumes[source]['bind'])
+            docker.types.Mount(
+                type="bind", source=source, target=volumes[source]["bind"]
+            )
         )
 
     host = 'tmp-{}'.format(new_user(12).lower())
@@ -278,7 +306,7 @@ def _launch_container(volume_info, container_config, gc):
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
 
     # Use the specified CSP for iframes or default to deployed host
-    csp = ''
+    csp = ""
     if container_config.csp:
         csp = container_config.csp
     else:
@@ -290,41 +318,43 @@ def _launch_container(volume_info, container_config, gc):
         container_config.image,
         command=rendered_command,
         labels={
-            f"{traefik_loadbalancer_prefix}.server.port": str(container_config.container_port),
-            'traefik.enable': 'true',
-            'traefik.http.routers.%s.rule' % host: 'Host(`{}.{}`)'.format(host, DOMAIN),
-            'traefik.http.routers.%s.entrypoints' % host: TRAEFIK_ENTRYPOINT,
-            'traefik.http.routers.%s.tls' % host: 'true',
+            f"{traefik_loadbalancer_prefix}.server.port": str(
+                container_config.container_port
+            ),
+            "traefik.enable": "true",
+            "traefik.http.routers.%s.rule" % host: "Host(`{}.{}`)".format(host, DOMAIN),
+            "traefik.http.routers.%s.entrypoints" % host: TRAEFIK_ENTRYPOINT,
+            "traefik.http.routers.%s.tls" % host: "true",
             (
-                f'traefik.http.middlewares.{host}'
-                '-csp.headers.customresponseheaders.Content-Security-Policy'
+                f"traefik.http.middlewares.{host}"
+                "-csp.headers.customresponseheaders.Content-Security-Policy"
             ): csp,
-            f"{traefik_loadbalancer_prefix}.passhostheader": 'true',
-            'traefik.http.routers.%s.middlewares' % host: 'girder, %s-csp' % host,
-            'traefik.docker.network': DEPLOYMENT.traefik_network,
-            'wholetale.instanceId': volume_info["instanceId"],
-            'wholetale.taleId': volume_info["taleId"],
+            f"{traefik_loadbalancer_prefix}.passhostheader": "true",
+            "traefik.http.routers.%s.middlewares" % host: "girder, %s-csp" % host,
+            "traefik.docker.network": DEPLOYMENT.traefik_network,
+            "wholetale.instanceId": volume_info["instanceId"],
+            "wholetale.taleId": volume_info["taleId"],
         },
         env=environment,
-        mode=docker.types.ServiceMode('replicated', replicas=1),
+        mode=docker.types.ServiceMode("replicated", replicas=1),
         networks=[DEPLOYMENT.traefik_network],
         name=host,
         mounts=mounts,
         endpoint_spec=endpoint_spec,
-        constraints=['node.id == {}'.format(volume_info["nodeId"])],
+        constraints=["node.id == {}".format(volume_info["nodeId"])],
         resources=docker.types.Resources(mem_limit=container_config.mem_limit),
-        restart_policy=docker.types.RestartPolicy(condition="none")
+        restart_policy=docker.types.RestartPolicy(condition="none"),
     )
 
     # Wait for the server to launch within the container before adding it
     # to the pool or serving it to a user.
     # _wait_for_server(host_ip, host_port, path) # FIXME
 
-    url = '{proto}://{host}.{domain}/{path}'.format(
-        proto='https', host=host, domain=DOMAIN,
-        path=rendered_url_path)
+    url = "{proto}://{host}.{domain}/{path}".format(
+        proto="https", host=host, domain=DOMAIN, path=rendered_url_path
+    )
 
-    return service, {'url': url}
+    return service, {"url": url}
 
 
 def _get_container_volumes(mountpoint, container_config, directories):
@@ -332,24 +362,18 @@ def _get_container_volumes(mountpoint, container_config, directories):
     for path in directories:
         source = os.path.join(mountpoint, path)
         target = os.path.join(container_config.target_mount, path)
-        volumes[source] = {
-            'bind': target, 'mode': 'rw'
-        }
+        volumes[source] = {"bind": target, "mode": "rw"}
 
     if container_config.buildpack:
         # Mount the MATLAB and Stata runtime licenses
         if container_config.buildpack == "MatlabBuildPack":
-            volumes[LICENSE_PATH] = {
-                'bind': '/licenses'
-            }
+            volumes[LICENSE_PATH] = {"bind": "/licenses"}
         elif container_config.buildpack == "StataBuildPack":
             # Weekly license expires each Sunday and is provided
             # in the format stata.YYYYMMDD.lic where YYYYMMDD is the
             # license expiration date.
             source_path = _get_stata_license_path()
-            volumes[source_path] = {
-                'bind': '/usr/local/stata/stata.lic'
-            }
+            volumes[source_path] = {"bind": "/usr/local/stata/stata.lic"}
     return volumes
 
 
@@ -376,7 +400,6 @@ def stop_container(container: docker.models.containers.Container):
 
 
 def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task=None):
-
     def logging_worker(log_queue, container):
         for line in container.logs(stream=True):
             log_queue.put(line.decode("utf-8").strip(), block=False)
@@ -386,7 +409,9 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task
     print("Starting recorded run")
 
     # Configure container volumes for recorded run
-    volumes = _get_container_volumes(mountpoint, container_config, ['data', 'workspace'])
+    volumes = _get_container_volumes(
+        mountpoint, container_config, ["data", "workspace"]
+    )
 
     # TODO: use run config, not entrypoint
     run_cmd = f"sh {entrypoint}"
@@ -406,8 +431,7 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task
     )
 
     logging_thread = threading.Thread(
-        target=logging_worker,
-        args=(log_queue, container)
+        target=logging_worker, args=(log_queue, container)
     )
 
     workspace_path = os.path.join(mountpoint, "workspace")
@@ -454,8 +478,8 @@ def _recorded_run(cli, mountpoint, container_config, tag, entrypoint, name, task
     except docker.errors.NotFound:
         pass
 
-    if not task.canceled and ret['StatusCode'] != 0:
-        raise ValueError('Error executing recorded run')
+    if not task.canceled and ret["StatusCode"] != 0:
+        raise ValueError("Error executing recorded run")
 
     return ret
 

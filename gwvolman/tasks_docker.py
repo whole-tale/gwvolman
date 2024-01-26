@@ -3,14 +3,19 @@ from datetime import datetime, timedelta
 import os
 import time
 import logging
-from .utils import \
-    new_user, _get_api_key, \
-    _get_container_config, _launch_container, _get_user_and_instance, \
-    _recorded_run, stop_container
+import json
+from .utils import (
+    new_user,
+    _get_api_key,
+    _get_container_config,
+    _launch_container,
+    _get_user_and_instance,
+    _recorded_run,
+    stop_container,
+)
 from .fs_container import FSContainer
 from .tasks_base import TasksBase
-from .constants import GIRDER_API_URL, \
-    RunStatus, VOLUMES_ROOT
+from .constants import GIRDER_API_URL, RunStatus, VOLUMES_ROOT
 
 from .r2d import DockerImageBuilder
 
@@ -22,20 +27,22 @@ RECORDED_RUN_STEP_TOTAL = 4
 
 
 class DockerTasks(TasksBase):
-
-    def create_volume(self, task, instance_id):
+    def create_volume(self, task, instance_id, mounts=None):
         """Create a mountpoint and compose WT-fs."""
         user, instance = _get_user_and_instance(task.girder_client, instance_id)
-        tale = task.girder_client.get('/tale/{taleId}'.format(**instance))
+        tale = task.girder_client.get("/tale/{taleId}".format(**instance))
 
         task.job_manager.updateProgress(
-            message='Creating volume', total=CREATE_VOLUME_STEP_TOTAL,
-            current=1, forceFlush=True)
+            message="Creating volume",
+            total=CREATE_VOLUME_STEP_TOTAL,
+            current=1,
+            forceFlush=True,
+        )
 
-        vol_name = "%s_%s_%s" % (tale['_id'], user['login'], new_user(6))
+        vol_name = "%s_%s_%s" % (tale["_id"], user["login"], new_user(6))
         fs_sidecar = FSContainer.start_container(vol_name)
-        payload = {
-            "mounts": [
+        if mounts is None:
+            mounts = [
                 {
                     "type": "data",
                     "protocol": "girderfs",
@@ -61,22 +68,30 @@ class DockerTasks(TasksBase):
                     "protocol": "girderfs",
                     "location": "runs",
                 },
-            ],
+            ]
+
+        payload = {
+            "mounts": mounts,
             "taleId": tale["_id"],
             "userId": user["_id"],
             "girderApiUrl": GIRDER_API_URL,
             "girderApiKey": _get_api_key(task.girder_client),
+            "girderToken": task.girder_client.token,
             "root": vol_name,
         }
+        print(json.dumps(payload))
         FSContainer.mount(fs_sidecar, payload)
         task.job_manager.updateProgress(
-            message='Volume created', total=CREATE_VOLUME_STEP_TOTAL,
-            current=CREATE_VOLUME_STEP_TOTAL, forceFlush=True)
+            message="Volume created",
+            total=CREATE_VOLUME_STEP_TOTAL,
+            current=CREATE_VOLUME_STEP_TOTAL,
+            forceFlush=True,
+        )
         print("WT Filesystem created successfully.")
 
         cli = docker.from_env()
         return dict(
-            nodeId=cli.info()['Swarm']['NodeID'],
+            nodeId=cli.info()["Swarm"]["NodeID"],
             fscontainerId=fs_sidecar.id,
             volumeName=vol_name,
             instanceId=instance_id,
@@ -86,24 +101,27 @@ class DockerTasks(TasksBase):
     def launch_container(self, task, service_info):
         """Launch a container using a Tale object."""
         user, instance = _get_user_and_instance(
-            task.girder_client, service_info['instanceId'])
+            task.girder_client, service_info["instanceId"]
+        )
         tale = task.girder_client.get(f"/tale/{service_info['taleId']}")
 
         task.job_manager.updateProgress(
-            message='Starting container', total=LAUNCH_CONTAINER_STEP_TOTAL,
-            current=1, forceFlush=True)
+            message="Starting container",
+            total=LAUNCH_CONTAINER_STEP_TOTAL,
+            current=1,
+            forceFlush=True,
+        )
 
         print("Launching container for a Tale...")
-        if 'imageInfo' not in tale:
-
+        if "imageInfo" not in tale:
             # Wait for image to be built
             tic = time.time()
             timeout = 180.0
             time_interval = 5
 
             while time.time() - tic < timeout:
-                tale = task.girder_client.get('/tale/{taleId}'.format(**instance))
-                if 'imageInfo' in tale and 'digest' in tale['imageInfo']:
+                tale = task.girder_client.get("/tale/{taleId}".format(**instance))
+                if "imageInfo" in tale and "digest" in tale["imageInfo"]:
                     break
                 msg = f"Waiting for image build to complete. ({time_interval}s)"
                 logging.info(msg)
@@ -111,7 +129,9 @@ class DockerTasks(TasksBase):
                 time.sleep(5)
 
         container_config = _get_container_config(task.girder_client, tale)
-        service, attrs = _launch_container(service_info, container_config, task.girder_client)
+        service, attrs = _launch_container(
+            service_info, container_config, task.girder_client
+        )
         print(
             f"Started a container using volume: {service_info['volumeName']} "
             f"on node: {service_info['nodeId']}"
@@ -125,11 +145,11 @@ class DockerTasks(TasksBase):
         print("Waiting for the environment to be accessible...")
         while time.time() - tic < timeout:
             try:
-                status = service.tasks()[0]['Status']
+                status = service.tasks()[0]["Status"]
 
-                if status['State'] in {"failed", "rejected"}:
-                    raise ValueError("Failed to start environment: %s" % status['Err'])
-                elif status['State'] == "running":
+                if status["State"] in {"failed", "rejected"}:
+                    raise ValueError("Failed to start environment: %s" % status["Err"])
+                elif status["State"] == "running":
                     started = True
                     break
 
@@ -143,100 +163,111 @@ class DockerTasks(TasksBase):
 
         print("Environment is up and running.")
         task.job_manager.updateProgress(
-            message='Container started', total=LAUNCH_CONTAINER_STEP_TOTAL,
-            current=LAUNCH_CONTAINER_STEP_TOTAL, forceFlush=True)
+            message="Container started",
+            total=LAUNCH_CONTAINER_STEP_TOTAL,
+            current=LAUNCH_CONTAINER_STEP_TOTAL,
+            forceFlush=True,
+        )
 
         service_info.update(attrs)
-        service_info['name'] = service.name
+        service_info["name"] = service.name
         return service_info
 
     def update_container(self, task, instanceId, digest=None):
         user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
-        cli = docker.from_env(version='1.28')
-        if 'containerInfo' not in instance:
+        cli = docker.from_env(version="1.28")
+        if "containerInfo" not in instance:
             return
-        containerInfo = instance['containerInfo']  # VALIDATE
+        containerInfo = instance["containerInfo"]  # VALIDATE
         try:
-            service = cli.services.get(containerInfo['name'])
+            service = cli.services.get(containerInfo["name"])
         except docker.errors.NotFound:
-            logging.info("Service not present [%s].", containerInfo['name'])
+            logging.info("Service not present [%s].", containerInfo["name"])
             return
 
         task.job_manager.updateProgress(
-            message='Restarting the Tale with a new image',
+            message="Restarting the Tale with a new image",
             total=UPDATE_CONTAINER_STEP_TOTAL,
-            current=1, forceFlush=True)
+            current=1,
+            forceFlush=True,
+        )
 
         # Don't try to restart if the image hasn't changed
         try:
-            previous_image = service.attrs['Spec']['TaskTemplate']['ContainerSpec']['Image']
+            previous_image = service.attrs["Spec"]["TaskTemplate"]["ContainerSpec"][
+                "Image"
+            ]
         except KeyError:
-            previous_image = ''
+            previous_image = ""
 
-        if (previous_image == digest):
+        if previous_image == digest:
             task.job_manager.updateProgress(
-                message='Image has not changed',
+                message="Image has not changed",
                 total=UPDATE_CONTAINER_STEP_TOTAL,
-                current=UPDATE_CONTAINER_STEP_TOTAL)
-            return {'image_digest': digest}
+                current=UPDATE_CONTAINER_STEP_TOTAL,
+            )
+            return {"image_digest": digest}
 
         try:
             # NOTE: Only "image" passed currently, but this can be easily extended
             logging.info("Restarting container [%s].", service.name)
             service.update(image=digest)
-            logging.info("Restart command has been sent to Container [%s].",
-                         service.name)
+            logging.info(
+                "Restart command has been sent to Container [%s].", service.name
+            )
         except Exception as e:
-            logging.error("Unable to send restart command to container [%s]: %s",
-                          service.id, e)
+            logging.error(
+                "Unable to send restart command to container [%s]: %s", service.id, e
+            )
 
         updated = False
         expired = False
         timeout = datetime.now() + timedelta(minutes=3)
         while not (updated or expired or task.canceled):
-            service = cli.services.get(containerInfo['name'])
+            service = cli.services.get(containerInfo["name"])
 
             try:
-                state = service.attrs['UpdateStatus']['State']
+                state = service.attrs["UpdateStatus"]["State"]
             except KeyError:
-                state = ''
+                state = ""
 
-            if state == 'paused':
+            if state == "paused":
                 raise RuntimeError(
                     'Restarting the Tale failed with "{}"'.format(
-                        service.attrs['UpdateStatus']['Message'])
+                        service.attrs["UpdateStatus"]["Message"]
+                    )
                 )
 
-            updated = state == 'completed'
+            updated = state == "completed"
             expired = datetime.now() > timeout
             time.sleep(1.0)
 
         if task.canceled:
-            raise RuntimeError('Tale restart cancelled')
+            raise RuntimeError("Tale restart cancelled")
         elif expired:
-            raise RuntimeError('Tale update timed out')
+            raise RuntimeError("Tale update timed out")
 
         task.job_manager.updateProgress(
-            message='Tale restarted with the new image',
+            message="Tale restarted with the new image",
             total=UPDATE_CONTAINER_STEP_TOTAL,
-            current=UPDATE_CONTAINER_STEP_TOTAL)
+            current=UPDATE_CONTAINER_STEP_TOTAL,
+        )
 
-        return {'image_digest': digest}
+        return {"image_digest": digest}
 
     def shutdown_container(self, task, instanceId):
         """Shutdown a running Tale."""
         user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
-        cli = docker.from_env(version='1.28')
-        if 'containerInfo' not in instance:
+        cli = docker.from_env(version="1.28")
+        if "containerInfo" not in instance:
             return
-        containerInfo = instance['containerInfo']  # VALIDATE
+        containerInfo = instance["containerInfo"]  # VALIDATE
         try:
-            service = cli.services.get(containerInfo['name'])
+            service = cli.services.get(containerInfo["name"])
         except docker.errors.NotFound:
-            logging.info("Service not present [%s].",
-                         containerInfo['name'])
+            logging.info("Service not present [%s].", containerInfo["name"])
             return
 
         try:
@@ -251,7 +282,7 @@ class DockerTasks(TasksBase):
         logging.info("Stopping FS container for instance %s", instanceId)
         user, instance = _get_user_and_instance(task.girder_client, instanceId)
 
-        if 'containerInfo' not in instance:
+        if "containerInfo" not in instance:
             logging.warning("No containerInfo for instance %s", instanceId)
             return
         containerInfo = instance["containerInfo"]  # VALIDATE
@@ -265,23 +296,26 @@ class DockerTasks(TasksBase):
         tale = task.girder_client.get(
             f"/tale/{tale_id}/restore", parameters={"versionId": run["runVersionId"]}
         )
-        user = task.girder_client.get('/user/me')
+        user = task.girder_client.get("/user/me")
         image_builder = DockerImageBuilder(task.girder_client, tale=tale)
 
         def set_run_status(run, status):
             task.girder_client.patch(
-                "/run/{_id}/status".format(**run), parameters={'status': status}
+                "/run/{_id}/status".format(**run), parameters={"status": status}
             )
 
         # UNKNOWN = 0 STARTING = 1 RUNNING = 2 COMPLETED = 3 FAILED = 4 CANCELLED = 5
         set_run_status(run, RunStatus.STARTING)
 
         task.job_manager.updateProgress(
-            message='Preparing volumes', total=RECORDED_RUN_STEP_TOTAL,
-            current=1, forceFlush=True)
+            message="Preparing volumes",
+            total=RECORDED_RUN_STEP_TOTAL,
+            current=1,
+            forceFlush=True,
+        )
 
         # Create Docker volume
-        vol_name = "%s_%s_%s" % (run_id, user['login'], new_user(6))
+        vol_name = "%s_%s_%s" % (run_id, user["login"], new_user(6))
         fs_sidecar = FSContainer.start_container(vol_name)
         payload = {
             "mounts": [
@@ -308,13 +342,19 @@ class DockerTasks(TasksBase):
 
         # Build the image for the run
         task.job_manager.updateProgress(
-            message='Building image', total=RECORDED_RUN_STEP_TOTAL,
-            current=2, forceFlush=True)
+            message="Building image",
+            total=RECORDED_RUN_STEP_TOTAL,
+            current=2,
+            forceFlush=True,
+        )
 
         # Setup image tag
         tag = image_builder.get_tag()
         logging.info(
-            "Computed tag: %s (taleId:%s, versionId:%s)", tag, tale_id, run["runVersionId"]
+            "Computed tag: %s (taleId:%s, versionId:%s)",
+            tag,
+            tale_id,
+            run["runVersionId"],
         )
 
         # Build currently assumes tmp directory, in this case mount the run workspace
@@ -331,13 +371,18 @@ class DockerTasks(TasksBase):
                 if task.canceled:
                     state.cleanup()
                     return
-                if ret['StatusCode'] != 0:
-                    raise ValueError('Image build failed for recorded run {}'.format(run_id))
+                if ret["StatusCode"] != 0:
+                    raise ValueError(
+                        "Image build failed for recorded run {}".format(run_id)
+                    )
                 image_builder.push_image(tag)
 
             task.job_manager.updateProgress(
-                message='Recording run', total=RECORDED_RUN_STEP_TOTAL,
-                current=3, forceFlush=True)
+                message="Recording run",
+                total=RECORDED_RUN_STEP_TOTAL,
+                current=3,
+                forceFlush=True,
+            )
 
             set_run_status(run, RunStatus.RUNNING)
             container_name = f"rrun-{new_user(8)}"
@@ -348,7 +393,7 @@ class DockerTasks(TasksBase):
                     "container_name": container_name,
                     "volume_created": state.volume_created,
                     "node_id": image_builder.dh.cli.info()["Swarm"]["NodeID"],
-                }
+                },
             )
 
             mountpoint = os.path.join(VOLUMES_ROOT, "mountpoints", state.volume_created)
@@ -360,7 +405,7 @@ class DockerTasks(TasksBase):
                 tag,
                 entrypoint,
                 container_name,
-                task=task
+                task=task,
             )
             if task.canceled:
                 state.cleanup()
@@ -368,8 +413,11 @@ class DockerTasks(TasksBase):
 
             set_run_status(run, RunStatus.COMPLETED)
             task.job_manager.updateProgress(
-                message='Finished recorded run', total=RECORDED_RUN_STEP_TOTAL,
-                current=4, forceFlush=True)
+                message="Finished recorded run",
+                total=RECORDED_RUN_STEP_TOTAL,
+                current=4,
+                forceFlush=True,
+            )
         except Exception as exc:
             logging.error(exc, exc_info=True)
             raise
@@ -377,7 +425,7 @@ class DockerTasks(TasksBase):
             state.cleanup(False)
 
     def check_on_run(self, run_state):
-        cli = docker.from_env(version='1.28')
+        cli = docker.from_env(version="1.28")
         try:
             container = cli.containers.get(run_state["container_name"])
             return container.status == "running"
@@ -391,7 +439,7 @@ class DockerTasks(TasksBase):
         state.container_name = run["meta"].get("container_name")
         state.cleanup(canceled=False)
         state.set_run_status(RunStatus.FAILED)
-        if (job_id := run["meta"]["jobId"]):
+        if job_id := run["meta"]["jobId"]:
             task.girder_client.put(f"/job/{job_id}", parameters={"status": 4})
 
 
@@ -402,11 +450,11 @@ class RecordedRunCleaner:
     def __init__(self, run, gc):
         self.gc = gc
         self.run = run
-        self.docker_cli = docker.from_env(version='1.28')
+        self.docker_cli = docker.from_env(version="1.28")
 
     def set_run_status(self, status):
         self.gc.patch(
-            "/run/{_id}/status".format(**self.run), parameters={'status': status}
+            "/run/{_id}/status".format(**self.run), parameters={"status": status}
         )
 
     def cleanup(self, canceled=True):

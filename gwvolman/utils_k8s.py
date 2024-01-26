@@ -1,10 +1,34 @@
+import json
 import os
 
 from kubernetes import client, config
 
 
-def tale_ingress(params):
+def tale_ingress(params: dict) -> None:
     host = f"{params['host']}.{params['domain']}"
+    annotations = {
+        "kubernetes.io/ingress.class": params["ingressClass"],
+    }
+    if params["ingressClass"] == "traefik":
+        annotations[
+            "traefik.ingress.kubernetes.io/router.middlewares"
+        ] = f"{params['deploymentNamespace']}-ssl-header@kubernetescrd"
+    elif params["ingressClass"] == "nginx":
+        annotations.update(
+            {
+                "nginx.ingress.kubernetes.io/proxy-read-timeout": 86400,
+                "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+                "nginx.ingress.kubernetes.io/configuration-snippet": (
+                    "more_set_headers X-Real-IP $remote_addr;\n"
+                    "more_set_headers X-Forwarded-For $proxy_add_x_forwarded_for;\n"
+                    "more_set_headers X-Forwarded-Proto $scheme;\n"
+                    "more_set_headers Host $host;\n"
+                    'more_set_headers Upgrade "websocket";\n'
+                    'more_set_headers Connection "upgrade";\n'
+                ),
+            }
+        )
+
     # Apply the Ingress
     config.load_incluster_config()
     api_instance = client.NetworkingV1Api()
@@ -18,12 +42,7 @@ def tale_ingress(params):
                     "instanceId": params["instanceId"],
                 },
                 namespace=params["deploymentNamespace"],
-                annotations={
-                    "kubernetes.io/ingress.class": "traefik",
-                    "traefik.ingress.kubernetes.io/router.middlewares": (
-                        f"{params['deploymentNamespace']}-ssl-header@kubernetescrd"
-                    ),
-                },
+                annotations=annotations,
             ),
             spec=client.V1IngressSpec(
                 tls=[
@@ -85,6 +104,46 @@ def tale_service(params):
 
 def tale_deployment(params):
     config.load_incluster_config()
+
+    mounter_mounts = [
+        client.V1VolumeMount(
+            mount_path="/data",
+            mount_propagation="Bidirectional",
+            name="data",
+        ),
+        client.V1VolumeMount(
+            mount_path="/home",
+            mount_propagation="Bidirectional",
+            name="home",
+        ),
+        client.V1VolumeMount(
+            mount_path="/workspace",
+            mount_propagation="Bidirectional",
+            name="workspace",
+        ),
+    ]
+    mounter_volumes = [
+        client.V1Volume(name="data", empty_dir={}),
+        client.V1Volume(name="home", empty_dir={}),
+        client.V1Volume(name="workspace", empty_dir={}),
+    ]
+    if params["girderFSMountType"] == "direct":
+        mounter_mounts.append(
+            client.V1VolumeMount(
+                mount_path="/srv/data",  # TODO get from girder
+                name=params["claimName"],
+                read_only=True,
+            ),
+        )
+        mounter_volumes.append(
+            client.V1Volume(
+                name=params["claimName"],
+                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=params["claimName"]
+                ),
+            ),
+        )
+
     # Apply the deployment
     api_instance = client.AppsV1Api()
     api_instance.create_namespaced_deployment(
@@ -114,7 +173,9 @@ def tale_deployment(params):
                         }
                     ),
                     spec=client.V1PodSpec(
-                        image_pull_secrets=[client.V1LocalObjectReference(name="local-registry-secret")],
+                        image_pull_secrets=[
+                            client.V1LocalObjectReference(name="local-registry-secret")
+                        ],
                         containers=[
                             client.V1Container(
                                 name="instance",
@@ -130,22 +191,22 @@ def tale_deployment(params):
                                         mount_path=os.path.join(
                                             params["mountPoint"], "workspace"
                                         ),
-                                        name=params["claimName"],
-                                        sub_path=params["workspaceSubPath"],
+                                        mount_propagation="HostToContainer",
+                                        name="workspace",
                                     ),
                                     client.V1VolumeMount(
                                         mount_path=os.path.join(
                                             params["mountPoint"], "home"
                                         ),
-                                        name=params["claimName"],
-                                        sub_path=params["homeSubPath"],
+                                        mount_propagation="HostToContainer",
+                                        name="home",
                                     ),
                                     client.V1VolumeMount(
                                         mount_path=os.path.join(
                                             params["mountPoint"], "data"
                                         ),
                                         mount_propagation="HostToContainer",
-                                        name="dms",
+                                        name="data",
                                     ),
                                 ],
                             ),
@@ -156,12 +217,12 @@ def tale_deployment(params):
                                 lifecycle=client.V1Lifecycle(
                                     post_start=client.V1LifecycleHandler(
                                         _exec=client.V1ExecAction(
-                                            command=params["mountDms"].split(" "),
+                                            command=["girderfs-mount"],
                                         )
                                     ),
                                     pre_stop=client.V1LifecycleHandler(
                                         _exec=client.V1ExecAction(
-                                            command=["umount", "/data"]
+                                            command=["girderfs-umount"],
                                         )
                                     ),
                                 ),
@@ -176,6 +237,12 @@ def tale_deployment(params):
                                         "smarter-devices/fuse": 1,
                                     },
                                 ),
+                                env=[
+                                    client.V1EnvVar(
+                                        name="GIRDERFS_DEF",
+                                        value=json.dumps(params["girderfsDef"]),
+                                    ),
+                                ],
                                 security_context=client.V1SecurityContext(
                                     allow_privilege_escalation=True,
                                     capabilities=client.V1Capabilities(
@@ -183,29 +250,10 @@ def tale_deployment(params):
                                     ),
                                     privileged=True,
                                 ),
-                                volume_mounts=[
-                                    client.V1VolumeMount(
-                                        mount_path="/data",
-                                        mount_propagation="Bidirectional",
-                                        name="dms",
-                                    ),
-                                    client.V1VolumeMount(
-                                        mount_path="/srv/data",  # TODO get from girder
-                                        name=params["claimName"],
-                                        read_only=True,
-                                    ),
-                                ],
+                                volume_mounts=mounter_mounts,
                             ),
                         ],
-                        volumes=[
-                            client.V1Volume(
-                                name=params["claimName"],
-                                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                                    claim_name=params["claimName"]
-                                ),
-                            ),
-                            client.V1Volume(name="dms", empty_dir={}),
-                        ],
+                        volumes=mounter_volumes,
                     ),
                 ),
             ),
