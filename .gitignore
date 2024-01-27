@@ -6,3 +6,5 @@ Testing
 build/
 dist/
 pip-wheel-metadata/
+.vscode/
+gwvolman.code-workspace
