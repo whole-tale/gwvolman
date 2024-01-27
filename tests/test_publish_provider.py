@@ -3,7 +3,7 @@ import pytest
 from girder_client import GirderClient
 
 from gwvolman.lib.publish_provider import PublishProvider, NullManager
-from gwvolman.tests import (
+from . import (
     TALE,
     PUBLISHED_TALE,
     ZENODO_TOKEN,
