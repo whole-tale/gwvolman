@@ -35,6 +35,7 @@ def mock_gc_get(path, parameters=None):
 def test_create_volume(gak, info, osmk, nu):
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
+    mock_gc.token = "some_token"
     mock_gc.loadOrCreateFolder = mock.Mock(return_value={"_id": "folder1"})
 
     create_volume.girder_client = mock_gc
@@ -69,6 +70,7 @@ def test_create_volume(gak, info, osmk, nu):
             "userId": "ghi567",
             "girderApiUrl": "https://girder.dev.wholetale.org/api/v1",
             "girderApiKey": "apikey1",
+            "girderToken": "some_token",
             "root": "tale1_user1_123456",
         }
         headers = {"Content-Type": "application/json"}
