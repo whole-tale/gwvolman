@@ -14,17 +14,15 @@ def tale_ingress(params: dict) -> None:
             "traefik.ingress.kubernetes.io/router.middlewares"
         ] = f"{params['deploymentNamespace']}-ssl-header@kubernetescrd"
     elif params["ingressClass"] == "nginx":
+        csp = f"frame-ancestors 'self' https://dashboard.{params['domain']};"
         annotations.update(
             {
-                "nginx.ingress.kubernetes.io/proxy-read-timeout": 86400,
+                "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
+                "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
                 "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
                 "nginx.ingress.kubernetes.io/configuration-snippet": (
-                    "more_set_headers X-Real-IP $remote_addr;\n"
-                    "more_set_headers X-Forwarded-For $proxy_add_x_forwarded_for;\n"
-                    "more_set_headers X-Forwarded-Proto $scheme;\n"
-                    "more_set_headers Host $host;\n"
-                    'more_set_headers Upgrade "websocket";\n'
-                    'more_set_headers Connection "upgrade";\n'
+                    "more_clear_headers \"Content-Security-Policy\";\n"
+                    f"add_header Content-Security-Policy \"{csp}\";\n"
                 ),
             }
         )
