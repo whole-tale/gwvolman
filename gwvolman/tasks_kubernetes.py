@@ -43,6 +43,13 @@ class KubernetesTasks(TasksBase):
 
         vol_name = "_".join((tale["_id"], user["login"], new_user(6)))
 
+        task.job_manager.updateProgress(
+            message="Volume created",
+            total=CREATE_VOLUME_STEP_TOTAL,
+            current=CREATE_VOLUME_STEP_TOTAL,
+            forceFlush=True,
+        )
+
         return {
             "nodeId": None,
             "fscontainerId": None,
