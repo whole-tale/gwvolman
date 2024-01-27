@@ -84,7 +84,8 @@ class K8SDeployment(object):
     """Container for WT-specific k8s stack deployment configuration."""
 
     dashboard_url = f"https://dashboard.{DOMAIN}"
-    girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
+    #girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
+    girder_url = f"https://girder.{DOMAIN}"
     registry_url = f"https://registry.{DOMAIN}"
     traefik_network = None
     tmpdir_mount = "/tmp"
