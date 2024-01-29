@@ -6,12 +6,9 @@ from urllib.parse import urlparse
 
 import girder_client
 
-from .constants import InstanceStatus, TaleStatus
+from .constants import BUILD_TALE_IMAGE_STEP_TOTAL, InstanceStatus, TaleStatus
 from .lib.zenodo import ZenodoPublishProvider
 from .r2d import ImageBuilder
-
-
-BUILD_TALE_IMAGE_STEP_TOTAL = 2
 
 
 class TasksBase:
@@ -34,29 +31,34 @@ class TasksBase:
         """
         Build docker image from Tale workspace using repo2docker and push to Whole Tale registry.
         """
-        logging.info('Building image for Tale %s', tale_id)
+        logging.info("Building image for Tale %s", tale_id)
 
         task.job_manager.updateProgress(
-            message='Building image', total=BUILD_TALE_IMAGE_STEP_TOTAL,
-            current=1, forceFlush=True)
+            message="Building image",
+            total=BUILD_TALE_IMAGE_STEP_TOTAL,
+            current=1,
+            forceFlush=True,
+        )
 
         tic = time.time()
-        tale = task.girder_client.get('/tale/%s' % tale_id)
+        tale = task.girder_client.get("/tale/%s" % tale_id)
         while tale["status"] != TaleStatus.READY:
             time.sleep(2)
-            tale = task.girder_client.get('/tale/{_id}'.format(**tale))
+            tale = task.girder_client.get("/tale/{_id}".format(**tale))
             if tale["status"] == TaleStatus.ERROR:
                 raise ValueError("Cannot build image for a Tale in error state.")
             if time.time() - tic > 5 * 60.0:
-                raise ValueError("Cannot build image. Tale preparing for more than 5 minutes.")
+                raise ValueError(
+                    "Cannot build image. Tale preparing for more than 5 minutes."
+                )
 
         last_build_time = -1
         try:
-            last_build_time = tale['imageInfo']['last_build']
+            last_build_time = tale["imageInfo"]["last_build"]
         except KeyError:
             pass
 
-        logging.info('Last build time {}'.format(last_build_time))
+        logging.info("Last build time {}".format(last_build_time))
         image_builder = ImageBuilder(task.girder_client, tale=tale)
         image_builder.pull_r2d()
 
@@ -73,17 +75,17 @@ class TasksBase:
         print(f"Last build time: {last_build_time}")
         print(f"image_builder.cached_image(tag): {image_builder.cached_image(tag)}")
         if not force and (image := image_builder.cached_image(tag)):
-            print('Cached image exists for this Tale. Skipping build.')
+            print("Cached image exists for this Tale. Skipping build.")
             task.job_manager.updateProgress(
-                message='Tale not modified, no need to build',
+                message="Tale not modified, no need to build",
                 total=BUILD_TALE_IMAGE_STEP_TOTAL,
                 current=BUILD_TALE_IMAGE_STEP_TOTAL,
-                forceFlush=True
+                forceFlush=True,
             )
             return {
-                'image_digest': f"{image['name']}:{image['tag']}@{image['digest']}",
-                'repo2docker_version': image_builder.container_config.repo2docker_version,
-                'last_build': last_build_time
+                "image_digest": f"{image['name']}:{image['tag']}@{image['digest']}",
+                "repo2docker_version": image_builder.container_config.repo2docker_version,
+                "last_build": last_build_time,
             }
 
         print("Forcing build.")
@@ -98,7 +100,7 @@ class TasksBase:
         if ret["StatusCode"] != 0:
             # repo2docker build failed
             print(ret)
-            raise ValueError('Error building tale {}'.format(tale_id))
+            raise ValueError("Error building tale {}".format(tale_id))
 
         # Push the image to the registry
         image_builder.push_image(tag)
@@ -107,19 +109,24 @@ class TasksBase:
         image = image_builder.cached_image(tag)
 
         task.job_manager.updateProgress(
-            message='Image build succeeded', total=BUILD_TALE_IMAGE_STEP_TOTAL,
-            current=BUILD_TALE_IMAGE_STEP_TOTAL, forceFlush=True)
+            message="Image build succeeded",
+            total=BUILD_TALE_IMAGE_STEP_TOTAL,
+            current=BUILD_TALE_IMAGE_STEP_TOTAL,
+            forceFlush=True,
+        )
 
-        logging.info(f"Successfully built image {image['name']}:{image['tag']} ({image['digest']})")
+        logging.info(
+            f"Successfully built image {image['name']}:{image['tag']} ({image['digest']})"
+        )
 
         # Image digest used by updateBuildStatus handler
         return {
-            'image_digest': f"{image['name']}:{image['tag']}@{image['digest']}",
-            'repo2docker_version': image_builder.container_config.repo2docker_version,
-            'last_build': build_time
+            "image_digest": f"{image['name']}:{image['tag']}@{image['digest']}",
+            "repo2docker_version": image_builder.container_config.repo2docker_version,
+            "last_build": build_time,
         }
 
-    def publish(self, task,  tale_id, token, version_id, repository=None, draft=False):
+    def publish(self, task, tale_id, token, version_id, repository=None, draft=False):
         """
         Publish a tale.
 
@@ -142,16 +149,20 @@ class TasksBase:
                 token,
                 version_id,
                 draft=draft,
-                job_manager=task.job_manager
+                job_manager=task.job_manager,
             )
         else:
             raise ValueError("Unsupported publisher ({})".format(token["provider"]))
 
-        if provider.published and provider.publication_info.get("versionId") == version_id:
-            raise ValueError(f"This version of the Tale ({version_id}) has already been published.")
+        if (
+            provider.published
+            and provider.publication_info.get("versionId") == version_id
+        ):
+            raise ValueError(
+                f"This version of the Tale ({version_id}) has already been published."
+            )
         provider.publish()
         return provider.publication_info
-
 
     def import_tale(self, task, lookup_kwargs, tale, spawn=True):
         """Create a Tale provided a url for an external data and an image Id.
