@@ -130,7 +130,7 @@ def tale_deployment(params):
             client.V1VolumeMount(
                 mount_path="/srv/data",  # TODO get from girder
                 name=params["claimName"],
-                read_only=True,
+                read_only=False,
             ),
         )
         mounter_volumes.append(
