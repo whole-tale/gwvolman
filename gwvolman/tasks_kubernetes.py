@@ -4,7 +4,11 @@ import uuid
 
 import kubernetes
 
-from .constants import ENABLE_WORKSPACES
+from .constants import (
+    CREATE_VOLUME_STEP_TOTAL,
+    ENABLE_WORKSPACES,
+    LAUNCH_CONTAINER_STEP_TOTAL,
+)
 from .tasks_base import TasksBase
 from .utils import (
     DOMAIN,
@@ -14,10 +18,6 @@ from .utils import (
     _get_container_config,
 )
 from .utils_k8s import tale_deployment, tale_service, tale_ingress
-
-CREATE_VOLUME_STEP_TOTAL = 2
-LAUNCH_CONTAINER_STEP_TOTAL = 2
-DMS_ENABLED = False
 
 
 class KubernetesTasks(TasksBase):
@@ -222,21 +222,6 @@ class KubernetesTasks(TasksBase):
             "mountType": K8SDeployment.girderfs_mount_type,
             "root": "/",
         }
-        if DMS_ENABLED:
-            session = self._create_session(task, tale)
-            template_params["girderfsDef"]["sessionId"] = session["_id"]
-
-            # template_params["mountDms"] = (
-            #     f"girderfs --api-url {girder_api_url} --token {task.girder_client.token}"
-            #     f" -c wt_dms /data {session['_id']}"
-            # )
-        # else:
-        # template_params["mountDms"] = (
-        #     "passthrough-fuse -o allow_other "
-        #     f"--girder-url={girder_api_url}/tale/{tale['_id']}/listing "
-        #     f"--token={task.girder_client.token} "
-        #     "/data"
-        # )
 
         # create deployment and service
         tale_deployment(template_params)

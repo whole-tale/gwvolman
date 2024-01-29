@@ -23,13 +23,9 @@ GIRDER_API_URL = os.environ.get("GIRDER_API_URL", DEFAULT_GIRDER_API_URL)
 LICENSE_PATH = os.environ.get("WT_LICENSE_PATH", "/licenses/")
 
 REPO2DOCKER_VERSION = os.environ.get(
-    "REPO2DOCKER_VERSION",
-    "wholetale/repo2docker_wholetale:latest"
+    "REPO2DOCKER_VERSION", "wholetale/repo2docker_wholetale:latest"
 )
-GIRDERFS_IMAGE = os.environ.get(
-    "GIRDERFS_IMAGE",
-    "wholetale/girderfs:latest"
-)
+GIRDERFS_IMAGE = os.environ.get("GIRDERFS_IMAGE", "wholetale/girderfs:latest")
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
 
@@ -98,3 +94,11 @@ class RunStatus(object):
     COMPLETED = 3
     FAILED = 4
     CANCELED = 5
+
+
+CREATE_VOLUME_STEP_TOTAL = 2
+LAUNCH_CONTAINER_STEP_TOTAL = 2
+UPDATE_CONTAINER_STEP_TOTAL = 2
+IMPORT_TALE_STEP_TOTAL = 2
+RECORDED_RUN_STEP_TOTAL = 4
+BUILD_TALE_IMAGE_STEP_TOTAL = 2

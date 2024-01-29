@@ -4,6 +4,13 @@ import os
 import time
 import logging
 import json
+
+from .constants import (
+    CREATE_VOLUME_STEP_TOTAL,
+    LAUNCH_CONTAINER_STEP_TOTAL,
+    RECORDED_RUN_STEP_TOTAL,
+    UPDATE_CONTAINER_STEP_TOTAL,
+)
 from .utils import (
     new_user,
     _get_api_key,
@@ -18,12 +25,6 @@ from .tasks_base import TasksBase
 from .constants import GIRDER_API_URL, RunStatus, VOLUMES_ROOT
 
 from .r2d import DockerImageBuilder
-
-CREATE_VOLUME_STEP_TOTAL = 2
-LAUNCH_CONTAINER_STEP_TOTAL = 2
-UPDATE_CONTAINER_STEP_TOTAL = 2
-IMPORT_TALE_STEP_TOTAL = 2
-RECORDED_RUN_STEP_TOTAL = 4
 
 
 class DockerTasks(TasksBase):
