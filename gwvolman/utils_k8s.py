@@ -3,6 +3,7 @@ import os
 
 from kubernetes import client, config
 
+from .constants import VOLUMES_ROOT
 
 def tale_ingress(params: dict) -> None:
     host = f"{params['host']}.{params['domain']}"
@@ -128,7 +129,7 @@ def tale_deployment(params):
     if params["girderFSMountType"] == "direct":
         mounter_mounts.append(
             client.V1VolumeMount(
-                mount_path="/srv/data",  # TODO get from girder
+                mount_path=VOLUMES_ROOT,
                 name=params["claimName"],
                 read_only=False,
             ),
@@ -239,6 +240,10 @@ def tale_deployment(params):
                                     client.V1EnvVar(
                                         name="GIRDERFS_DEF",
                                         value=json.dumps(params["girderfsDef"]),
+                                    ),
+                                    client.V1EnvVar(
+                                        name="WT_VOLUMES_PATH",
+                                        value=VOLUMES_ROOT,
                                     ),
                                 ],
                                 security_context=client.V1SecurityContext(
