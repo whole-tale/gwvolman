@@ -6,7 +6,6 @@ import kubernetes
 
 from .constants import (
     CREATE_VOLUME_STEP_TOTAL,
-    ENABLE_WORKSPACES,
     LAUNCH_CONTAINER_STEP_TOTAL,
 )
 from .tasks_base import TasksBase
@@ -25,10 +24,6 @@ class KubernetesTasks(TasksBase):
         super().__init__(*args, **kwargs)
         kubernetes.config.load_incluster_config()
         self.deployment = K8SDeployment()
-
-    @staticmethod
-    def _claim_from_volume(volume_name):
-        return f"claim-{volume_name}"
 
     def create_volume(self, task, instance_id: str, mounts=None):
         user, instance = _get_user_and_instance(task.girder_client, instance_id)
@@ -109,21 +104,6 @@ class KubernetesTasks(TasksBase):
             time.sleep(5)
         raise Exception("Pod %s startup timed out" % instanceId)
 
-    def _configure_volumes(self, template_params, session, home_dir, tale):
-        # DMS
-        template_params["dmsMountEnabled"] = True
-        template_params["dmsSessionId"] = str(session["_id"])
-
-        # Home
-        template_params["homeDirId"] = str(home_dir["_id"])
-
-        # Workspace
-        if ENABLE_WORKSPACES:
-            template_params["workspacesEnabled"] = True
-            template_params["taleId"] = str(tale["_id"])
-        else:
-            template_params["workspacesEnabled"] = False
-
     def _render_config(self, container_config):
         token = uuid.uuid4().hex
         # command
@@ -144,9 +124,6 @@ class KubernetesTasks(TasksBase):
         return container_config._replace(
             command=rendered_command, url_path=rendered_url_path
         )
-
-    def _add_ingress_rule(self, service_name, port, host):
-        pass
 
     def launch_container(self, task, payload):
         """Launch a container using a Tale object."""
@@ -199,6 +176,7 @@ class KubernetesTasks(TasksBase):
             "homeSubPath": f"homes/{user['login'][0]}/{user['login']}",
             "workspaceSubPath": f"workspaces/{tale['_id'][0]}/{tale['_id']}",
         }
+
         container_config = _get_container_config(task.girder_client, tale)
 
         container_config = self._render_config(container_config)
@@ -252,7 +230,6 @@ class KubernetesTasks(TasksBase):
             namespace=self.deployment.namespace,
             label_selector=f"instanceId={instanceId}",
         )
-
         deployment = self._ensure_one(deployments.items, "deployments", instanceId)
         if deployment is None:
             return
@@ -282,6 +259,3 @@ class KubernetesTasks(TasksBase):
             api.delete_namespaced_ingress(
                 name=ingress.metadata.name, namespace=self.deployment.namespace
             )
-
-    def _create_session(task, tale):
-        raise NotImplementedError()
