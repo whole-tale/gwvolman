@@ -3,6 +3,8 @@ import time
 import uuid
 
 import kubernetes
+from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream
 
 from .constants import (
     CREATE_VOLUME_STEP_TOTAL,
@@ -92,7 +94,7 @@ class KubernetesTasks(TasksBase):
             else:
                 pod = pods.items[0]
                 if pod.status.phase == "Running":
-                    return
+                    return pod
                 elif pod.status.phase == "Pending":
                     # Reset deadline
                     tic = time.time()
@@ -205,7 +207,10 @@ class KubernetesTasks(TasksBase):
         tale_deployment(template_params)
 
         # wait until task is started
-        self._wait_for_pod(instanceId)
+        pod = self._wait_for_pod(instanceId)
+
+        # exec girderfs-mount in mounter container
+        self._execute_girderfs(pod, "girderfs-mount")
 
         tale_service(template_params)
         tale_ingress(template_params)
@@ -222,6 +227,28 @@ class KubernetesTasks(TasksBase):
         payload["name"] = service_name
         return payload
 
+    def _execute_girderfs(self, pod, cmd=None):
+        # exec into mounter container in the pod
+        api = kubernetes.client.CoreV1Api()
+        try:
+            resp = stream(
+                api.connect_get_namespaced_pod_exec,
+                name=pod.metadata.name,
+                namespace=self.deployment.namespace,
+                command=cmd,
+                container="mounter",
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+            print("Response: " + resp)
+        except ApiException as e:
+            print(
+                "Exception when calling CoreV1Api->connect_get_namespaced_pod_exec: %s\n"
+                % e
+            )
+
     def shutdown_container(self, task, instanceId):
         """Shutdown a running Tale."""
         logging.info("Shutting down container for instance %s" % instanceId)
@@ -233,6 +260,10 @@ class KubernetesTasks(TasksBase):
         deployment = self._ensure_one(deployments.items, "deployments", instanceId)
         if deployment is None:
             return
+
+        # umount girderfs
+        pod = self._wait_for_pod(instanceId)
+        self._execute_girderfs(pod, "girderfs-umount")
 
         api.delete_namespaced_deployment(
             name=deployment.metadata.name, namespace=self.deployment.namespace
