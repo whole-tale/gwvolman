@@ -5,6 +5,7 @@ from kubernetes import client, config
 
 from .constants import VOLUMES_ROOT
 
+
 def tale_ingress(params: dict) -> None:
     host = f"{params['host']}.{params['domain']}"
     annotations = {
@@ -21,10 +22,10 @@ def tale_ingress(params: dict) -> None:
                 "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
                 "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
                 "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
-                "nginx.ingress.kubernetes.io/proxy-body-size:": "512M",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "512M",
                 "nginx.ingress.kubernetes.io/configuration-snippet": (
-                    "more_clear_headers \"Content-Security-Policy\";\n"
-                    f"add_header Content-Security-Policy \"{csp}\";\n"
+                    'more_clear_headers "Content-Security-Policy";\n'
+                    f'add_header Content-Security-Policy "{csp}";\n'
                 ),
             }
         )
@@ -214,18 +215,18 @@ def tale_deployment(params):
                                 name="mounter",
                                 command=["tini", "--", "/bin/sleep", "infinity"],
                                 image=params["mounterImage"],
-                                lifecycle=client.V1Lifecycle(
-                                    post_start=client.V1LifecycleHandler(
-                                        _exec=client.V1ExecAction(
-                                            command=["girderfs-mount"],
-                                        )
-                                    ),
-                                    pre_stop=client.V1LifecycleHandler(
-                                        _exec=client.V1ExecAction(
-                                            command=["girderfs-umount"],
-                                        )
-                                    ),
-                                ),
+                                # lifecycle=client.V1Lifecycle(
+                                #    post_start=client.V1LifecycleHandler(
+                                #        _exec=client.V1ExecAction(
+                                #            command=["girderfs-mount"],
+                                #        )
+                                #    ),
+                                #    pre_stop=client.V1LifecycleHandler(
+                                #        _exec=client.V1ExecAction(
+                                #            command=["girderfs-umount"],
+                                #        )
+                                #    ),
+                                # ),
                                 resources=client.V1ResourceRequirements(
                                     limits={
                                         "memory": "256Mi",
