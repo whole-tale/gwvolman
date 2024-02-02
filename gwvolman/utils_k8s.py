@@ -21,6 +21,7 @@ def tale_ingress(params: dict) -> None:
                 "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
                 "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
                 "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+                "nginx.ingress.kubernetes.io/proxy-body-size:": "512M",
                 "nginx.ingress.kubernetes.io/configuration-snippet": (
                     "more_clear_headers \"Content-Security-Policy\";\n"
                     f"add_header Content-Security-Policy \"{csp}\";\n"

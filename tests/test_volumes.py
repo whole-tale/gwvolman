@@ -56,7 +56,7 @@ def test_create_volume(gak, info, osmk, nu):
         type(fscontainer).status = mock_status
         mock_docker.return_value.containers.run.return_value = fscontainer
 
-        ret = create_volume("instance1")
+        ret = create_volume("instance1", None)
 
         data = {
             "mounts": [
