@@ -5,6 +5,7 @@ import time
 
 from kubernetes import client, config
 
+from ..constants import REPO2DOCKER_VERSION
 from ..utils import (
     DOMAIN,
     DummyTask,
@@ -104,7 +105,11 @@ class KanikoImageBuilder(ImageBuilderBase):
 
         # Define Job manifest
         job_name = f"r2d-job-{suffix}"
-        cmd = self.r2d_command(tag, dry_run=dry_run).split(" ")
+        cmd = (
+            f"mkdir -p {local_directory_path} && "
+            f"cp -Lr /data/* {local_directory_path} && "
+            f"{self.r2d_command(tag, dry_run=dry_run)}"
+        )
         job_manifest = {
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -116,8 +121,8 @@ class KanikoImageBuilder(ImageBuilderBase):
                         "containers": [
                             {
                                 "name": "r2d",
-                                "image": "wholetale/repo2docker_wholetale:k8s",
-                                "command": cmd,
+                                "image": REPO2DOCKER_VERSION,
+                                "command": ["/bin/bash", "-c", cmd],
                                 "lifecycle": {
                                     "postStart": {
                                         "exec": {
@@ -132,7 +137,7 @@ class KanikoImageBuilder(ImageBuilderBase):
                                 "volumeMounts": [
                                     {
                                         "name": "job-volume",
-                                        "mountPath": local_directory_path,
+                                        "mountPath": "/data",
                                     }
                                 ],
                                 "workingDir": local_directory_path,  # Set working directory
