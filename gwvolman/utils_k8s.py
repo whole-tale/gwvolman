@@ -3,7 +3,7 @@ import os
 
 from kubernetes import client, config
 
-from .constants import VOLUMES_ROOT
+from .constants import NFS_PATH, NFS_SERVER, VOLUMES_ROOT
 
 
 def tale_ingress(params: dict) -> None:
@@ -103,8 +103,50 @@ def tale_service(params):
     )
 
 
+def compose_volumes(params):
+    volumes = [
+        client.V1Volume(name="data", empty_dir={}),
+    ]
+
+    if params["girderFSMountType"] == "direct":
+        volumes.append(
+            client.V1Volume(
+                name=params["claimName"],
+                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=params["claimName"]
+                ),
+            )
+        )
+        if NFS_SERVER:
+            volumes += [
+                client.V1Volume(
+                    name="workspace",
+                    nfs=client.V1NFSVolumeSource(
+                        path=os.path.join(NFS_PATH, params["workspaceSubPath"]),
+                        server=NFS_SERVER,
+                    ),
+                ),
+                client.V1Volume(
+                    name="home",
+                    nfs=client.V1NFSVolumeSource(
+                        path=os.path.join(NFS_PATH, params["homeSubPath"]),
+                        server=NFS_SERVER,
+                    ),
+                ),
+            ]
+    else:
+        volumes += [
+            client.V1Volume(name="workspace", empty_dir={}),
+            client.V1Volume(name="home", empty_dir={}),
+        ]
+
+    return volumes
+
+
 def tale_deployment(params):
     config.load_incluster_config()
+
+    volumes = compose_volumes(params)
 
     mounter_mounts = [
         client.V1VolumeMount(
@@ -112,21 +154,6 @@ def tale_deployment(params):
             mount_propagation="Bidirectional",
             name="data",
         ),
-        client.V1VolumeMount(
-            mount_path="/home",
-            mount_propagation="Bidirectional",
-            name="home",
-        ),
-        client.V1VolumeMount(
-            mount_path="/workspace",
-            mount_propagation="Bidirectional",
-            name="workspace",
-        ),
-    ]
-    mounter_volumes = [
-        client.V1Volume(name="data", empty_dir={}),
-        client.V1Volume(name="home", empty_dir={}),
-        client.V1Volume(name="workspace", empty_dir={}),
     ]
     if params["girderFSMountType"] == "direct":
         mounter_mounts.append(
@@ -136,14 +163,54 @@ def tale_deployment(params):
                 read_only=False,
             ),
         )
-        mounter_volumes.append(
-            client.V1Volume(
-                name=params["claimName"],
-                persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=params["claimName"]
-                ),
+    else:
+        mounter_mounts += [
+            client.V1VolumeMount(
+                mount_path="/workspace",
+                mount_propagation="Bidirectional",
+                name="workspace",
+                read_only=False,
             ),
+            client.V1VolumeMount(
+                mount_path="/home",
+                mount_propagation="Bidirectional",
+                name="home",
+                read_only=False,
+            ),
+        ]
+
+    instance_mounts = [
+        client.V1VolumeMount(
+            mount_path=os.path.join(params["mountPoint"], "data"),
+            mount_propagation="HostToContainer",
+            name="data",
         )
+    ]
+
+    if params["girderFSMountType"] == "direct" and not NFS_SERVER:
+        instance_mounts += [
+            client.V1VolumeMount(
+                mount_path=os.path.join(params["mountPoint"], "workspace"),
+                name=params["claimName"],
+                sub_path=params["workspaceSubPath"],
+            ),
+            client.V1VolumeMount(
+                mount_path=os.path.join(params["mountPoint"], "home"),
+                name=params["claimName"],
+                sub_path=params["homeSubPath"],
+            ),
+        ]
+    else:
+        instance_mounts = [
+            client.V1VolumeMount(
+                mount_path=os.path.join(params["mountPoint"], "workspace"),
+                name="workspace",
+            ),
+            client.V1VolumeMount(
+                mount_path=os.path.join(params["mountPoint"], "home"),
+                name="home",
+            ),
+        ]
 
     # Apply the deployment
     api_instance = client.AppsV1Api()
@@ -187,54 +254,29 @@ def tale_deployment(params):
                                         container_port=params["instancePort"]
                                     )
                                 ],
-                                volume_mounts=[
-                                    client.V1VolumeMount(
-                                        mount_path=os.path.join(
-                                            params["mountPoint"], "workspace"
-                                        ),
-                                        mount_propagation="HostToContainer",
-                                        name="workspace",
-                                    ),
-                                    client.V1VolumeMount(
-                                        mount_path=os.path.join(
-                                            params["mountPoint"], "home"
-                                        ),
-                                        mount_propagation="HostToContainer",
-                                        name="home",
-                                    ),
-                                    client.V1VolumeMount(
-                                        mount_path=os.path.join(
-                                            params["mountPoint"], "data"
-                                        ),
-                                        mount_propagation="HostToContainer",
-                                        name="data",
-                                    ),
-                                ],
+                                volume_mounts=instance_mounts,
                             ),
                             client.V1Container(
                                 name="mounter",
                                 command=["tini", "--", "/bin/sleep", "infinity"],
                                 image=params["mounterImage"],
-                                # lifecycle=client.V1Lifecycle(
-                                #    post_start=client.V1LifecycleHandler(
-                                #        _exec=client.V1ExecAction(
-                                #            command=["girderfs-mount"],
-                                #        )
-                                #    ),
-                                #    pre_stop=client.V1LifecycleHandler(
-                                #        _exec=client.V1ExecAction(
-                                #            command=["girderfs-umount"],
-                                #        )
-                                #    ),
-                                # ),
+                                lifecycle=client.V1Lifecycle(
+                                    #    post_start=client.V1LifecycleHandler(
+                                    #        _exec=client.V1ExecAction(
+                                    #            command=["girderfs-mount"],
+                                    #        )
+                                    #    ),
+                                    pre_stop=client.V1LifecycleHandler(
+                                        _exec=client.V1ExecAction(
+                                            command=["girderfs-umount"],
+                                        )
+                                    ),
+                                ),
                                 resources=client.V1ResourceRequirements(
                                     limits={
-                                        "memory": "256Mi",
                                         "smarter-devices/fuse": 1,
                                     },
                                     requests={
-                                        "cpu": "1",
-                                        "memory": "128Mi",
                                         "smarter-devices/fuse": 1,
                                     },
                                 ),
@@ -258,7 +300,7 @@ def tale_deployment(params):
                                 volume_mounts=mounter_mounts,
                             ),
                         ],
-                        volumes=mounter_volumes,
+                        volumes=volumes,
                     ),
                 ),
             ),
