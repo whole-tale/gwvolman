@@ -39,7 +39,7 @@ def test_cleanup_run():
 
     cleanup_run.girder_client = gc
     cleanup_run.job_manager = mock.MagicMock()
-    with mock.patch("gwvolman.tasks.RecordedRunCleaner.cleanup") as cleanup:
+    with mock.patch("gwvolman.tasks_docker.RecordedRunCleaner.cleanup") as cleanup:
         cleanup_run("run_id")
 
         gc.get.assert_called_with("/run/run_id")
