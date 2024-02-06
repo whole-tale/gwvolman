@@ -262,8 +262,8 @@ class KubernetesTasks(TasksBase):
             return
 
         # umount girderfs
-        pod = self._wait_for_pod(instanceId)
-        self._execute_girderfs(pod, "girderfs-umount")
+        # pod = self._wait_for_pod(instanceId)
+        # self._execute_girderfs(pod, "girderfs-umount")
 
         api.delete_namespaced_deployment(
             name=deployment.metadata.name, namespace=self.deployment.namespace

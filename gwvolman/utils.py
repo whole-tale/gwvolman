@@ -293,6 +293,15 @@ def _launch_container(volume_info, container_config, gc):
     source_mount = os.path.join(VOLUMES_ROOT, "mountpoints", volume_info["volumeName"])
     mounts = []
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
+    user = gc.get("/user/me")
+    volumes[os.path.join(VOLUMES_ROOT, f"homes/{user['login'][0]}/{user['login']}")] = {
+        "bind": os.path.join(container_config.target_mount, "home"), "mode": "rw"
+    }
+    tale = gc.get("/tale/%s" % volume_info["taleId"])
+    volumes[os.path.join(VOLUMES_ROOT, f"workspaces/{tale['_id'][0]}/{tale['_id']}")] = {
+        "bind": os.path.join(container_config.target_mount, "workspace"), "mode": "rw"
+    }
+
     for source in volumes:
         mounts.append(
             docker.types.Mount(
@@ -363,7 +372,7 @@ def _get_container_volumes(mountpoint, container_config, directories):
     for path in directories:
         source = os.path.join(mountpoint, path)
         target = os.path.join(container_config.target_mount, path)
-        volumes[source] = {"bind": target, "mode": "rw"}
+        volumes[source] = {"bind": target, "mode": "ro"}
 
     if container_config.buildpack:
         # Mount the MATLAB and Stata runtime licenses

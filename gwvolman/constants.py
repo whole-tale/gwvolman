@@ -8,9 +8,9 @@ API_VERSION = "2.1"
 DEFAULT_USER = 1000
 DEFAULT_GROUP = 100
 ENABLE_WORKSPACES = True
-MOUNTPOINTS = ["data", "home"]
+MOUNTPOINTS = ["data"]
 if ENABLE_WORKSPACES:
-    MOUNTPOINTS.append("workspace")
+    # MOUNTPOINTS.append("workspace")
     MOUNTPOINTS.append("versions")
     MOUNTPOINTS.append("runs")
 
@@ -28,6 +28,8 @@ REPO2DOCKER_VERSION = os.environ.get(
 GIRDERFS_IMAGE = os.environ.get("GIRDERFS_IMAGE", "wholetale/girderfs:latest")
 CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
+NFS_PATH = os.environ.get("NFS_PATH", "/srv/vc_crypt/IMQCAM/girder")
+NFS_SERVER = os.environ.get("NFS_SERVER")
 
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"
