@@ -25,6 +25,26 @@ def create_configmap(api_instance, configmap_name, data):
 
 
 def get_pod_logs(api_instance, pod_name, container_name, state):
+    # wait for the pod to start
+    timeout = 60 * 5
+    start_time = time.time()
+    while True:
+        try:
+            pod = api_instance.read_namespaced_pod(name=pod_name, namespace="wt")
+            if pod.status.phase == "Running":
+                break
+            elif pod.status.phase == "Failed":
+                print("Pod failed to start")
+                return
+            time.sleep(5)
+            if timeout and time.time() - start_time > timeout:
+                print("Timed out waiting for pod to start")
+                return
+        except client.exceptions.ApiException as e:
+            if e.status != 404:
+                print("Exception when calling CoreV1Api->read_namespaced_pod: %s\n" % e)
+            pass
+
     try:
         pod_logs = api_instance.read_namespaced_pod_log(
             name=pod_name,
