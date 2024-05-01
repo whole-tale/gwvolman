@@ -258,6 +258,7 @@ def _launch_container(volume_info, container_config, gc):
         )
 
     host = 'tmp-{}'.format(new_user(12).lower())
+    environment.append(f"TMP_URL={host}.{DOMAIN}")
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053
     endpoint_spec = docker.types.EndpointSpec(mode="vip")
