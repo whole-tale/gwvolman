@@ -6,7 +6,7 @@ packaging
 pyOpenSSL
 requests
 pyyaml
-lxml
+lxml[html_clean]
 markdown
 git+https://github.com/whole-tale/girderfs@master#egg=girderfs
 python-dateutil
