@@ -324,6 +324,8 @@ def _launch_container(volume_info, container_config, gc):
 
     traefik_loadbalancer_prefix = f"traefik.http.services.{host}.loadbalancer"
 
+    fqdn = f"{host}.{DOMAIN}"
+
     service = cli.services.create(
         container_config.image,
         command=rendered_command,
@@ -349,6 +351,7 @@ def _launch_container(volume_info, container_config, gc):
         mode=docker.types.ServiceMode("replicated", replicas=1),
         networks=[DEPLOYMENT.traefik_network],
         name=host,
+        hosts={fqdn: "host-gateway"},
         mounts=mounts,
         endpoint_spec=endpoint_spec,
         constraints=["node.id == {}".format(volume_info["nodeId"])],
