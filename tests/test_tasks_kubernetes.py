@@ -117,14 +117,15 @@ def test_launch_container(task_handler, task, mounts):
     task_handler._wait_for_pod = mock.Mock()
     with mock.patch("kubernetes.client.CoreV1Api") as api_mock, mock.patch(
         "kubernetes.config.load_incluster_config"
-    ), mock.patch("kubernetes.client.AppsV1Api") as apps_api_mock, mock.patch(
-        "kubernetes.client.NetworkingV1Api"
-    ) as net_api_mock:
+    ), mock.patch("gwvolman.tasks_kubernetes.stream") as stream_mock, mock.patch(
+        "kubernetes.client.AppsV1Api"
+    ) as apps_api_mock, mock.patch("kubernetes.client.NetworkingV1Api") as net_api_mock:
         api_mock.return_value.list_namespaced_pod.return_value.items = []
         result = task_handler.launch_container(task, payload)
         apps_api_mock.return_value.create_namespaced_deployment.assert_called_once()
         api_mock.return_value.create_namespaced_service.assert_called_once()
         net_api_mock.return_value.create_namespaced_ingress.assert_called_once()
+        stream_mock.assert_called_once()
         assert result["instanceId"] == payload["instanceId"]
 
 

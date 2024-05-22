@@ -375,7 +375,8 @@ def _get_container_volumes(mountpoint, container_config, directories):
     for path in directories:
         source = os.path.join(mountpoint, path)
         target = os.path.join(container_config.target_mount, path)
-        volumes[source] = {"bind": target, "mode": "ro"}
+        mode = "rw" if path in ("workspace", "home") else "ro"
+        volumes[source] = {"bind": target, "mode": mode}
 
     if container_config.buildpack:
         # Mount the MATLAB and Stata runtime licenses

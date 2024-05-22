@@ -50,14 +50,14 @@ RPZ_RUN_CALL = mock.call(
     image="registry.test.wholetale.org/123abc/1624994605",
     command="sh entrypoint.sh",
     detach=True,
+    name="rrun-123456",
     volumes={
-        os.path.join(_mount_point, "data"): {"bind": "/work/data", "mode": "rw"},
+        os.path.join(_mount_point, "data"): {"bind": "/work/data", "mode": "ro"},
         os.path.join(_mount_point, "workspace"): {
             "bind": "/work/workspace",
             "mode": "rw",
         },
     },
-    name="rrun-123456",
     working_dir="/work/workspace",
 )
 CPR_RUN_CALL = mock.call(

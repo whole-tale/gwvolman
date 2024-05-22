@@ -8,7 +8,8 @@ class TestKanikoImageBuilder(unittest.TestCase):
     @patch("gwvolman.r2d.kaniko.client.CoreV1Api")
     @patch("gwvolman.r2d.kaniko.config")
     @patch("json.dump")
-    def test_run_r2d(self, mock_json_dump, mock_config, mock_api, mock_batch_api):
+    @patch("threading.Thread")
+    def test_run_r2d(self, mock_thread, mock_json_dump, mock_config, mock_api, mock_batch_api):
         mock_task = MagicMock()
         mock_api_instance = MagicMock()
         mock_api.return_value = mock_api_instance
@@ -51,6 +52,10 @@ class TestKanikoImageBuilder(unittest.TestCase):
             b"Using local repo\n",
             b"[Repo2Docker]\n",
             b"Other log\n",
+        ]
+        mock_api_instance.read_namespaced_pod.side_effect = [
+            MagicMock(status=MagicMock(phase="Starting")),
+            MagicMock(status=MagicMock(phase="Running")),
         ]
 
         state = {"state": MagicMock(), "dry_run": False}
