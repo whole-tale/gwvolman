@@ -8,7 +8,7 @@ import pytest
 
 from gwvolman.lib.publish_provider import NullManager
 from gwvolman.tasks import publish
-from gwvolman.tests import TALE, ZENODO_TOKEN, mock_gc_get
+from . import TALE, ZENODO_TOKEN, mock_gc_get
 
 
 @httmock.all_requests
@@ -362,7 +362,7 @@ def mock_tale_update_draft(path, json=None):
 def stream_response(chunk_size=65536):
     test_path = os.path.dirname(__file__)
     version_id = TALE["dct:hasVersion"]["@id"].rsplit("/", 1)[-1]
-    with open("{}/../data/{}.zip".format(test_path, version_id), "rb") as fp:
+    with open("{}/data/{}.zip".format(test_path, version_id), "rb") as fp:
         while True:
             data = fp.read(chunk_size)
             if not data:
@@ -460,7 +460,8 @@ def test_zenodo_publish():
         mock_other_request,
     ):
         with mock.patch(
-            "gwvolman.tasks.ZenodoPublishProvider.publish_version", lambda x, y: None
+            "gwvolman.tasks_base.ZenodoPublishProvider.publish_version",
+            lambda x, y: None,
         ):
             publish(
                 "already_published",

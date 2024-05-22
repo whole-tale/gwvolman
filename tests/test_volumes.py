@@ -4,7 +4,7 @@ import os
 
 os.environ["GIRDER_API_URL"] = "https://girder.dev.wholetale.org/api/v1"
 
-from gwvolman.tasks import create_volume
+from gwvolman.tasks import create_volume  # noqa: E402
 
 
 def mock_gc_post(path, parameters=None):
@@ -26,15 +26,16 @@ def mock_gc_get(path, parameters=None):
         return {}
 
 
-@mock.patch("gwvolman.tasks.new_user", return_value="123456")
+@mock.patch("gwvolman.tasks_docker.new_user", return_value="123456")
 @mock.patch("os.mkdir", return_value=None)
 @mock.patch(
     "docker.client.DockerClient.info", return_value={"Swarm": {"NodeID": "node1"}}
 )
-@mock.patch("gwvolman.tasks._get_api_key", return_value="apikey1")
+@mock.patch("gwvolman.tasks_docker._get_api_key", return_value="apikey1")
 def test_create_volume(gak, info, osmk, nu):
     mock_gc = mock.MagicMock(spec=GirderClient)
     mock_gc.get = mock_gc_get
+    mock_gc.token = "some_token"
     mock_gc.loadOrCreateFolder = mock.Mock(return_value={"_id": "folder1"})
 
     create_volume.girder_client = mock_gc
@@ -55,7 +56,7 @@ def test_create_volume(gak, info, osmk, nu):
         type(fscontainer).status = mock_status
         mock_docker.return_value.containers.run.return_value = fscontainer
 
-        ret = create_volume("instance1")
+        ret = create_volume("instance1", None)
 
         data = {
             "mounts": [
@@ -69,6 +70,7 @@ def test_create_volume(gak, info, osmk, nu):
             "userId": "ghi567",
             "girderApiUrl": "https://girder.dev.wholetale.org/api/v1",
             "girderApiKey": "apikey1",
+            "girderToken": "some_token",
             "root": "tale1_user1_123456",
         }
         headers = {"Content-Type": "application/json"}

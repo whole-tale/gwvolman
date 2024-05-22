@@ -123,17 +123,21 @@ def docker_run_r2d_container(**kwargs):
         def wait():
             return {"StatusCode": 0}
 
+        @staticmethod
+        def remove():
+            return
+
     return MockContainer()
 
 
 @mock.patch("docker.APIClient")
 @mock.patch(
-    "gwvolman.utils.Deployment.registry_url",
+    "gwvolman.utils.DockerDeployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.tmpdir_mount",
+    "gwvolman.utils.DockerDeployment.tmpdir_mount",
     new_callable=mock.PropertyMock,
     return_value="/tmp",
 )
@@ -156,7 +160,7 @@ def test_image_builder(dtmp, depl, dapicli):
         dcli.return_value.containers.run = docker_run_r2d_container
         dcli.return_value.services.get = docker_services_get
 
-        from gwvolman.build_utils import ImageBuilder
+        from gwvolman.r2d import ImageBuilder
 
         with pytest.raises(ValueError) as ex:
             image_builder = ImageBuilder(gc)
@@ -192,12 +196,12 @@ def test_image_builder(dtmp, depl, dapicli):
 @mock.patch.dict(os.environ, {"MATLAB_FILE_INSTALLATION_KEY": "fake-key"})
 @mock.patch("docker.APIClient")
 @mock.patch(
-    "gwvolman.utils.Deployment.registry_url",
+    "gwvolman.utils.DockerDeployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.tmpdir_mount",
+    "gwvolman.utils.DockerDeployment.tmpdir_mount",
     new_callable=mock.PropertyMock,
     return_value="/tmp",
 )
@@ -217,7 +221,7 @@ def test_r2d_calls(dtmp, depl, dapicli):
         },
     }
 
-    from gwvolman.build_utils import ImageBuilder
+    from gwvolman.r2d import ImageBuilder
     from gwvolman.constants import REPO2DOCKER_VERSION
 
     with mock.patch("docker.from_env") as dcli:
@@ -239,15 +243,15 @@ def test_r2d_calls(dtmp, depl, dapicli):
         stata_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --engine dockercli"
-            " --config='/wholetale/repo2docker_config.py'"
-            " --target-repo-dir='/home/jovyan/work/workspace'"
+            " --config=/wholetale/repo2docker_config.py"
+            " --target-repo-dir=/home/jovyan/work/workspace"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
-            f"  --build-arg STATA_LICENSE_ENCODED='{base64.b64encode(b'blah').decode()}'"
-            f"  --image-name some_tag {image_builder.build_context}",
+            f" --build-arg STATA_LICENSE_ENCODED='{base64.b64encode(b'blah').decode()}'"
+            f" --image-name=some_tag {image_builder.build_context}",
             environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
-            remove=True,
+            remove=False,
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                 f"/tmp/{subdir}": {"bind": image_builder.build_context, "mode": "ro"},
@@ -266,15 +270,15 @@ def test_r2d_calls(dtmp, depl, dapicli):
         matlab_expected_call = mock.call(
             image=REPO2DOCKER_VERSION,
             command="jupyter-repo2docker --engine dockercli"
-            " --config='/wholetale/repo2docker_config.py'"
-            " --target-repo-dir='/home/jovyan/work/workspace'"
+            " --config=/wholetale/repo2docker_config.py"
+            " --target-repo-dir=/home/jovyan/work/workspace"
             " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
-            "  --build-arg FILE_INSTALLATION_KEY=fake-key"
-            f"  --image-name some_tag {image_builder.build_context}",
+            " --build-arg FILE_INSTALLATION_KEY=fake-key"
+            f" --image-name=some_tag {image_builder.build_context}",
             environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
-            remove=True,
+            remove=False,
             volumes={
                 "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                 f"/tmp/{subdir}": {"bind": image_builder.build_context, "mode": "ro"},
@@ -294,14 +298,14 @@ def test_r2d_calls(dtmp, depl, dapicli):
             expected_call = mock.call(
                 image=r2d,
                 command=f"jupyter-repo2docker {engine}"
-                " --config='/wholetale/repo2docker_config.py'"
-                " --target-repo-dir='/home/jovyan/work/workspace'"
+                " --config=/wholetale/repo2docker_config.py"
+                " --target-repo-dir=/home/jovyan/work/workspace"
                 " --user-id=1000 --user-name=jovyan --no-clean --no-run --debug"
-                f"  --image-name some_tag {image_builder.build_context}",
+                f" --image-name=some_tag {image_builder.build_context}",
                 environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
                 privileged=True,
                 detach=True,
-                remove=True,
+                remove=False,
                 volumes={
                     "/var/run/docker.sock": {
                         "bind": "/var/run/docker.sock",
@@ -325,12 +329,12 @@ def test_r2d_calls(dtmp, depl, dapicli):
     return_value=False,
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.registry_url",
+    "gwvolman.utils.DockerDeployment.registry_url",
     new_callable=mock.PropertyMock,
     return_value="https://registry.dev.wholetale.org",
 )
 @mock.patch(
-    "gwvolman.utils.Deployment.tmpdir_mount",
+    "gwvolman.utils.DockerDeployment.tmpdir_mount",
     new_callable=mock.PropertyMock,
     return_value="/tmp",
 )
@@ -369,18 +373,18 @@ def test_build_image_task(dtmpdir, drurl, task):
             build_tale_image(tale["_id"], force=False)
         assert ex.match("Cannot build image. Tale preparing for more than 5 minutes.")
 
-    with mock.patch("gwvolman.tasks.ImageBuilder") as image_builder:
+    with mock.patch("gwvolman.tasks_base.ImageBuilder") as image_builder:
         gc.get.side_effect = [
             {"_id": "id", "status": TaleStatus.READY, "imageInfo": {}},
         ]
         build_tale_image.girder_client = gc
         image_builder.return_value.get_tag.return_value = "some_tag"
         image_builder.return_value.cached_image.return_value = {
-            "Descriptor": {"digest": "some_digest"}
+            "digest": "some_digest", "name": "foo", "tag": "bar"
         }
 
         result = build_tale_image(tale["_id"], force=False)
-        assert result["image_digest"] == "some_tag@some_digest"
+        assert result["image_digest"] == "foo:bar@some_digest"
         image_builder.return_value.run_r2d.assert_not_called()
 
         image_builder.return_value.run_r2d.return_value = ({"StatusCode": 1}, 0)
@@ -397,6 +401,9 @@ def test_build_image_task(dtmpdir, drurl, task):
         image_builder.return_value.dh.cli.images.get.return_value = image
         image.attrs = {"RepoDigests": ["registry.dev.wholetale.org/foo:tag"]}
 
+        image_builder.return_value.cached_image.return_value = {
+            "digest": "some_digest", "name": "foo", "tag": "tag"
+        }
         result = build_tale_image(tale["_id"], force=False)
         image_builder.return_value.run_r2d.assert_called()
-        assert result["image_digest"] == "registry.dev.wholetale.org/foo:tag"
+        assert result["image_digest"] == "foo:tag@some_digest"
