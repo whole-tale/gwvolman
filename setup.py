@@ -26,6 +26,7 @@ setup(
         'requests',
         'markdown',
         'lxml',
+        'lxml_html_clean',
     ],
     packages=find_packages(),
     zip_safe=False
