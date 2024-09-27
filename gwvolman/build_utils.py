@@ -219,7 +219,7 @@ class ImageBuilder:
             environment=["DOCKER_HOST=unix:///var/run/docker.sock"],
             privileged=True,
             detach=True,
-            remove=True,
+            remove=False,
             volumes=volumes,
         )
 
@@ -240,6 +240,7 @@ class ImageBuilder:
             ret = container.wait()
         except docker.errors.NotFound:
             ret = {"StatusCode": -123}
+        container.remove()
 
         if ret["StatusCode"] != 0:
             logging.error("Error building image")
