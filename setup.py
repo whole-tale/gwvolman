@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="gwvolman",
     version="1.3.dev0",
-    description="An example girder worker extension",
+    description="WholeTale Girder Volume Manager",
     author="Kacper Kowalik",
     author_email="xarthisius.kk@gmail.com",
     license="MIT",
@@ -28,7 +28,7 @@ setup(
         "markdown",
         "lxml[html_clean]",
         "pystache",
-        "celery[redis]",
+        "celery[redis]>5",
         "python-dateutil",
     ],
     packages=find_packages(),
