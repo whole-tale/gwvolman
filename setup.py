@@ -21,10 +21,10 @@ setup(
     },
     install_requires=[
         "girder-client",
-        "girder-worker",
+        "girder-worker>=5.0.0a5.dev0",
         "kubernetes",
         "docker>=2.3.0",
-        "requests<2.32.0",
+        "requests",
         "markdown",
         "lxml[html_clean]",
         "pystache",
