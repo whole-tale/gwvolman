@@ -11,5 +11,4 @@ pyyaml
 lxml[html_clean]
 celery[redis]
 fusepy==3.0.1
-git+https://github.com/Xarthisius/girderfs@master#egg=girderfs
 python-dateutil

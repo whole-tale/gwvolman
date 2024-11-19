@@ -7,7 +7,6 @@ girder-worker-config set celery broker ${CELERY_BROKER:-redis://redis/}
 girder-worker-config set girder_worker tmp_root /tmp
 
 if [[ -n "$DEV" ]] ; then
-  python3 -m pip install -e /girderfs
   python3 -m pip install -r /gwvolman/requirements.txt -e /gwvolman
 fi
 
