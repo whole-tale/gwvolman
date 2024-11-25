@@ -103,10 +103,14 @@ class TasksBase:
             raise ValueError("Error building tale {}".format(tale_id))
 
         # Push the image to the registry
+        logging.info("Pushing image %s", tag)
         image_builder.push_image(tag)
+        logging.info("Image pushed")
 
         # Get the built image digest
+        logging.info("Getting image from cache...")
         image = image_builder.cached_image(tag)
+        logging.info("Image: %s", image)
 
         task.job_manager.updateProgress(
             message="Image build succeeded",

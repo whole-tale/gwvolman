@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import threading
 import time
@@ -31,12 +32,12 @@ def get_pod_logs(api_instance, pod_name, container_name, state):
     while True:
         try:
             pod = api_instance.read_namespaced_pod(name=pod_name, namespace="wt")
-            if pod.status.phase == "Running":
+            if pod.status.phase in ("Running", "Succeeded"):
                 break
             elif pod.status.phase == "Failed":
                 print("Pod failed to start")
                 return
-            time.sleep(5)
+            time.sleep(0.5)
             if timeout and time.time() - start_time > timeout:
                 print("Timed out waiting for pod to start")
                 return
@@ -130,6 +131,7 @@ class KanikoImageBuilder(ImageBuilderBase):
             f"cp -Lr /data/* {local_directory_path} && "
             f"{self.r2d_command(tag, dry_run=dry_run)}"
         )
+        docker_secret_name = os.environ.get("DOCKER_PULL_SECRET", "xarth-dockerhub-creds")
         job_manifest = {
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -149,7 +151,11 @@ class KanikoImageBuilder(ImageBuilderBase):
                                             "command": [
                                                 "/bin/sh",
                                                 "-c",
-                                                "echo $TRAEFIK_SERVICE_HOST registry.local.wholetale.org >> /etc/hosts",
+                                                (
+                                                    "echo $TRAEFIK_SERVICE_HOST registry.local.wholetale.org >> /etc/hosts && "
+                                                    "mkdir -p /root/.docker && "
+                                                    "cp /secrets/config.json /root/.docker/config.json"
+                                                ),
                                             ]
                                         }
                                     }
@@ -158,17 +164,29 @@ class KanikoImageBuilder(ImageBuilderBase):
                                     {
                                         "name": "job-volume",
                                         "mountPath": "/data",
-                                    }
+                                    },
+                                    {
+                                        "name": "docker-secret",
+                                        "mountPath": "/secrets/",
+                                    },
                                 ],
                                 "workingDir": local_directory_path,  # Set working directory
                             }
                         ],
+                        "imagePullSecrets": [{"name": docker_secret_name}],
                         "restartPolicy": "Never",
                         "volumes": [
                             {
                                 "name": "job-volume",
                                 "configMap": {"name": configmap_name},
-                            }
+                            },
+                            {
+                                "name": "docker-secret",
+                                "secret": {
+                                    "secretName": docker_secret_name,
+                                    "items": [{"key": ".dockerconfigjson", "path": "config.json"}]
+                                },
+                            },
                         ],
                     },
                 },
@@ -178,18 +196,24 @@ class KanikoImageBuilder(ImageBuilderBase):
 
         # Create Job
         batch_api_instance = client.BatchV1Api()
+        logging.info("Creating a r2d job in namespace 'wt'")
         batch_api_instance.create_namespaced_job(namespace="wt", body=job_manifest)
 
         # Wait for the Job to complete
+        logging.info("Waiting for the r2d job to complete... (5s)")
         time.sleep(5)
+        logging.info("Listing associated pods")
         pods = api_instance.list_namespaced_pod(
             namespace="wt", label_selector=f"job-name={job_name}"
         )
         pod_name = pods.items[0].metadata.name
         container_name = "r2d"
+        logging.info(f"Pod name: {pod_name}")
         try:
             # Print Job logs while waiting
+            logging.info("Starting logs thread (dry_run=%s)" % dry_run)
             state = {"state": hashlib.md5("R2D output".encode()), "dry_run": dry_run}
+            logging.info("Printing logs (in a thread)")
             pod_thread = threading.Thread(
                 target=get_pod_logs,
                 args=(api_instance, pod_name, container_name, state),
@@ -198,6 +222,7 @@ class KanikoImageBuilder(ImageBuilderBase):
 
             while True:
                 if task.canceled:
+                    logging.info("Job canceled by user")
                     ret = {"StatusCode": -123, "error": "Canceled by user"}
                     self._cleanup(
                         pod_name,
@@ -206,6 +231,7 @@ class KanikoImageBuilder(ImageBuilderBase):
                         batch_api_instance,
                         api_instance,
                     )
+                    logging.info("Cleanup complete")
                     break
 
                 job_status = batch_api_instance.read_namespaced_job_status(
@@ -215,6 +241,7 @@ class KanikoImageBuilder(ImageBuilderBase):
                     job_status.status.succeeded is not None
                     and job_status.status.succeeded > 0
                 ):
+                    logging.info("Job succeeded")
                     self._cleanup(
                         pod_name,
                         job_name,
@@ -222,6 +249,7 @@ class KanikoImageBuilder(ImageBuilderBase):
                         batch_api_instance,
                         api_instance,
                     )
+                    logging.info("Cleanup complete")
                     ret = {"StatusCode": 0}
                     break
                 elif (
@@ -233,6 +261,8 @@ class KanikoImageBuilder(ImageBuilderBase):
                 time.sleep(5)
         finally:
             # Stop the pod logs thread when done
+            logging.info("Stopping logs thread")
             pod_thread.join()
+            logging.info("Logs thread stopped")
 
         return ret, state["state"].hexdigest()
