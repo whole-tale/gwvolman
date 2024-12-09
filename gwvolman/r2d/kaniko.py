@@ -6,7 +6,7 @@ import time
 
 from kubernetes import client, config
 
-from ..constants import REPO2DOCKER_VERSION
+from ..constants import NAMESPACE, REPO2DOCKER_VERSION
 from ..utils import (
     DOMAIN,
     DummyTask,
@@ -22,7 +22,7 @@ def create_configmap(api_instance, configmap_name, data):
         "metadata": {"name": configmap_name},
         "data": data,
     }
-    api_instance.create_namespaced_config_map(namespace="wt", body=body)
+    api_instance.create_namespaced_config_map(namespace=NAMESPACE, body=body)
 
 
 def get_pod_logs(api_instance, pod_name, container_name, state):
@@ -31,7 +31,7 @@ def get_pod_logs(api_instance, pod_name, container_name, state):
     start_time = time.time()
     while True:
         try:
-            pod = api_instance.read_namespaced_pod(name=pod_name, namespace="wt")
+            pod = api_instance.read_namespaced_pod(name=pod_name, namespace=NAMESPACE)
             if pod.status.phase in ("Running", "Succeeded"):
                 break
             elif pod.status.phase == "Failed":
@@ -49,14 +49,17 @@ def get_pod_logs(api_instance, pod_name, container_name, state):
     try:
         pod_logs = api_instance.read_namespaced_pod_log(
             name=pod_name,
-            namespace="wt",
+            namespace=NAMESPACE,
             container="r2d",
             follow=True,
             _preload_content=False,
         )
         for line in pod_logs:
             output = line.decode("utf-8").strip()
-            if not (output.startswith("Using local repo") or output.startswith("[Repo2Docker]")):
+            if not (
+                output.startswith("Using local repo")
+                or output.startswith("[Repo2Docker]")
+            ):
                 state["state"].update(output.encode("utf-8"))
             if not state["dry_run"]:
                 print(output, end="\n")
@@ -92,9 +95,11 @@ class KanikoImageBuilder(ImageBuilderBase):
 
     @staticmethod
     def _cleanup(pod_name, job_name, configmap_name, batch_api_instance, api_instance):
-        batch_api_instance.delete_namespaced_job(name=job_name, namespace="wt")
-        api_instance.delete_namespaced_config_map(name=configmap_name, namespace="wt")
-        api_instance.delete_namespaced_pod(name=pod_name, namespace="wt")
+        batch_api_instance.delete_namespaced_job(name=job_name, namespace=NAMESPACE)
+        api_instance.delete_namespaced_config_map(
+            name=configmap_name, namespace=NAMESPACE
+        )
+        api_instance.delete_namespaced_pod(name=pod_name, namespace=NAMESPACE)
 
     def run_r2d(self, tag, dry_run=False, task=None):
         task = task or DummyTask
@@ -131,7 +136,9 @@ class KanikoImageBuilder(ImageBuilderBase):
             f"cp -Lr /data/* {local_directory_path} && "
             f"{self.r2d_command(tag, dry_run=dry_run)}"
         )
-        docker_secret_name = os.environ.get("DOCKER_PULL_SECRET", "xarth-dockerhub-creds")
+        docker_secret_name = os.environ.get(
+            "DOCKER_PULL_SECRET", "xarth-dockerhub-creds"
+        )
         job_manifest = {
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -184,7 +191,12 @@ class KanikoImageBuilder(ImageBuilderBase):
                                 "name": "docker-secret",
                                 "secret": {
                                     "secretName": docker_secret_name,
-                                    "items": [{"key": ".dockerconfigjson", "path": "config.json"}]
+                                    "items": [
+                                        {
+                                            "key": ".dockerconfigjson",
+                                            "path": "config.json",
+                                        }
+                                    ],
                                 },
                             },
                         ],
@@ -196,15 +208,15 @@ class KanikoImageBuilder(ImageBuilderBase):
 
         # Create Job
         batch_api_instance = client.BatchV1Api()
-        logging.info("Creating a r2d job in namespace 'wt'")
-        batch_api_instance.create_namespaced_job(namespace="wt", body=job_manifest)
+        logging.info(f"Creating a r2d job in namespace '{NAMESPACE}'")
+        batch_api_instance.create_namespaced_job(namespace=NAMESPACE, body=job_manifest)
 
         # Wait for the Job to complete
         logging.info("Waiting for the r2d job to complete... (5s)")
         time.sleep(5)
         logging.info("Listing associated pods")
         pods = api_instance.list_namespaced_pod(
-            namespace="wt", label_selector=f"job-name={job_name}"
+            namespace=NAMESPACE, label_selector=f"job-name={job_name}"
         )
         pod_name = pods.items[0].metadata.name
         container_name = "r2d"
@@ -235,7 +247,7 @@ class KanikoImageBuilder(ImageBuilderBase):
                     break
 
                 job_status = batch_api_instance.read_namespaced_job_status(
-                    name=job_name, namespace="wt"
+                    name=job_name, namespace=NAMESPACE
                 )
                 if (
                     job_status.status.succeeded is not None

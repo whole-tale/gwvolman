@@ -30,6 +30,7 @@ CPR_VERSION = os.environ.get("CPR_VERSION", "wholetale/wt-cpr:latest")
 VOLUMES_ROOT = os.environ.get("WT_VOLUMES_PATH", "/mnt/homes")
 NFS_PATH = os.environ.get("NFS_PATH", "/srv/vc_crypt/IMQCAM/girder")
 NFS_SERVER = os.environ.get("NFS_SERVER")
+NAMESPACE = os.environ.get("NAMESPACE", "wt")
 
 RUN_WT_BUTTON_IMG = (
     "https://img.shields.io/badge/WholeTale-Run!-579ACA.svg?"

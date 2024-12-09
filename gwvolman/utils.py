@@ -22,6 +22,7 @@ import dateutil.relativedelta as rel
 from .constants import (
     LICENSE_PATH,
     MOUNTPOINTS,
+    NAMESPACE,
     REPO2DOCKER_VERSION,
     VOLUMES_ROOT,
     GIRDERFS_IMAGE,
@@ -89,7 +90,7 @@ class K8SDeployment(object):
     registry_url = f"https://registry.{DOMAIN}"
     traefik_network = None
     tmpdir_mount = "/tmp"
-    namespace = "wt"
+    namespace = NAMESPACE
     girderfs_mount_type = os.environ.get("GIRDERFS_MOUNT_TYPE", "direct")
     ingress_class = os.environ.get("INGRESS_CLASS", "traefik")
     mounter_image = GIRDERFS_IMAGE
