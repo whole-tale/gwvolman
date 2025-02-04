@@ -1,0 +1,6 @@
+prune tests
+exclude tests
+prune Dockerfile docker-entrypoint.sh MANIFEST.in README.md requirements-dev.txt setup.cfg tox.ini
+prune .gitignore .github .coveragerc
+exclude Dockerfile docker-entrypoint.sh MANIFEST.in README.md requirements-dev.txt setup.cfg tox.ini
+exclude .gitignore .github .coveragerc
