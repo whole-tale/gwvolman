@@ -32,7 +32,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .tox
-        key: ${{ matrix.python-version }}-tox-${{ hashFiles('setup.py', 'requirements.txt') }}
+        key: ${{ matrix.python-version }}-tox-${{ hashFiles('setup.py', 'requirements-dev.txt') }}
     - name: Run Linter
       run: tox -e lint -- gwvolman
     - name: Run Tests with coverage

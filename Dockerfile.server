@@ -1,0 +1,9 @@
+FROM xarthisius/gwvolman:latest
+
+COPY --chown=ubuntu:ubuntu setup.py /gwvolman/setup.py
+COPY --chown=ubuntu:ubuntu gwvolman /gwvolman/gwvolman
+COPY ./server-dev.sh /server-dev.sh
+
+RUN . /home/ubuntu/venv/bin/activate && pip install fastapi uvicorn
+RUN chmod +x /server-dev.sh
+ENTRYPOINT ["/server-dev.sh"]

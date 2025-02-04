@@ -34,7 +34,6 @@ RUN echo "ubuntu ALL=(ALL)    NOPASSWD: /usr/bin/mount, /usr/bin/umount" >> /etc
 USER ubuntu
 WORKDIR /gwvolman
 
-COPY --chown=ubuntu:ubuntu requirements.txt /gwvolman/requirements.txt
 COPY --chown=ubuntu:ubuntu setup.py /gwvolman/setup.py
 COPY --chown=ubuntu:ubuntu gwvolman /gwvolman/gwvolman
 
@@ -64,7 +63,5 @@ RUN echo "use_locks 0" >> /etc/davfs2/davfs2.conf && \
   echo "gui_optimize 1" >> /etc/davfs2/davfs2.conf
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-COPY scheduler-entrypoint.sh /scheduler-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-RUN chmod +x /scheduler-entrypoint.sh
 ENTRYPOINT ["/usr/bin/tini", "--", "/docker-entrypoint.sh"]
