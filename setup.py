@@ -2,14 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="gwvolman",
-    version="1.99",
+    version="2.0.0",
     description="WholeTale Girder Volume Manager",
     author="Kacper Kowalik",
     author_email="xarthisius.kk@gmail.com",
-    license="MIT",
+    license="BSD-3-Clause",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
-        "License :: OSI Approved :: Apache Software License"
+        "License :: OSI Approved :: BSD License",
         "Intended Audience :: Science/Research",
         "Natural Language :: English",
         "Programming Language :: Python",
