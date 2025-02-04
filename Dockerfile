@@ -1,4 +1,4 @@
-FROM ubuntu:jammy
+FROM ubuntu:24.04
 
 RUN apt-get update -qqy && \
   apt-get install -qy software-properties-common python3-software-properties && \
@@ -27,19 +27,19 @@ RUN apt-get update -qqy && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN groupadd -g 1000 wtgroup && useradd -g 1000 -G 1000 -u 1000 -m -s /bin/bash wtuser
-RUN echo "source /home/wtuser/venv/bin/activate" >> /etc/bash.bashrc
-RUN echo "wtuser ALL=(ALL)    NOPASSWD: /usr/bin/mount, /usr/bin/umount" >> /etc/sudoers
+# RUN groupadd -g 1000 ubuntu && useradd -g 1000 -G 1000 -u 1000 -m -s /bin/bash ubuntu
+RUN echo "source /home/ubuntu/venv/bin/activate" >> /etc/bash.bashrc
+RUN echo "ubuntu ALL=(ALL)    NOPASSWD: /usr/bin/mount, /usr/bin/umount" >> /etc/sudoers
 
-USER wtuser
+USER ubuntu
 WORKDIR /gwvolman
 
-COPY --chown=wtuser:wtgroup requirements.txt /gwvolman/requirements.txt
-COPY --chown=wtuser:wtgroup setup.py /gwvolman/setup.py
-COPY --chown=wtuser:wtgroup gwvolman /gwvolman/gwvolman
+COPY --chown=ubuntu:ubuntu requirements.txt /gwvolman/requirements.txt
+COPY --chown=ubuntu:ubuntu setup.py /gwvolman/setup.py
+COPY --chown=ubuntu:ubuntu gwvolman /gwvolman/gwvolman
 
-RUN python3 -m venv /home/wtuser/venv
-RUN . /home/wtuser/venv/bin/activate \
+RUN python3 -m venv /home/ubuntu/venv
+RUN . /home/ubuntu/venv/bin/activate \
   && pip install -U setuptools wheel \
   && pip install --no-cache-dir -r requirements.txt -e . \
   && rm -rf /tmp/*
@@ -50,7 +50,10 @@ ENV LANG=C.UTF-8
 # Temporary fix for girder_utils (chain tasks and kwargs)
 RUN sed \
   -e "/serializer/ s/girder_io/json/" \
-  -i /home/wtuser/venv/lib/python3.10/site-packages/girder_worker/task.py
+  -i /home/ubuntu/venv/lib/python3.12/site-packages/girder_worker/task.py && \
+  sed \
+  -e 's/from .app import app/from ..app import app/g' \
+  -i /home/ubuntu/venv/lib/python3.12/site-packages/girder_worker/utils/__init__.py
 
 USER root
 # https://github.com/whole-tale/gwvolman/issues/51

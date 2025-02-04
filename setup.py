@@ -2,8 +2,8 @@ from setuptools import setup, find_packages
 
 setup(
     name="gwvolman",
-    version="1.3.dev0",
-    description="An example girder worker extension",
+    version="1.99",
+    description="WholeTale Girder Volume Manager",
     author="Kacper Kowalik",
     author_email="xarthisius.kk@gmail.com",
     license="MIT",
@@ -21,14 +21,14 @@ setup(
     },
     install_requires=[
         "girder-client",
-        "girder-worker",
+        "girder-worker>=5.0.0a5.dev0",
         "kubernetes",
         "docker>=2.3.0",
-        "requests<2.32.0",
+        "requests",
         "markdown",
         "lxml[html_clean]",
         "pystache",
-        "celery[redis]",
+        "celery[redis]>5",
         "python-dateutil",
     ],
     packages=find_packages(),

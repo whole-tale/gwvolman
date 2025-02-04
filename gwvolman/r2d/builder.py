@@ -124,11 +124,14 @@ class ImageBuilderBase:
 
         # Perform dry run to get the Dockerfile's checksum
         registry_netloc = urlparse(DEPLOYMENT.registry_url).netloc
+        logging.info("Computing tag for %s", self.tale["_id"])
         ret, output_digest = self.run_r2d(
             f"{registry_netloc}/placeholder_env/placeholder_dockerfile",
             dry_run=True,
         )
+        logging.info("Computed tag %s", output_digest)
         if ret["StatusCode"] != 0:
+            logging.error("Failed to compute a tag %s", ret)
             raise ValueError(f"Failed to compute a tag {ret=}")
 
         # Remove the temporary directory, cause we want entire workspace for build
@@ -159,6 +162,8 @@ class ImageBuilderBase:
                     "ascii"
                 )
                 extra_args += " --build-arg STATA_LICENSE_ENCODED='{}'".format(encoded)
+        if base_image := os.environ.get("R2D_BASE_IMAGE"):
+            extra_args += f" --Repo2Docker.base_image={base_image}"
         return extra_args
 
     def r2d_command(self, tag, dry_run=False):
@@ -198,7 +203,10 @@ class ImageBuilderBase:
                 req = session.get(
                     f"{base_url}{name}/manifests/{tag}",
                     headers={
-                        "Accept": "application/vnd.docker.distribution.manifest.v2+json"
+                        "Accept": (
+                            "application/vnd.docker.distribution.manifest.v2+json,"
+                            "application/vnd.oci.image.manifest.v1+json"
+                        )
                     },
                 )
                 req.raise_for_status()
@@ -225,5 +233,6 @@ class ImageBuilderBase:
                 }
         except requests.exceptions.HTTPError as err:
             if err.response.status_code == 404:
+                logging.info("Image %s not found in the registry", image)
                 return
             raise

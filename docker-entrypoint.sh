@@ -1,13 +1,12 @@
 #!/bin/bash
 
 set -e
-. /home/wtuser/venv/bin/activate
+. /home/ubuntu/venv/bin/activate
 girder-worker-config set celery backend ${CELERY_BACKEND:-redis://redis/}
 girder-worker-config set celery broker ${CELERY_BROKER:-redis://redis/}
 girder-worker-config set girder_worker tmp_root /tmp
 
 if [[ -n "$DEV" ]] ; then
-  python3 -m pip install -e /girderfs
   python3 -m pip install -r /gwvolman/requirements.txt -e /gwvolman
 fi
 
@@ -24,9 +23,11 @@ fi
 # become user:group set within and exec command passed in args
 if [ "$GOSU_USER" != "0:0" ]; then
     IFS=: read GOSU_UID GOSU_GID DOCKER_GROUP <<<"${GOSU_USER}"
-    groupadd -g $DOCKER_GROUP docker
-    gpasswd -a wtuser docker
-    usermod -g $GOSU_GID wtuser
+    if [ -z $(getent group $DOCKER_GROUP) ] ; then
+      groupadd -g $DOCKER_GROUP docker
+    fi
+    gpasswd -a ubuntu $(getent group $DOCKER_GROUP | cut -f1 -d:)
+    usermod -g $GOSU_GID ubuntu
     exec gosu $GOSU_UID python3 -m girder_worker -l INFO "$@"
 fi
 
