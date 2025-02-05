@@ -14,24 +14,39 @@ from .builder import ImageBuilderBase
 
 
 class DockerHelper:
-    def __init__(self, auth=True):
-        username = os.environ.get("REGISTRY_USER", "fido")
-        password = os.environ.get("REGISTRY_PASS")
+    def __init__(
+        self, registry_user=None, registry_password=None, registry_url=None, auth=True
+    ):
+        username = registry_user or os.environ.get("REGISTRY_USER", "fido")
+        password = registry_password or os.environ.get("REGISTRY_PASS")
+        registry_url = registry_url or DEPLOYMENT.registry_url
         self.cli = docker.from_env(version="1.28")
         self.apicli = docker.APIClient(base_url="unix://var/run/docker.sock")
         if auth:
-            self.cli.login(
-                username=username, password=password, registry=DEPLOYMENT.registry_url
-            )
+            self.cli.login(username=username, password=password, registry=registry_url)
             self.apicli.login(
-                username=username, password=password, registry=DEPLOYMENT.registry_url
+                username=username, password=password, registry=registry_url
             )
 
 
 class DockerImageBuilder(ImageBuilderBase):
-    def __init__(self, gc, imageId=None, tale=None, auth=True):
+    def __init__(
+        self,
+        gc,
+        imageId=None,
+        tale=None,
+        registry_user=None,
+        registry_password=None,
+        registry_url=None,
+        auth=True,
+    ):
         super().__init__(gc, imageId=imageId, tale=tale, auth=auth)
-        self.dh = DockerHelper(auth)
+        self.dh = DockerHelper(
+            registry_user=registry_user,
+            registry_password=registry_password,
+            registry_url=registry_url,
+            auth=auth,
+        )
 
     def pull_r2d(self):
         try:

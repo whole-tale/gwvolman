@@ -38,6 +38,7 @@ REGISTRY_PASS = os.environ.get("REGISTRY_PASS")
 MOUNTS = {}
 RETRIES = 5
 container_name_pattern = re.compile(r"tmp\.([^.]+)\.(.+)\Z")
+logger = logging.getLogger(__name__)
 
 PooledContainer = namedtuple("PooledContainer", ["id", "path", "host"])
 ContainerConfig = namedtuple(
@@ -84,10 +85,12 @@ def size_notation_to_bytes(size):
 class K8SDeployment(object):
     """Container for WT-specific k8s stack deployment configuration."""
 
+    __name__ = "K8SDeployment"
     dashboard_url = f"https://dashboard.{DOMAIN}"
     #girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
     girder_url = f"https://girder.{DOMAIN}"
     registry_url = f"https://registry.{DOMAIN}"
+    builder_url = os.environ.get("BUILDER_URL", "https://builder.{DOMAIN}")
     traefik_network = None
     tmpdir_mount = "/tmp"
     namespace = NAMESPACE
@@ -102,10 +105,11 @@ class DockerDeployment(object):
     This class allows to read and store configuration of services in a WT
     deployment. It's meant to be used as a singleton across gwvolman.
     """
-
+    __name__ = "DockerDeployment"
     _dashboard_url = None
     _girder_url = None
     _registry_url = None
+    builder_url = os.environ.get("BUILDER_URL", "https://builder.{DOMAIN}")
     _traefik_network = None
     _tmpdir_mount = None
 
@@ -180,6 +184,7 @@ if os.environ.get("DEPLOYMENT", "docker") == "k8s":
     DEPLOYMENT = K8SDeployment()
 else:
     DEPLOYMENT = DockerDeployment()
+logger.warning(f"gwvolman:init: Using {DEPLOYMENT.__name__} as a Deployment backend")
 
 
 def sample_with_replacement(a, size):

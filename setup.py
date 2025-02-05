@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="gwvolman",
-    version="2.0.0",
+    version="2.1.0",
     description="WholeTale Girder Volume Manager",
     author="Kacper Kowalik",
     author_email="xarthisius.kk@gmail.com",
