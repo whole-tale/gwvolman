@@ -99,9 +99,14 @@ async def build_tale(
                 },
             }
 
+            docker_group = os.environ.get("DOCKER_GROUP", "docker")
+            if docker_group.isdigit():
+                docker_group = int(docker_group)
+
             container = client.containers.run(
                 image=image_builder.container_config.repo2docker_version,
                 command=r2d_cmd,
+                group_add=[docker_group],
                 environment={"DOCKER_HOST": "unix:///var/run/docker.sock"},
                 privileged=True,
                 detach=True,

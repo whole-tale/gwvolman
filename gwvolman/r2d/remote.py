@@ -4,6 +4,7 @@ import os
 import requests
 
 from .builder import ImageBuilderBase
+from ..utils import DOMAIN
 
 
 class RemoteImageBuilder(ImageBuilderBase):
@@ -22,7 +23,7 @@ class RemoteImageBuilder(ImageBuilderBase):
         self.builder_url = builder_url or os.environ.get(
             "BUILDER_URL", "https://builder.local.xarthisius.xyz"
         )
-        self.registry_url = registry_url or "https://registry.local.xarthisius.xyz"
+        self.registry_url = registry_url or f"https://registry.{DOMAIN}"
         self.registry_user = registry_user or os.environ.get("REGISTRY_USER", "fido")
         self.registry_password = registry_password or os.environ.get("REGISTRY_PASS")
 
@@ -53,7 +54,7 @@ class RemoteImageBuilder(ImageBuilderBase):
                 "image": image,
                 "registry_user": self.registry_user,
                 "registry_password": self.registry_password,
-                "registry_url": self.registry_url,
+                "registry_url": f"https://registry.{DOMAIN}",
             },
             stream=True,
         )
@@ -70,7 +71,7 @@ class RemoteImageBuilder(ImageBuilderBase):
             f"{self.builder_url}/build",
             params={
                 "taleId": self.tale["_id"],
-                "apiUrl": self.gc.urlBase,
+                "apiUrl": f"https://girder.{DOMAIN}/api/v1",
                 "token": self.gc.token,
                 "registry_url": self.registry_url,
                 "dry_run": dry_run,

@@ -113,7 +113,7 @@ def compose_volumes(params):
             client.V1Volume(
                 name=params["claimName"],
                 persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=params["claimName"]
+                    claim_name=params["claimName"],
                 ),
             )
         )
@@ -160,6 +160,7 @@ def tale_deployment(params):
             client.V1VolumeMount(
                 mount_path=VOLUMES_ROOT,
                 name=params["claimName"],
+                sub_path=params["claimSubPath"],
                 read_only=False,
             ),
         )
@@ -192,12 +193,12 @@ def tale_deployment(params):
             client.V1VolumeMount(
                 mount_path=os.path.join(params["mountPoint"], "workspace"),
                 name=params["claimName"],
-                sub_path=params["workspaceSubPath"],
+                sub_path=os.path.join(params["claimSubPath"], params["workspaceSubPath"]),
             ),
             client.V1VolumeMount(
                 mount_path=os.path.join(params["mountPoint"], "home"),
                 name=params["claimName"],
-                sub_path=params["homeSubPath"],
+                sub_path=os.path.join(params["claimSubPath"], params["homeSubPath"]),
             ),
         ]
     else:
@@ -255,6 +256,16 @@ def tale_deployment(params):
                                     )
                                 ],
                                 volume_mounts=instance_mounts,
+                                resources=client.V1ResourceRequirements(
+                                    limits={
+                                        "memory": "4Gi",
+                                        "cpu": "1",
+                                    },
+                                    requests={
+                                        "memory": "4Gi",
+                                        "cpu": "1",
+                                    },
+                                ),
                             ),
                             client.V1Container(
                                 name="mounter",
@@ -274,9 +285,13 @@ def tale_deployment(params):
                                 ),
                                 resources=client.V1ResourceRequirements(
                                     limits={
+                                        "memory": "1Gi",
+                                        "cpu": "1",
                                         "smarter-devices/fuse": 1,
                                     },
                                     requests={
+                                        "memory": "1Gi",
+                                        "cpu": "0.5",
                                         "smarter-devices/fuse": 1,
                                     },
                                 ),

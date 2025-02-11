@@ -169,7 +169,8 @@ class KubernetesTasks(TasksBase):
             "domain": DOMAIN,
             "ingressClass": K8SDeployment.ingress_class,
             "deploymentNamespace": self.deployment.namespace,
-            "claimName": "girder-data",  # TODO pass from deployment
+            "claimName": K8SDeployment.existing_claim,
+            "claimSubPath": K8SDeployment.existing_claim_subpath,
             "girderApiUrl": girder_api_url,
             "mounterImage": self.deployment.mounter_image,
             "instanceId": instanceId,
