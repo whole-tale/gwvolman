@@ -91,6 +91,8 @@ class K8SDeployment(object):
     girder_url = f"https://girder.{DOMAIN}"
     registry_url = f"https://registry.{DOMAIN}"
     builder_url = os.environ.get("BUILDER_URL", "https://builder.{DOMAIN}")
+    existing_claim = os.environ.get("GIRDER_EXISTING_CLAIM", "girder-data")
+    existing_claim_subpath = os.environ.get("GIRDER_EXISTING_CLAIM_SUBPATH", "")
     traefik_network = None
     tmpdir_mount = "/tmp"
     namespace = NAMESPACE
