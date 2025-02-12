@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="gwvolman",
-    version="2.1.1",
+    version="2.1.2",
     description="WholeTale Girder Volume Manager",
     author="Kacper Kowalik",
     author_email="xarthisius.kk@gmail.com",
@@ -26,7 +26,7 @@ setup(
         "docker>=2.3.0",
         "requests",
         "markdown",
-        "lxml[html_clean]",
+        "lxml_html_clean",
         "pystache",
         "celery[redis]>5",
         "python-dateutil",
