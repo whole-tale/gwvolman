@@ -87,7 +87,7 @@ class K8SDeployment(object):
 
     __name__ = "K8SDeployment"
     dashboard_url = f"https://dashboard.{DOMAIN}"
-    #girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
+    # girder_url = f"http://{os.environ.get('GIRDER_SERVICE_HOST')}:8080"
     girder_url = f"https://girder.{DOMAIN}"
     registry_url = f"https://registry.{DOMAIN}"
     builder_url = os.environ.get("BUILDER_URL", "https://builder.{DOMAIN}")
@@ -107,6 +107,7 @@ class DockerDeployment(object):
     This class allows to read and store configuration of services in a WT
     deployment. It's meant to be used as a singleton across gwvolman.
     """
+
     __name__ = "DockerDeployment"
     _dashboard_url = None
     _girder_url = None
@@ -296,19 +297,24 @@ def _launch_container(volume_info, container_config, gc):
 
     # inject Girder token into the container
     environment = container_config.environment or []
-    environment += [f"GIRDER_TOKEN={gc.token}", f"GIRDER_API_URL={gc.urlBase}"]
+    environment += [
+        f"GIRDER_TOKEN={gc.token}",
+        f"GIRDER_API_URL={gc.urlBase}",
+        f"GIRDER_API_KEY={_get_api_key(gc)}",
+    ]
 
     source_mount = os.path.join(VOLUMES_ROOT, "mountpoints", volume_info["volumeName"])
     mounts = []
     volumes = _get_container_volumes(source_mount, container_config, MOUNTPOINTS)
     user = gc.get("/user/me")
     volumes[os.path.join(VOLUMES_ROOT, f"homes/{user['login'][0]}/{user['login']}")] = {
-        "bind": os.path.join(container_config.target_mount, "home"), "mode": "rw"
+        "bind": os.path.join(container_config.target_mount, "home"),
+        "mode": "rw",
     }
     tale = gc.get("/tale/%s" % volume_info["taleId"])
-    volumes[os.path.join(VOLUMES_ROOT, f"workspaces/{tale['_id'][0]}/{tale['_id']}")] = {
-        "bind": os.path.join(container_config.target_mount, "workspace"), "mode": "rw"
-    }
+    volumes[
+        os.path.join(VOLUMES_ROOT, f"workspaces/{tale['_id'][0]}/{tale['_id']}")
+    ] = {"bind": os.path.join(container_config.target_mount, "workspace"), "mode": "rw"}
 
     for source in volumes:
         mounts.append(
@@ -317,7 +323,7 @@ def _launch_container(volume_info, container_config, gc):
             )
         )
 
-    host = 'tmp-{}'.format(new_user(12).lower())
+    host = "tmp-{}".format(new_user(12).lower())
     environment.append(f"TMP_URL={host}.{DOMAIN}")
 
     # https://github.com/containous/traefik/issues/2582#issuecomment-354107053

@@ -17,6 +17,7 @@ from .utils import (
     _get_user_and_instance,
     new_user,
     _get_container_config,
+    _get_api_key,
 )
 from .utils_k8s import tale_deployment, tale_service, tale_ingress
 
@@ -172,6 +173,7 @@ class KubernetesTasks(TasksBase):
             "claimName": K8SDeployment.existing_claim,
             "claimSubPath": K8SDeployment.existing_claim_subpath,
             "girderApiUrl": girder_api_url,
+            "girderApiKey": _get_api_key(task.girder_client),
             "mounterImage": self.deployment.mounter_image,
             "instanceId": instanceId,
             "girderToken": task.girder_client.token,
@@ -197,6 +199,7 @@ class KubernetesTasks(TasksBase):
         template_params["girderfsDef"] = {
             "mounts": payload["mounts"],
             "girderApiUrl": girder_api_url,
+            "girderApiKey": _get_api_key(task.girder_client),
             "girderToken": task.girder_client.token,
             "taleId": tale["_id"],
             "userId": user["_id"],

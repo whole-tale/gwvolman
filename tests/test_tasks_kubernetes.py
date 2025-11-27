@@ -38,6 +38,8 @@ def mock_gc_get(path, parameters=None):
         }
     elif path == "/run/123abc":
         return {"_id": "123abc", "name": "run1", "runVersionId": "xyz234"}
+    elif path == "/api_key":
+        return [{"name": "tmpnb", "active": True, "key": "girderApiKey"}]
 
 
 @pytest.fixture
