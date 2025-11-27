@@ -28,8 +28,8 @@ if [ "$GOSU_USER" != "0:0" ]; then
     fi
     gpasswd -a ubuntu $(getent group $DOCKER_GROUP | cut -f1 -d:)
     usermod -g $GOSU_GID ubuntu
-    exec gosu $GOSU_UID python3 -m girder_worker -l INFO "$@"
+    exec gosu $GOSU_UID celery -A girder_worker.app worker -l INFO "$@"
 fi
 
 # If GOSU_USER was 0:0 exec command passed in args without gosu (assume already root)
-exec python3 -m girder_worker -l INFO "$@"
+exec celery -A girder_worker.app worker -l INFO "$@"
