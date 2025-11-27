@@ -1,9 +1,33 @@
 import json
 import os
+import re
 
 from kubernetes import client, config
 
 from .constants import NFS_PATH, NFS_SERVER, VOLUMES_ROOT
+
+
+def split_and_clean_quotes(input_string):
+    """
+    Splits a string by whitespace, ignoring whitespace within single quotes,
+    and removes the surrounding single quotes from the resulting quoted tokens.
+    """
+    # 1. Find all tokens (quoted or unquoted)
+    pattern = r"'[^']+'|\S+"
+    tokens = re.findall(pattern, input_string)
+
+    # 2. Clean the quotes from the found tokens
+    cleaned_tokens = []
+    for token in tokens:
+        # Check if the token starts and ends with a single quote
+        if token.startswith("'") and token.endswith("'"):
+            # Remove the first and last character (the quotes)
+            cleaned_tokens.append(token[1:-1])
+        else:
+            # Keep unquoted tokens as they are
+            cleaned_tokens.append(token)
+
+    return cleaned_tokens
 
 
 def tale_ingress(params: dict) -> None:
@@ -193,7 +217,9 @@ def tale_deployment(params):
             client.V1VolumeMount(
                 mount_path=os.path.join(params["mountPoint"], "workspace"),
                 name=params["claimName"],
-                sub_path=os.path.join(params["claimSubPath"], params["workspaceSubPath"]),
+                sub_path=os.path.join(
+                    params["claimSubPath"], params["workspaceSubPath"]
+                ),
             ),
             client.V1VolumeMount(
                 mount_path=os.path.join(params["mountPoint"], "home"),
@@ -214,6 +240,7 @@ def tale_deployment(params):
         ]
 
     # Apply the deployment
+    command_array = split_and_clean_quotes(params["command"])
     api_instance = client.AppsV1Api()
     api_instance.create_namespaced_deployment(
         body=client.V1Deployment(
@@ -248,7 +275,8 @@ def tale_deployment(params):
                         containers=[
                             client.V1Container(
                                 name="instance",
-                                command=params["command"].split(" "),
+                                command=[command_array[0]],
+                                args=command_array[1:],
                                 image=params["instanceImage"],
                                 ports=[
                                     client.V1ContainerPort(
@@ -266,6 +294,20 @@ def tale_deployment(params):
                                         "cpu": "1",
                                     },
                                 ),
+                                env=[
+                                    client.V1EnvVar(
+                                        name="GIRDER_API_KEY",
+                                        value=params["girderApiKey"],
+                                    ),
+                                    client.V1EnvVar(
+                                        name="GIRDER_API_URL",
+                                        value=params["girderApiUrl"],
+                                    ),
+                                    client.V1EnvVar(
+                                        name="TMP_URL",
+                                        value=f"{params['host']}.{params['domain']}",
+                                    ),
+                                ],
                             ),
                             client.V1Container(
                                 name="mounter",
